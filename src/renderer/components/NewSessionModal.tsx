@@ -72,6 +72,10 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     }
   };
 
+  const onNameChange = (raw: string) => {
+    setName(raw.replace(/\s+/g, '-'));
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
@@ -135,13 +139,14 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
             <input
               ref={inputRef}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => onNameChange(e.target.value)}
               placeholder="e.g. feature-1"
               autoComplete="off"
               spellCheck={false}
             />
             <div className="muted" style={{ fontSize: 11 }}>
-              This is also the branch name. Letters, numbers, dot, underscore, slash, dash.
+              This is also the branch name (letters, numbers, dot, underscore, slash, dash). Spaces become dashes as you
+              type.
             </div>
           </div>
           {error && <div className="modal-error">{error}</div>}
