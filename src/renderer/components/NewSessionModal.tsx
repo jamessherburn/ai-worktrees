@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CreateSessionResult, RepoInfo } from '@shared/types';
+import type { WizardConfig } from '@shared/wizard';
 import { AGENTS, DEFAULT_AGENT_ID, type AgentAvailability, type AgentId } from '@shared/agents';
+import { WizardSessionStep } from './WizardSessionStep';
 
 type Props = {
   onClose: () => void;
   onCreated: (result: Extract<CreateSessionResult, { ok: true }>) => void;
 };
+
+type Step = 'form' | 'wizard';
 
 export function NewSessionModal({ onClose, onCreated }: Props) {
   const [repos, setRepos] = useState<RepoInfo[] | null>(null);
@@ -15,6 +19,9 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [useWizardMode, setUseWizardMode] = useState(true);
+  const [step, setStep] = useState<Step>('form');
+  const [wizardConfig, setWizardConfig] = useState<WizardConfig | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -35,8 +42,8 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   }, []);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, [repos]);
+    if (step === 'form') inputRef.current?.focus();
+  }, [repos, step]);
 
   const selectedAvailable = availability ? availability[agentId] : true;
   const anyAvailable = availability ? AGENTS.some((a) => availability[a.id]) : true;
@@ -46,12 +53,16 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     [selectedAvailable, repoPath, name, busy],
   );
 
-  const submit = async () => {
-    if (!canSubmit) return;
+  const runCreate = async (wizardBriefMarkdown: string | null) => {
     setBusy(true);
     setError(null);
     try {
-      const result = await window.api.createSession({ repoPath, name: name.trim(), agentId });
+      const result = await window.api.createSession({
+        repoPath,
+        name: name.trim(),
+        agentId,
+        wizardBriefMarkdown: wizardBriefMarkdown ?? undefined,
+      });
       if (result.ok) {
         onCreated(result);
       } else {
@@ -64,17 +75,47 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     }
   };
 
+  const beginCreate = async () => {
+    if (!canSubmit) return;
+    if (useWizardMode) {
+      const s = await window.api.getSettings();
+      setWizardConfig(s.wizard);
+      setStep('wizard');
+      setError(null);
+      return;
+    }
+    await runCreate(null);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') onClose();
-    if (e.key === 'Enter' && canSubmit) {
+    if (e.key === 'Escape') {
+      if (step === 'wizard') setStep('form');
+      else onClose();
+    }
+    if (step === 'form' && e.key === 'Enter' && canSubmit) {
       e.preventDefault();
-      void submit();
+      void beginCreate();
     }
   };
 
   const onNameChange = (raw: string) => {
     setName(raw.replace(/\s+/g, '-'));
   };
+
+  if (step === 'wizard' && wizardConfig) {
+    return (
+      <div className="modal-backdrop" onClick={() => !busy && setStep('form')}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+          <WizardSessionStep
+            config={wizardConfig}
+            onBack={() => !busy && setStep('form')}
+            onConfirm={(markdown) => void runCreate(markdown)}
+            busy={busy}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -149,13 +190,23 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
               type.
             </div>
           </div>
+          <div className="field field-row">
+            <label className="wizard-mode-check">
+              <input type="checkbox" checked={useWizardMode} onChange={(e) => setUseWizardMode(e.target.checked)} />
+              <span>Use Wizard Mode</span>
+            </label>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              When enabled, you answer a short questionnaire before the session is created so we can draft a briefing for
+              your agent.
+            </div>
+          </div>
           {error && <div className="modal-error">{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
+          <button className="btn btn-primary" onClick={() => void beginCreate()} disabled={!canSubmit}>
             {busy ? 'Creating…' : 'Create Session'}
           </button>
         </div>

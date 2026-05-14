@@ -1,4 +1,5 @@
 import type { AgentId } from './agents';
+import type { WizardConfig } from './wizard';
 
 export type Session = {
   id: string;
@@ -12,6 +13,8 @@ export type Session = {
   createdAt: string;
   lastStartedAt: string | null;
   waitingOnReview?: boolean;
+  /** When set, the session header offers pasting this briefing into the agent terminal. */
+  wizardBriefMarkdown?: string;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';
@@ -28,6 +31,7 @@ export type ThemePreference = 'system' | 'dark' | 'light';
 export type Settings = {
   codeDir: string;
   theme: ThemePreference;
+  wizard: WizardConfig;
 };
 
 export type RepoInfo = {
@@ -39,6 +43,7 @@ export type CreateSessionInput = {
   repoPath: string;
   name: string;
   agentId: AgentId;
+  wizardBriefMarkdown?: string | null;
 };
 
 export type DeleteSessionInput = {

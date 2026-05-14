@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
+import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { Sidebar } from './components/Sidebar';
 import { TerminalView } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
@@ -21,7 +22,9 @@ const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
 const MAIN_PANE_MIN_WIDTH = 80;
 
-const DEFAULT_SETTINGS: Settings = { codeDir: '', theme: 'system' };
+const DEFAULT_SETTINGS: Settings = { codeDir: '', theme: 'system', wizard: DEFAULT_WIZARD_CONFIG };
+
+type TerminalPasteApi = { paste: (text: string) => void };
 
 function clampSidebarWidth(value: number): number {
   if (!Number.isFinite(value)) return SIDEBAR_DEFAULT_WIDTH;
@@ -128,7 +131,7 @@ export function App() {
       if (!alive) return;
       setGhApiBar({ message, tone: 'pending' });
     });
-    let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+    let dismissTimer: number | undefined;
     void window.api
       .ensureGitHubApi()
       .then((result) => {
@@ -201,6 +204,19 @@ export function App() {
     [sessions, activeId],
   );
 
+  const terminalApisRef = useRef(new Map<string, TerminalPasteApi>());
+
+  const handleTerminalApi = useCallback((id: string, api: TerminalPasteApi | null) => {
+    if (api) terminalApisRef.current.set(id, api);
+    else terminalApisRef.current.delete(id);
+  }, []);
+
+  const pasteWizardBrief = useCallback(() => {
+    const s = activeSession;
+    if (!s?.wizardBriefMarkdown) return;
+    terminalApisRef.current.get(s.id)?.paste(s.wizardBriefMarkdown);
+  }, [activeSession]);
+
   const openSession = useCallback((id: string) => {
     setActiveId(id);
     setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -249,6 +265,7 @@ export function App() {
             session={activeSession}
             gitPanelHidden={gitPanelCollapsed}
             onShowGitPanel={toggleGitPanel}
+            onPasteWizardBrief={pasteWizardBrief}
           />
         ) : (
           <EmptyHeader />
@@ -266,6 +283,7 @@ export function App() {
                   blurred={modalOpen}
                   themeName={resolvedTheme}
                   onExit={() => closeSessionTerminal(id)}
+                  onTerminalApi={handleTerminalApi}
                 />
               </div>
             );
@@ -386,12 +404,13 @@ function PaneHeader({
   session,
   gitPanelHidden,
   onShowGitPanel,
+  onPasteWizardBrief,
 }: {
   session: SessionWithStatus;
   gitPanelHidden: boolean;
   onShowGitPanel: () => void;
+  onPasteWizardBrief: () => void;
 }) {
-  const canMarkIdle = session.status === 'running' && session.activity === 'working';
   return (
     <header className="pane-header">
       <div className="header-info">
@@ -401,9 +420,14 @@ function PaneHeader({
         </div>
       </div>
       <div className="pane-actions">
-        {canMarkIdle && (
-          <button className="btn btn-ghost" onClick={() => window.api.pty.markIdle(session.id)}>
-            Mark Idle
+        {session.wizardBriefMarkdown && (
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={onPasteWizardBrief}
+            title="Paste the wizard-generated briefing into the agent terminal at the cursor"
+          >
+            Allow Wizard Command
           </button>
         )}
         {gitPanelHidden && (
