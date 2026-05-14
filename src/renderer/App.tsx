@@ -63,7 +63,7 @@ export function App() {
   const [gitPanelFullscreen, setGitPanelFullscreen] = useState(false);
   const [ghApiBar, setGhApiBar] = useState<{
     message: string;
-    tone: 'pending' | 'success' | 'error';
+    tone: 'pending' | 'success' | 'error' | 'warning';
   } | null>(null);
 
   const onResizeSidebar = useCallback((width: number) => {
@@ -134,13 +134,22 @@ export function App() {
       .then((result) => {
         if (!alive) return;
         if (result.ok) {
-          setGhApiBar({
-            message: result.outcome === 'already-installed' ? 'Already installed' : 'Installed',
-            tone: 'success',
-          });
-          dismissTimer = window.setTimeout(() => {
-            if (alive) setGhApiBar(null);
-          }, 4200);
+          if (result.needsGhAuth) {
+            setGhApiBar({
+              message: result.launchedAuthTerminal
+                ? 'GitHub CLI needs sign-in — finish gh auth login in the Terminal window that opened.'
+                : 'GitHub CLI needs sign-in — run gh auth login in a terminal, then dismiss this message.',
+              tone: 'warning',
+            });
+          } else {
+            setGhApiBar({
+              message: result.outcome === 'already-installed' ? 'Already installed' : 'Installed',
+              tone: 'success',
+            });
+            dismissTimer = window.setTimeout(() => {
+              if (alive) setGhApiBar(null);
+            }, 4200);
+          }
         } else {
           setGhApiBar({
             message: result.error,
