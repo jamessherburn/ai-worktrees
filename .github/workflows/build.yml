@@ -1,0 +1,36 @@
+name: Build MacOS Installers
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: macos-latest # Required to build/code-sign Mac apps
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set artifact name (UTC)
+        id: meta
+        run: echo "name=ai-worktrees-$(date -u +'%d-%m-%y-%H-%M')" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build DMG Packages
+        run: npm run dist
+        # npm run dist runs electron-vite build && electron-builder --mac
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: release/*.dmg
+          retention-days: 5 # Keeps them private and temporary
