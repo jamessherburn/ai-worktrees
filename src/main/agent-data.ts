@@ -84,12 +84,26 @@ function detectCursorBilling(): Billing {
   return { billing: 'subscription', note: 'Cursor plan — check cursor.com for current tier' };
 }
 
+/** ccusage throws when Claude Code has never created local project data (app not installed / not used). */
+function isMissingClaudeLocalData(error: string): boolean {
+  return error.includes('No valid Claude data directories');
+}
+
 export async function getAgentSpend(agentId: AgentId, force = false): Promise<AgentSpendInfo> {
   switch (agentId) {
     case 'claude': {
       const { billing, note } = detectClaudeBilling();
       const result = await getTodayUsage(force);
-      if (!result.ok) return { kind: 'error', message: result.error };
+      if (!result.ok) {
+        if (isMissingClaudeLocalData(result.error)) {
+          return {
+            kind: 'plan',
+            billing: 'unknown',
+            note: 'Claude Code not installed or not used yet — no local usage data',
+          };
+        }
+        return { kind: 'error', message: result.error };
+      }
       const usage = result.usage;
       return {
         kind: 'cost',
