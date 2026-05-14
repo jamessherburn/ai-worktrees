@@ -52,6 +52,13 @@ export const DEFAULT_WIZARD_CONFIG: WizardConfig = {
       showWhen: { questionId: 'intention', equals: 'verify' },
     },
     {
+      id: 'build_context',
+      prompt: 'What are we building or changing? Add goals, constraints, and anything else to kick off the session.',
+      kind: 'textarea',
+      placeholder: 'Describe the feature, bugfix, or refactor; tech preferences; acceptance criteria…',
+      showWhen: { questionId: 'intention', equals: 'build-new' },
+    },
+    {
       id: 'unit_tests_first',
       prompt: 'For this build, should we add unit tests first?',
       kind: 'single',
@@ -86,8 +93,11 @@ export const DEFAULT_WIZARD_CONFIG: WizardConfig = {
 
 **Intention:** {{intention}}
 
-**Verification focus**
+**What we're verifying**
 {{verify_details}}
+
+**What we're building or changing**
+{{build_context}}
 
 **Build preferences** (when starting new work)
 - Unit tests first: {{unit_tests_first}}

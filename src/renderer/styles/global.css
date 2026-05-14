@@ -839,6 +839,197 @@ body.resizing-sidebar .sidebar-resize {
 
 .wizard-edit-body {
   min-height: 0;
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+}
+
+.wizard-config-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wizard-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wizard-config-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wizard-config-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.wizard-template-editor {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: inherit;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.wizard-template-editor:focus {
+  border-color: var(--accent);
+}
+
+.field-label-sm {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.wizard-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-question-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-question-card-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wizard-question-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.wizard-question-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wizard-question-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+@media (max-width: 560px) {
+  .wizard-question-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wizard-question-field-span2 {
+  grid-column: 1 / -1;
+}
+
+.wizard-options-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-option-id {
+  width: 120px;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.wizard-option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.wizard-add-option {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.wizard-show-when {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.wizard-show-when-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: 22px;
+}
+
+.wizard-show-when-fields select {
+  min-width: 140px;
+}
+
+.wizard-show-when-eq {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wizard-raw-json {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-elev-2) 80%, transparent);
+}
+
+.wizard-raw-json summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  user-select: none;
+}
+
+.wizard-raw-json .wizard-config-hint {
+  margin-top: 8px;
+}
+
+.wizard-raw-json .wizard-json-editor {
+  margin-top: 10px;
+  min-height: 160px;
+}
+
+.wizard-raw-json-actions {
+  margin-top: 8px;
 }
 
 .checkbox {

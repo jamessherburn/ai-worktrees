@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { WizardConfig } from '@shared/wizard';
 import { DEFAULT_WIZARD_CONFIG, parseWizardConfigJson, wizardConfigToJson } from '@shared/wizard';
+import { WizardConfigEditor } from './WizardConfigEditor';
 
 type Props = {
   initial: WizardConfig;
@@ -9,21 +10,35 @@ type Props = {
 };
 
 export function WizardEditModal({ initial, onClose, onSaved }: Props) {
-  const [json, setJson] = useState(() => wizardConfigToJson(initial));
+  const [config, setConfig] = useState<WizardConfig>(initial);
+  const [rawJson, setRawJson] = useState(() => wizardConfigToJson(initial));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setJson(wizardConfigToJson(initial));
+    setConfig(initial);
+    setRawJson(wizardConfigToJson(initial));
   }, [initial]);
 
   const resetDefaults = () => {
-    setJson(wizardConfigToJson(DEFAULT_WIZARD_CONFIG));
+    setConfig(DEFAULT_WIZARD_CONFIG);
+    setRawJson(wizardConfigToJson(DEFAULT_WIZARD_CONFIG));
     setError(null);
   };
 
+  const applyRawJson = () => {
+    const parsed = parseWizardConfigJson(rawJson);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    setConfig(parsed.value);
+    setRawJson(wizardConfigToJson(parsed.value));
+  };
+
   const save = async () => {
-    const parsed = parseWizardConfigJson(json);
+    const parsed = parseWizardConfigJson(wizardConfigToJson(config));
     if (!parsed.ok) {
       setError(parsed.error);
       return;
@@ -46,21 +61,39 @@ export function WizardEditModal({ initial, onClose, onSaved }: Props) {
         <div className="modal-header">
           <div className="modal-title">Edit Wizard</div>
           <div className="modal-subtitle">
-            Questions and the markdown template are stored as JSON. Use <code className="kbd">{'{{questionId}}'}</code>{' '}
-            placeholders in <span className="kbd">promptTemplate</span>.
+            Design questions and the briefing template. Placeholders use <code className="kbd">{'{{questionId}}'}</code>{' '}
+            syntax.
           </div>
         </div>
         <div className="modal-body wizard-edit-body">
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="field-label">Wizard configuration (JSON)</label>
+          <WizardConfigEditor value={config} onChange={setConfig} />
+
+          <details
+            className="wizard-raw-json"
+            onToggle={(e) => {
+              if ((e.target as HTMLDetailsElement).open) {
+                setRawJson(wizardConfigToJson(config));
+              }
+            }}
+          >
+            <summary>Advanced: raw JSON</summary>
+            <p className="wizard-config-hint">
+              Paste or edit the full config. Apply replaces the form above; Save still validates everything.
+            </p>
             <textarea
               className="wizard-json-editor"
-              value={json}
-              onChange={(e) => setJson(e.target.value)}
+              value={rawJson}
+              onChange={(e) => setRawJson(e.target.value)}
               spellCheck={false}
               autoComplete="off"
             />
-          </div>
+            <div className="wizard-raw-json-actions">
+              <button type="button" className="btn btn-ghost btn-small" onClick={applyRawJson} disabled={busy}>
+                Apply JSON to form
+              </button>
+            </div>
+          </details>
+
           {error && <div className="modal-error">{error}</div>}
         </div>
         <div className="modal-footer">
