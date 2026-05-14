@@ -48,6 +48,58 @@ async function ghAvailable(): Promise<boolean> {
   }
 }
 
+/** True when `gh` reports an authenticated GitHub host (exit 0). */
+async function ghAuthOk(): Promise<boolean> {
+  try {
+    await runInLoginShell('command -v gh >/dev/null 2>&1 && gh auth status', {
+      timeout: 25_000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function launchGhAuthLogin(): Promise<boolean> {
+  if (process.platform === 'darwin') {
+    try {
+      await execFileAsync('osascript', [
+        '-e',
+        'tell application "Terminal" to do script "gh auth login"',
+      ]);
+      return true;
+    } catch (err) {
+      console.error('[gh-cli] launchGhAuthLogin (Terminal):', (err as Error).message);
+      return false;
+    }
+  }
+  if (process.platform === 'win32') {
+    try {
+      await execFileAsync('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', 'gh auth login'], {
+        windowsHide: false,
+      });
+      return true;
+    } catch (err) {
+      console.error('[gh-cli] launchGhAuthLogin (cmd):', (err as Error).message);
+      return false;
+    }
+  }
+  return false;
+}
+
+async function ensureGhAuthOrOpenLogin(
+  send: (m: string) => void,
+  outcome: 'already-installed' | 'installed',
+): Promise<GhSetupResult> {
+  send('Checking GitHub CLI sign-in...');
+  if (await ghAuthOk()) {
+    return { ok: true, outcome };
+  }
+  send('Opening a terminal for GitHub sign-in…');
+  const launchedAuthTerminal = await launchGhAuthLogin();
+  return { ok: true, outcome, needsGhAuth: true, launchedAuthTerminal };
+}
+
 async function brewInstall(
   send: (m: string) => void,
   formula: string,
@@ -135,13 +187,13 @@ export async function ensureGitHubCli(send: (message: string) => void): Promise<
 
   send('Checking if GitHub API is installed...');
   if (await ghAvailable()) {
-    return { ok: true, outcome: 'already-installed' };
+    return ensureGhAuthOrOpenLogin(send, 'already-installed');
   }
 
   send('Installing GitHub API...');
   const ghOk = await ensureGh(send);
   if (ghOk) {
-    return { ok: true, outcome: 'installed' };
+    return ensureGhAuthOrOpenLogin(send, 'installed');
   }
 
   const hint =

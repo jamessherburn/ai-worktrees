@@ -130,5 +130,12 @@ export type OpenInVSCodeResult =
   | { ok: false; reason: 'failed'; error: string };
 
 export type GhSetupResult =
-  | { ok: true; outcome: 'already-installed' | 'installed' }
+  | {
+      ok: true;
+      outcome: 'already-installed' | 'installed';
+      /** Present when `gh` is installed but `gh auth status` fails (user must sign in). */
+      needsGhAuth?: boolean;
+      /** Whether the app tried to open a system terminal to run `gh auth login`. */
+      launchedAuthTerminal?: boolean;
+    }
   | { ok: false; error: string };

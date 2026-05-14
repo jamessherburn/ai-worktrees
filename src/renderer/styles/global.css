@@ -1497,6 +1497,11 @@ body.resizing-git-panel .git-panel-resize {
   color: var(--danger);
 }
 
+.gh-api-status-bar--warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  color: var(--warning);
+}
+
 .gh-api-status-bar__text {
   overflow: hidden;
   text-overflow: ellipsis;
