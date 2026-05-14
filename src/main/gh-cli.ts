@@ -23,10 +23,17 @@ async function runInLoginShell(
 
 async function gitAvailable(): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync('git', ['--version'], { timeout: 8000 });
+    const { stdout } = await runInLoginShell('command -v git >/dev/null 2>&1 && git --version', {
+      timeout: 20_000,
+    });
     return /git version/i.test(stdout);
   } catch {
-    return false;
+    try {
+      const { stdout } = await execFileAsync('git', ['--version'], { timeout: 8000 });
+      return /git version/i.test(stdout);
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -41,29 +48,39 @@ async function ghAvailable(): Promise<boolean> {
   }
 }
 
-async function installWithBrew(send: (m: string) => void): Promise<boolean> {
-  send('Installing via Homebrew...');
+async function brewInstall(
+  send: (m: string) => void,
+  formula: string,
+  progressLabel: string,
+  verify: () => Promise<boolean>,
+): Promise<boolean> {
+  send(progressLabel);
   try {
-    await runInLoginShell('command -v brew >/dev/null 2>&1 && brew install gh', {
+    await runInLoginShell(`command -v brew >/dev/null 2>&1 && brew install ${formula}`, {
       timeout: 600_000,
       maxBuffer: 20 * 1024 * 1024,
     });
-    return ghAvailable();
+    return verify();
   } catch (err) {
-    console.error('[gh-cli] brew install failed:', (err as Error).message);
-    return false;
+    console.error(`[gh-cli] brew install ${formula} failed:`, (err as Error).message);
+    return verify();
   }
 }
 
-async function installWindows(send: (m: string) => void): Promise<boolean> {
-  send('Installing via winget...');
+async function wingetInstall(
+  send: (m: string) => void,
+  wingetId: string,
+  progressLabel: string,
+  verify: () => Promise<boolean>,
+): Promise<boolean> {
+  send(progressLabel);
   try {
     await execFileAsync(
       'winget',
       [
         'install',
         '--id',
-        'GitHub.cli',
+        wingetId,
         '-e',
         '--source',
         'winget',
@@ -72,35 +89,58 @@ async function installWindows(send: (m: string) => void): Promise<boolean> {
       ],
       { timeout: 600_000, maxBuffer: 20 * 1024 * 1024 },
     );
-    return ghAvailable();
+    return verify();
   } catch (err) {
-    console.error('[gh-cli] winget install failed:', (err as Error).message);
-    return false;
+    console.error(`[gh-cli] winget install ${wingetId} failed:`, (err as Error).message);
+    return verify();
   }
 }
 
-export async function ensureGitHubCli(send: (message: string) => void): Promise<GhSetupResult> {
-  send('Checking if GitHub API is installed...');
+async function ensureGit(send: (m: string) => void): Promise<boolean> {
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    return brewInstall(send, 'git', 'Installing Git via Homebrew...', gitAvailable);
+  }
+  if (process.platform === 'win32') {
+    return wingetInstall(send, 'Git.Git', 'Installing Git via winget...', gitAvailable);
+  }
+  return false;
+}
 
+async function ensureGh(send: (m: string) => void): Promise<boolean> {
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    return brewInstall(send, 'gh', 'Installing GitHub CLI via Homebrew...', ghAvailable);
+  }
+  if (process.platform === 'win32') {
+    return wingetInstall(send, 'GitHub.cli', 'Installing GitHub CLI via winget...', ghAvailable);
+  }
+  return false;
+}
+
+export async function ensureGitHubCli(send: (message: string) => void): Promise<GhSetupResult> {
+  send('Checking if Git is installed...');
   if (!(await gitAvailable())) {
-    send('Git not found — install Git first.');
-    return { ok: false, error: 'Git is not installed or not on PATH.' };
+    send('Installing Git...');
+    const gitOk = await ensureGit(send);
+    if (!gitOk || !(await gitAvailable())) {
+      send('Could not install Git automatically.');
+      const hint =
+        process.platform === 'darwin'
+          ? 'Install manually: brew install git (https://git-scm.com)'
+          : process.platform === 'win32'
+            ? 'Install manually: winget install Git.Git (https://git-scm.com)'
+            : 'Install manually — see https://git-scm.com/downloads';
+      return { ok: false, error: `Git is not available. ${hint}` };
+    }
   }
 
+  send('Checking if GitHub API is installed...');
   if (await ghAvailable()) {
     return { ok: true, outcome: 'already-installed' };
   }
 
   send('Installing GitHub API...');
-
-  let installed = false;
-  if (process.platform === 'darwin' || process.platform === 'linux') {
-    installed = await installWithBrew(send);
-  } else if (process.platform === 'win32') {
-    installed = await installWindows(send);
-  }
-
-  if (installed) {
+  const ghOk = await ensureGh(send);
+  if (ghOk) {
     return { ok: true, outcome: 'installed' };
   }
 
@@ -114,6 +154,6 @@ export async function ensureGitHubCli(send: (message: string) => void): Promise<
   send('Could not install automatically.');
   return {
     ok: false,
-    error: `Automatic install failed. ${hint}`,
+    error: `Automatic GitHub CLI install failed. ${hint}`,
   };
 }
