@@ -128,3 +128,7 @@ export type OpenInVSCodeResult =
   | { ok: true }
   | { ok: false; reason: 'not-installed' }
   | { ok: false; reason: 'failed'; error: string };
+
+export type GhSetupResult =
+  | { ok: true; outcome: 'already-installed' | 'installed' }
+  | { ok: false; error: string };

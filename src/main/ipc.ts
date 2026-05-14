@@ -6,6 +6,7 @@ import type {
   CreateSessionInput,
   DeleteSessionInput,
   DiaryItem,
+  GhSetupResult,
   GitDiffRequest,
   GitDiffResult,
   GitStatusResult,
@@ -16,6 +17,7 @@ import type {
   SessionWithStatus,
 } from '@shared/types';
 import { IPC } from '@shared/ipc-channels';
+import { ensureGitHubCli } from './gh-cli.js';
 import { listRepos } from './repos.js';
 import { getFileDiff, getWorktreeStatus } from './git.js';
 import { openWorktreeInVSCode } from './vscode.js';
@@ -79,6 +81,13 @@ async function decorate(sessions: Session[]): Promise<SessionWithStatus[]> {
 }
 
 export function registerIpc(): void {
+  ipcMain.handle(IPC.GhSetupEnsure, async (event): Promise<GhSetupResult> => {
+    const wc = event.sender;
+    return ensureGitHubCli((message) => {
+      wc.send(IPC.GhSetupProgress, message);
+    });
+  });
+
   ipcMain.handle(IPC.ListSessions, async (): Promise<SessionWithStatus[]> => {
     return decorate(await listSessions());
   });

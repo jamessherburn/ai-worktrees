@@ -1460,3 +1460,71 @@ body.resizing-git-panel .git-panel-resize {
   display: inline-block;
   min-width: 100%;
 }
+
+/* GitHub API (gh) startup status */
+.gh-api-status-bar {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 28px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  animation: gh-api-status-in 180ms ease-out;
+}
+
+.gh-api-status-bar--pending {
+  border-color: var(--border-strong);
+}
+
+.gh-api-status-bar--success {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  color: var(--success);
+}
+
+.gh-api-status-bar--error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+}
+
+.gh-api-status-bar__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-api-status-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: gh-api-spin 0.7s linear infinite;
+}
+
+@keyframes gh-api-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gh-api-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

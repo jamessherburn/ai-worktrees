@@ -61,6 +61,10 @@ export function App() {
     return clampGitPanelWidth(stored, SIDEBAR_DEFAULT_WIDTH);
   });
   const [gitPanelFullscreen, setGitPanelFullscreen] = useState(false);
+  const [ghApiBar, setGhApiBar] = useState<{
+    message: string;
+    tone: 'pending' | 'success' | 'error';
+  } | null>(null);
 
   const onResizeSidebar = useCallback((width: number) => {
     setSidebarWidth(clampSidebarWidth(width));
@@ -116,6 +120,50 @@ export function App() {
     const list = await window.api.listSessions();
     setSessions(list);
     return list;
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const unsub = window.api.onGitHubApiSetupProgress((message) => {
+      if (!alive) return;
+      setGhApiBar({ message, tone: 'pending' });
+    });
+    let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+    void window.api
+      .ensureGitHubApi()
+      .then((result) => {
+        if (!alive) return;
+        if (result.ok) {
+          setGhApiBar({
+            message: result.outcome === 'already-installed' ? 'Already installed' : 'Installed',
+            tone: 'success',
+          });
+          dismissTimer = window.setTimeout(() => {
+            if (alive) setGhApiBar(null);
+          }, 4200);
+        } else {
+          setGhApiBar({
+            message: result.error,
+            tone: 'error',
+          });
+          dismissTimer = window.setTimeout(() => {
+            if (alive) setGhApiBar(null);
+          }, 12000);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setGhApiBar({ message: `GitHub API check failed: ${message}`, tone: 'error' });
+        dismissTimer = window.setTimeout(() => {
+          if (alive) setGhApiBar(null);
+        }, 12000);
+      });
+    return () => {
+      alive = false;
+      unsub();
+      if (dismissTimer !== undefined) window.clearTimeout(dismissTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -275,6 +323,18 @@ export function App() {
 
       {vscodeMissing && (
         <VSCodeMissingModal onClose={() => setVscodeMissing(false)} />
+      )}
+
+      {ghApiBar && (
+        <div
+          className={`gh-api-status-bar gh-api-status-bar--${ghApiBar.tone}`}
+          role="status"
+          onClick={() => setGhApiBar(null)}
+          title="Dismiss"
+        >
+          {ghApiBar.tone === 'pending' && <span className="gh-api-status-bar__spinner" aria-hidden />}
+          <span className="gh-api-status-bar__text">{ghApiBar.message}</span>
+        </div>
       )}
     </div>
   );
