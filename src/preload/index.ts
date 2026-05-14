@@ -43,6 +43,7 @@ const api = {
     ipcRenderer.invoke(IPC.PickDirectory, defaultPath),
   revealInFinder: (path: string) => ipcRenderer.invoke(IPC.RevealInFinder, path),
   openInITerm: (path: string) => ipcRenderer.invoke(IPC.OpenInITerm, path),
+  openInTerminal: (path: string): Promise<void> => ipcRenderer.invoke(IPC.OpenInTerminal, path),
   openInVSCode: (path: string): Promise<OpenInVSCodeResult> =>
     ipcRenderer.invoke(IPC.OpenInVSCode, path),
   detectAgents: (force?: boolean): Promise<AgentAvailability> =>

@@ -105,6 +105,9 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     agentId: input.agentId ?? DEFAULT_AGENT_ID,
     createdAt: new Date().toISOString(),
     lastStartedAt: null,
+    ...(input.wizardBriefMarkdown != null && input.wizardBriefMarkdown !== ''
+      ? { wizardBriefMarkdown: input.wizardBriefMarkdown }
+      : {}),
   };
 
   await store.update((current) => ({ sessions: [...current.sessions, session] }));

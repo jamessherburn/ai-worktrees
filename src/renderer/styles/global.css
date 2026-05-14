@@ -325,6 +325,40 @@ body.resizing-sidebar .sidebar-resize {
   white-space: nowrap;
 }
 
+.session-agent-tag-wrap {
+  flex-shrink: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.session-agent-tag-wrap--wizard .session-agent-tag {
+  padding-right: 8px;
+}
+
+.session-agent-wizard-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+[data-theme='light'] .session-agent-wizard-badge {
+  box-shadow: 0 1px 4px rgba(46, 35, 73, 0.12);
+}
+
 .session-agent-tag {
   flex-shrink: 0;
   display: inline-flex;
@@ -713,6 +747,98 @@ body.resizing-sidebar .sidebar-resize {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.wizard-mode-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+}
+
+.wizard-mode-check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.wizard-session-body {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}
+
+.wizard-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.wizard-option:hover {
+  border-color: var(--border-strong);
+}
+
+.wizard-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2));
+}
+
+.wizard-option input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.wizard-textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font: inherit;
+  color: inherit;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.wizard-textarea:focus {
+  border-color: var(--accent);
+}
+
+.wizard-json-editor {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: inherit;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.wizard-json-editor:focus {
+  border-color: var(--accent);
+}
+
+.wizard-edit-body {
+  min-height: 0;
 }
 
 .checkbox {
@@ -1257,7 +1383,9 @@ body.resizing-git-panel .git-panel-resize {
 
 .dev-panel-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);

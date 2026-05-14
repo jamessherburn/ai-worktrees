@@ -134,6 +134,12 @@ export function DeveloperPanel({
     }
   }, [worktreePath, onVSCodeNotInstalled]);
 
+  const openInTerminal = useCallback(() => {
+    void window.api.openInTerminal(worktreePath).catch(() => {
+      // Terminal.app missing or AppleScript denied — best-effort; no modal for now
+    });
+  }, [worktreePath]);
+
   const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
   const onResizeMouseDown = (e: React.MouseEvent) => {
@@ -202,6 +208,14 @@ export function DeveloperPanel({
         >
           <VSCodeIcon />
           <span>Open In Visual Studio Code</span>
+        </button>
+        <button
+          className="btn btn-ghost btn-small"
+          onClick={openInTerminal}
+          title={`Open ${worktreePath} in Terminal`}
+        >
+          <TerminalAppIcon />
+          <span>Open In Terminal</span>
         </button>
       </div>
 
@@ -420,6 +434,16 @@ function VSCodeIcon() {
       <path d="M17 3 7 12l10 9V3z" />
       <line x1="7" y1="12" x2="3" y2="9" />
       <line x1="7" y1="12" x2="3" y2="15" />
+    </svg>
+  );
+}
+
+function TerminalAppIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="14" rx="2" />
+      <path d="M7 8h6M7 12h10" />
+      <polyline points="9 16 7 14 9 12" />
     </svg>
   );
 }

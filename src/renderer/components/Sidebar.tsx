@@ -144,15 +144,26 @@ export function Sidebar({
                         <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
                         <div className="session-name" title={s.name}>
                           {s.name}
-                          <div className="session-branch">
-                            <span
-                              className={`session-agent-tag agent-${s.agentId}`}
-                              title={`Agent: ${getAgent(s.agentId).name}`}
-                            >
+                        <div className="session-branch">
+                          <span
+                            className={`session-agent-tag-wrap${s.wizardBriefMarkdown ? ' session-agent-tag-wrap--wizard' : ''}`}
+                            title={
+                              s.wizardBriefMarkdown
+                                ? `Agent: ${getAgent(s.agentId).name} · Wizard briefing available`
+                                : `Agent: ${getAgent(s.agentId).name}`
+                            }
+                          >
+                            <span className={`session-agent-tag agent-${s.agentId}`}>
                               {getAgent(s.agentId).name}
                             </span>
-                            {s.branchName}
-                          </div>
+                            {s.wizardBriefMarkdown ? (
+                              <span className="session-agent-wizard-badge" aria-hidden>
+                                <WizardHatIcon />
+                              </span>
+                            ) : null}
+                          </span>
+                          {s.branchName}
+                        </div>
                         </div>
                         <button
                           className="session-delete"
@@ -234,6 +245,15 @@ function SessionContextMenu({
         </button>
       )}
     </div>
+  );
+}
+
+function WizardHatIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 3 5 16h14L12 3z" />
+      <path d="M4 16h16v2.5H4z" />
+    </svg>
   );
 }
 

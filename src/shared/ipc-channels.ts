@@ -8,6 +8,7 @@ export const IPC = {
   PickDirectory: 'dialog:pickDirectory',
   RevealInFinder: 'shell:revealInFinder',
   OpenInITerm: 'shell:openInITerm',
+  OpenInTerminal: 'shell:openInTerminal',
   PtyStart: 'pty:start',
   PtyWrite: 'pty:write',
   PtyResize: 'pty:resize',

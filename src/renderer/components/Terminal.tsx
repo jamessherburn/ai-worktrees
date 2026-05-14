@@ -3,12 +3,15 @@ import { Terminal as Xterm, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 
+type TerminalApi = { paste: (text: string) => void };
+
 type Props = {
   sessionId: string;
   visible: boolean;
   blurred: boolean;
   themeName: 'dark' | 'light';
   onExit?: (sessionId: string) => void;
+  onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
 };
 
 const DARK_THEME: ITheme = {
@@ -59,10 +62,12 @@ const LIGHT_THEME: ITheme = {
   brightWhite: '#1f2330',
 };
 
-export function TerminalView({ sessionId, visible, blurred, themeName, onExit }: Props) {
+export function TerminalView({ sessionId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const onTerminalApiRef = useRef(onTerminalApi);
+  onTerminalApiRef.current = onTerminalApi;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -82,6 +87,13 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit }:
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(host);
+
+    onTerminalApiRef.current?.(sessionId, {
+      paste: (text: string) => {
+        term.focus();
+        term.paste(text);
+      },
+    });
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -138,6 +150,7 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit }:
 
     return () => {
       cancelled = true;
+      onTerminalApiRef.current?.(sessionId, null);
       if (fitTimer !== undefined) window.clearTimeout(fitTimer);
       unsubData?.();
       unsubExit?.();
@@ -146,7 +159,7 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit }:
       termRef.current = null;
       fitRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- terminal is tied to sessionId; theme updates handled separately
   }, [sessionId]);
 
   useEffect(() => {

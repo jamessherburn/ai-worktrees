@@ -1,5 +1,5 @@
 import { dialog, ipcMain, nativeTheme, shell } from 'electron';
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import type { AgentId } from '@shared/agents';
 import type { AgentSpendInfo } from '@shared/types';
 import type {
@@ -134,6 +134,25 @@ export function registerIpc(): void {
     const script = `tell application "iTerm" to create window with default profile command "cd \\"${escaped}\\" && claude --continue"`;
     return new Promise<void>((resolve) => {
       exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve());
+    });
+  });
+
+  ipcMain.handle(IPC.OpenInTerminal, async (_e, dir: string) => {
+    const inner = dir.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        'osascript',
+        [
+          '-e',
+          'tell application "Terminal" to activate',
+          '-e',
+          `tell application "Terminal" to do script "cd " & quoted form of "${inner}"`,
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        },
+      );
     });
   });
 
