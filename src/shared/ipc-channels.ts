@@ -30,6 +30,8 @@ export const IPC = {
   GitDiff: 'git:diff',
   OpenInVSCode: 'shell:openInVSCode',
   AgentsDetect: 'agents:detect',
+  GhSetupEnsure: 'gh-setup:ensure',
+  GhSetupProgress: 'gh-setup:progress',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

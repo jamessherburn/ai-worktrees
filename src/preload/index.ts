@@ -7,6 +7,7 @@ import type {
   CreateSessionResult,
   DeleteSessionInput,
   DiaryItem,
+  GhSetupResult,
   GitDiffRequest,
   GitDiffResult,
   GitStatusResult,
@@ -22,6 +23,12 @@ type PtyExitPayload = { sessionId: string; exitCode: number };
 type PtyActivityPayload = { sessionId: string; activity: ActivityState };
 
 const api = {
+  ensureGitHubApi: (): Promise<GhSetupResult> => ipcRenderer.invoke(IPC.GhSetupEnsure),
+  onGitHubApiSetupProgress: (cb: (message: string) => void) => {
+    const listener = (_: unknown, message: string) => cb(message);
+    ipcRenderer.on(IPC.GhSetupProgress, listener);
+    return () => ipcRenderer.removeListener(IPC.GhSetupProgress, listener);
+  },
   listSessions: (): Promise<SessionWithStatus[]> => ipcRenderer.invoke(IPC.ListSessions),
   setWaitingOnReview: (sessionId: string, value: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.SessionsSetWaitingOnReview, { sessionId, value }),
