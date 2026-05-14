@@ -122,7 +122,9 @@ export async function startPty(opts: {
 
   let proc: pty.IPty;
   try {
-    proc = pty.spawn(shellPath(), ['-l', '-c', launch.shellCommand], {
+    // Match agent-detection.ts: login + interactive (-lic) so ~/.zshrc PATH
+    // (nvm, fnm, etc.) matches what `command -v` saw when marking the agent installed.
+    proc = pty.spawn(shellPath(), ['-lic', launch.shellCommand], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,

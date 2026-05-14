@@ -131,7 +131,7 @@ pty-manager calls agents.buildLaunchCommand(agentId, {cwd, previouslyStarted})
        which returns the shell line to run (e.g. "claude --continue")
     │
     ▼
-pty.spawn('/bin/zsh', ['-l', '-c', '<shell command>'], { cwd: worktreePath })
+pty.spawn(shellPath(), ['-lic', '<shell command>'], { cwd: worktreePath })
        Data flows over IPC.PtyData → xterm.js. Input flows back over IPC.PtyWrite.
        Activity is sampled every 500ms and emitted over IPC.PtyActivity.
     │
@@ -249,7 +249,7 @@ This app is local-first. It does not phone home, collect telemetry, or check for
 ### Shell injection surface
 
 - All git calls use `execFile` (no shell). Branch names, paths, refs are passed as argv, never interpolated into a command string.
-- Pty launches via `pty.spawn('/bin/zsh', ['-l', '-c', launch.shellCommand], { cwd })`. The `shellCommand` for built-in agents is composed of literal strings only (e.g. `'claude --continue'`) — no untrusted interpolation. **If you add an agent that needs user-supplied flags in its launch command, escape them or pass them as separate argv to the CLI inside the shell command.**
+- Pty launches via `pty.spawn(shellPath(), ['-lic', launch.shellCommand], { cwd })` (same `-lic` flags as agent detection so `PATH` matches). The `shellCommand` for built-in agents is composed of literal strings only (e.g. `'claude --continue'`) — no untrusted interpolation. **If you add an agent that needs user-supplied flags in its launch command, escape them or pass them as separate argv to the CLI inside the shell command.**
 - Session names are validated against `^[a-zA-Z0-9._/-]+$` (`NAME_PATTERN` in `src/main/sessions.ts`) before being used to construct branch names or worktree paths.
 - Agent-CLI detection runs `command -v <binary>` inside a login shell. Each `<binary>` comes from the in-code `AGENTS` registry (literal strings), never from user input.
 - The only `exec` (shell) call is `osascript` for the iTerm helper, and the only thing interpolated is the worktree path — itself derived from validated inputs.
