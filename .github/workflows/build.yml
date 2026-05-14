@@ -25,8 +25,8 @@ jobs:
         run: npm install
 
       - name: Build DMG Packages
-        run: npm run dist
-        # npm run dist runs electron-vite build && electron-builder --mac
+        run: npm run dist:ci
+        # --publish never: CI sets CI=true; electron-builder otherwise expects GH_TOKEN for releases
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
