@@ -4,6 +4,10 @@ A local Mac desktop app for managing AI coding-agent sessions across multiple re
 
 The first supported agent is [Claude Code](https://claude.com/claude-code). The app is designed so additional agents can be plugged in without changing the rest of the UI.
 
+# Installing The Latest Version
+The latest version can be found from the Actions tab.  Each time the `main` branch is updated a new release artifact is created.  For personal use you can self-sign the application after installation using the following command:
+`xattr -rd com.apple.quarantine "/Applications/AI Worktrees.app"`.
+
 ## Features
 
 - **One-click new session** — pick an agent and a repo, name the session, app creates a worktree off the latest `origin/main` (or `origin/master`) and opens the agent inside it.
