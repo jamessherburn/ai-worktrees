@@ -31,6 +31,20 @@ async function buildClaudeCommand({ cwd, previouslyStarted }: LaunchOptions): Pr
   return { shellCommand: canContinue ? 'claude --continue' : 'claude' };
 }
 
+async function buildAiderCommand(): Promise<LaunchCommand> {
+  // Use the model specified by the user. Aider will pick up local .aider.conf.yml if present.
+  // We also point it to the global instructions file if it exists.
+  const instructions = join(homedir(), '.aider', 'AIDER.md');
+  let cmd = 'aider --model ollama/qwen2.5-coder:7b';
+  try {
+    await fs.stat(instructions);
+    cmd += ` --read ${instructions}`;
+  } catch {
+    // ignore
+  }
+  return { shellCommand: cmd };
+}
+
 function buildResumable(base: string, resumeArgs: string | null, options: LaunchOptions): LaunchCommand {
   if (options.previouslyStarted && resumeArgs) {
     return { shellCommand: `${base} ${resumeArgs}`.trim() };
@@ -51,5 +65,7 @@ export async function buildLaunchCommand(
       return buildResumable('codex', 'resume --last', options);
     case 'gemini':
       return buildResumable('gemini', null, options);
+    case 'aider':
+      return buildAiderCommand();
   }
 }

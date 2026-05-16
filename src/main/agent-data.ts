@@ -120,5 +120,11 @@ export async function getAgentSpend(agentId: AgentId, force = false): Promise<Ag
       return { kind: 'plan', ...(await detectGeminiBilling()) };
     case 'codex':
       return { kind: 'plan', ...(await detectCodexBilling()) };
+    case 'aider':
+      return {
+        kind: 'plan',
+        billing: 'free',
+        note: 'Local Ollama/Aider — no per-token charges',
+      };
   }
 }
