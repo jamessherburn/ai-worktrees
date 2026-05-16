@@ -12,9 +12,12 @@ function shellPath(): string {
 }
 
 function buildProbeCommand(): string {
-  return AGENTS.map(
-    (a) => `command -v ${a.binary} >/dev/null 2>&1 && echo "${a.id}=1" || echo "${a.id}=0"`,
-  ).join('; ');
+  return AGENTS.map((a) => {
+    if (a.id === 'aider') {
+      return `(command -v aider >/dev/null 2>&1 && command -v ollama >/dev/null 2>&1 && command -v ctags >/dev/null 2>&1 && ollama list | grep -q "qwen2.5-coder" && echo "aider=1") || echo "aider=0"`;
+    }
+    return `command -v ${a.binary} >/dev/null 2>&1 && echo "${a.id}=1" || echo "${a.id}=0"`;
+  }).join('; ');
 }
 
 function parseProbeOutput(stdout: string): AgentAvailability {
