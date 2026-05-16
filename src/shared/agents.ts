@@ -1,4 +1,4 @@
-export type AgentId = 'claude' | 'cursor' | 'gemini' | 'codex' | 'aider';
+export type AgentId = 'claude' | 'cursor' | 'gemini' | 'codex';
 
 export type AgentInstructionsLocation = {
   home: string;
@@ -41,13 +41,6 @@ export const AGENTS: AgentDefinition[] = [
     description: 'OpenAI Codex CLI',
     binary: 'codex',
     instructions: { home: '.codex', filename: 'AGENTS.md' },
-  },
-  {
-    id: 'aider',
-    name: 'Aider (Local)',
-    description: 'Aider with local Ollama qwen2.5-coder',
-    binary: 'aider',
-    instructions: { home: '.aider', filename: 'AIDER.md' },
   },
 ];
 
