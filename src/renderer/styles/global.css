@@ -399,12 +399,6 @@ body.resizing-sidebar .sidebar-resize {
   border-color: color-mix(in srgb, #66C49A 32%, transparent);
 }
 
-.session-agent-tag.agent-aider {
-  color: #B2D86B;
-  background: color-mix(in srgb, #B2D86B 14%, transparent);
-  border-color: color-mix(in srgb, #B2D86B 32%, transparent);
-}
-
 .status-dot {
   width: 8px;
   height: 8px;
