@@ -6,10 +6,12 @@ import type {
   CreateSessionInput,
   CreateSessionResult,
   DeleteSessionInput,
-  DiaryItem,
+  TaskItem,
   GhSetupResult,
   GitDiffRequest,
   GitDiffResult,
+  GitFileActionRequest,
+  GitFileActionResult,
   GitStatusResult,
   OpenInVSCodeResult,
   RepoInfo,
@@ -59,14 +61,20 @@ const api = {
       ipcRenderer.invoke(IPC.GitStatus, sessionId),
     diff: (req: GitDiffRequest): Promise<GitDiffResult> =>
       ipcRenderer.invoke(IPC.GitDiff, req),
+    fileAction: (req: GitFileActionRequest): Promise<GitFileActionResult> =>
+      ipcRenderer.invoke(IPC.GitFileAction, req),
   },
-  diary: {
-    list: (): Promise<DiaryItem[]> => ipcRenderer.invoke(IPC.DiaryList),
-    add: (text: string): Promise<DiaryItem> => ipcRenderer.invoke(IPC.DiaryAdd, text),
-    toggleDone: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DiaryToggleDone, id),
-    remove: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DiaryRemove, id),
+  tasks: {
+    list: (): Promise<TaskItem[]> => ipcRenderer.invoke(IPC.TasksList),
+    add: (text: string, sectionId: string): Promise<TaskItem> =>
+      ipcRenderer.invoke(IPC.TasksAdd, { text, sectionId }),
+    update: (id: string, text: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.TasksUpdate, { id, text }),
+    move: (id: string, sectionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.TasksMove, { id, sectionId }),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(IPC.TasksRemove, id),
     clearDoneBefore: (cutoffISO: string): Promise<number> =>
-      ipcRenderer.invoke(IPC.DiaryClearDoneBefore, cutoffISO),
+      ipcRenderer.invoke(IPC.TasksClearDoneBefore, cutoffISO),
   },
   pty: {
     start: (sessionId: string, cols: number, rows: number) =>
@@ -78,7 +86,9 @@ const api = {
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.send(IPC.PtyResize, { sessionId, cols, rows }),
     kill: (sessionId: string) => ipcRenderer.invoke(IPC.PtyKill, sessionId),
-    backlog: (sessionId: string): Promise<{ running: boolean; backlog: string }> =>
+    backlog: (
+      sessionId: string,
+    ): Promise<{ running: boolean; backlog: string; activity: 'working' | 'idle' }> =>
       ipcRenderer.invoke(IPC.PtyBacklog, sessionId),
     markIdle: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.PtyMarkIdle, sessionId),

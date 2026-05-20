@@ -3,7 +3,10 @@ import { Terminal as Xterm, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 
-type TerminalApi = { paste: (text: string) => void };
+export type TerminalApi = {
+  paste: (text: string) => void;
+  scrollToBottom: () => void;
+};
 
 type Props = {
   sessionId: string;
@@ -91,7 +94,20 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     onTerminalApiRef.current?.(sessionId, {
       paste: (text: string) => {
         term.focus();
-        term.paste(text);
+        // Write to the PTY so input lands at the shell cursor; echoed output appears in xterm.
+        window.api.pty.write(sessionId, text.replace(/\n/g, '\r'));
+      },
+      scrollToBottom: () => {
+        const buffer = term.buffer.active;
+        const target = buffer.baseY + buffer.length - 1;
+        if (target >= buffer.viewportY) {
+          term.scrollToLine(target);
+        }
+        term.scrollToBottom();
+        requestAnimationFrame(() => {
+          term.scrollToBottom();
+          term.focus();
+        });
       },
     });
 

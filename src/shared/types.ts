@@ -28,10 +28,31 @@ export type SessionWithStatus = Session & {
 
 export type ThemePreference = 'system' | 'dark' | 'light';
 
+export type TaskSectionConfig = {
+  id: string;
+  name: string;
+  /** When true, the column is hidden on the board; cards remain stored until the section is shown again. */
+  hidden?: boolean;
+};
+
+export type TasksConfig = {
+  sections: TaskSectionConfig[];
+  /** Board section whose completed cards appear in What Did I Do (default: Done). */
+  whatDidIDoSectionId: string;
+};
+
+export type SessionPromptPreset = {
+  title: string;
+  text: string;
+};
+
 export type Settings = {
   codeDir: string;
   theme: ThemePreference;
   wizard: WizardConfig;
+  tasks?: TasksConfig;
+  /** Pre-built prompts shown in each session row (pasted into the terminal with Enter). */
+  sessionPrompts?: SessionPromptPreset[];
 };
 
 export type RepoInfo = {
@@ -84,12 +105,17 @@ export type AgentSpendInfo =
   | { kind: 'plan'; billing: AgentBillingMode; note: string }
   | { kind: 'error'; message: string };
 
-export type DiaryItem = {
+export type TaskItem = {
   id: string;
   text: string;
   createdAt: string;
+  sectionId: string;
+  /** Set when the card enters the configured "What Did I Do" section (typically Done). */
   doneAt: string | null;
 };
+
+/** @deprecated Use TaskItem */
+export type DiaryItem = TaskItem;
 
 export type GitFileChangeKind =
   | 'modified'
@@ -128,6 +154,20 @@ export type GitDiffRequest = {
 export type GitDiffResult =
   | { ok: true; diff: string }
   | { ok: false; error: string };
+
+export type GitFileGroup = 'staged' | 'unstaged' | 'untracked';
+
+export type GitFileAction = 'stage' | 'unstage' | 'discard';
+
+export type GitFileActionRequest = {
+  sessionId: string;
+  path: string;
+  oldPath?: string;
+  group: GitFileGroup;
+  action: GitFileAction;
+};
+
+export type GitFileActionResult = { ok: true } | { ok: false; error: string };
 
 export type OpenInVSCodeResult =
   | { ok: true }

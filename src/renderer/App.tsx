@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
+import { DEFAULT_SESSION_PROMPTS, normalizeSessionPrompts } from '@shared/session-prompts';
+import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { Sidebar } from './components/Sidebar';
-import { TerminalView } from './components/Terminal';
+import { TerminalView, type TerminalApi } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
-import { DiaryModal } from './components/DiaryModal';
 import { DeveloperPanel } from './components/DeveloperPanel';
+import { SessionPromptBar } from './components/SessionPromptBar';
+import { TasksPanel } from './components/TasksPanel';
 import { Logo } from './components/Logo';
 import { useResolvedTheme } from './theme';
 
@@ -21,10 +24,20 @@ const SIDEBAR_DEFAULT_WIDTH = 280;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
 const MAIN_PANE_MIN_WIDTH = 80;
+const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
+const TASKS_PANEL_HEIGHT_KEY = 'tasks-panel-height';
+const TASKS_PANEL_DEFAULT_HEIGHT = 280;
+const TASKS_PANEL_MIN_HEIGHT = 160;
+const MAIN_PANE_MIN_HEIGHT = 120;
 
-const DEFAULT_SETTINGS: Settings = { codeDir: '', theme: 'system', wizard: DEFAULT_WIZARD_CONFIG };
+const DEFAULT_SETTINGS: Settings = {
+  codeDir: '',
+  theme: 'system',
+  wizard: DEFAULT_WIZARD_CONFIG,
+  tasks: DEFAULT_TASKS_CONFIG,
+  sessionPrompts: DEFAULT_SESSION_PROMPTS,
+};
 
-type TerminalPasteApi = { paste: (text: string) => void };
 
 function clampSidebarWidth(value: number): number {
   if (!Number.isFinite(value)) return SIDEBAR_DEFAULT_WIDTH;
@@ -41,13 +54,29 @@ function clampGitPanelWidth(value: number, sidebarWidth: number): number {
   return Math.min(maxGitPanelWidth(sidebarWidth), Math.max(GIT_PANEL_MIN_WIDTH, value));
 }
 
+function maxTasksPanelHeight(): number {
+  if (typeof window === 'undefined') return 600;
+  return Math.max(TASKS_PANEL_MIN_HEIGHT, window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT);
+}
+
+function clampTasksPanelHeight(value: number): number {
+  if (!Number.isFinite(value)) return TASKS_PANEL_DEFAULT_HEIGHT;
+  return Math.min(maxTasksPanelHeight(), Math.max(TASKS_PANEL_MIN_HEIGHT, value));
+}
+
 export function App() {
   const [sessions, setSessions] = useState<SessionWithStatus[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentData, setShowAgentData] = useState(false);
-  const [showDiary, setShowDiary] = useState(false);
+  const [tasksPanelCollapsed, setTasksPanelCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem(TASKS_PANEL_COLLAPSED_KEY) !== '0';
+  });
+  const [tasksPanelHeight, setTasksPanelHeight] = useState<number>(() => {
+    const stored = Number(localStorage.getItem(TASKS_PANEL_HEIGHT_KEY));
+    return clampTasksPanelHeight(stored);
+  });
   const [pendingDelete, setPendingDelete] = useState<SessionWithStatus | null>(null);
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -110,12 +139,39 @@ export function App() {
 
   const getMaxGitPanelWidth = useCallback(() => maxGitPanelWidth(sidebarWidth), [sidebarWidth]);
 
+  const toggleTasksPanel = useCallback(() => {
+    setTasksPanelCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(TASKS_PANEL_COLLAPSED_KEY, next ? '1' : '0');
+      return next;
+    });
+  }, []);
+
+  const onResizeTasksPanel = useCallback((h: number) => {
+    setTasksPanelHeight(clampTasksPanelHeight(h));
+  }, []);
+
+  const onResizeTasksPanelEnd = useCallback((h: number) => {
+    const clamped = clampTasksPanelHeight(h);
+    setTasksPanelHeight(clamped);
+    localStorage.setItem(TASKS_PANEL_HEIGHT_KEY, String(Math.round(clamped)));
+  }, []);
+
+  const tasksConfig = useMemo(
+    () => normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
+    [settings.tasks],
+  );
+
   const resolvedTheme = useResolvedTheme(settings.theme);
+  const sessionPrompts = useMemo(
+    () => normalizeSessionPrompts(settings.sessionPrompts),
+    [settings.sessionPrompts],
+  );
+
   const modalOpen =
     showNew ||
     showSettings ||
     showAgentData ||
-    showDiary ||
     pendingDelete !== null ||
     vscodeMissing;
 
@@ -204,9 +260,9 @@ export function App() {
     [sessions, activeId],
   );
 
-  const terminalApisRef = useRef(new Map<string, TerminalPasteApi>());
+  const terminalApisRef = useRef(new Map<string, TerminalApi>());
 
-  const handleTerminalApi = useCallback((id: string, api: TerminalPasteApi | null) => {
+  const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
     if (api) terminalApisRef.current.set(id, api);
     else terminalApisRef.current.delete(id);
   }, []);
@@ -216,6 +272,47 @@ export function App() {
     if (!s?.wizardBriefMarkdown) return;
     terminalApisRef.current.get(s.id)?.paste(s.wizardBriefMarkdown);
   }, [activeSession]);
+
+  const scrollActiveTerminalToBottom = useCallback(() => {
+    if (!activeId) return;
+    const api = terminalApisRef.current.get(activeId);
+    if (api) {
+      api.scrollToBottom();
+      return;
+    }
+    // Session selected but terminal still mounting — retry briefly.
+    let attempts = 0;
+    const retry = () => {
+      attempts += 1;
+      terminalApisRef.current.get(activeId)?.scrollToBottom();
+      if (attempts < 20) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, [activeId]);
+
+  const runSessionPrompt = useCallback(
+    (text: string) => {
+      if (!activeId) return;
+      const payload = `${text}\r`;
+      const api = terminalApisRef.current.get(activeId);
+      if (api) {
+        api.paste(payload);
+        return;
+      }
+      let attempts = 0;
+      const retry = () => {
+        const next = terminalApisRef.current.get(activeId);
+        if (next) {
+          next.paste(payload);
+          return;
+        }
+        attempts += 1;
+        if (attempts < 30) window.setTimeout(retry, 50);
+      };
+      window.setTimeout(retry, 50);
+    },
+    [activeId],
+  );
 
   const openSession = useCallback((id: string) => {
     setActiveId(id);
@@ -227,11 +324,13 @@ export function App() {
   }, []);
 
   const showGitPanel = activeSession !== null && !gitPanelCollapsed;
+  const showTasksPanel = !tasksPanelCollapsed;
   const fullscreen = showGitPanel && gitPanelFullscreen;
-  const appClass = `app${showGitPanel ? ' with-git-panel' : ''}${fullscreen ? ' git-panel-fullscreen' : ''}`;
+  const appClass = `app${showGitPanel ? ' with-git-panel' : ''}${fullscreen ? ' git-panel-fullscreen' : ''}${showTasksPanel ? ' with-tasks-panel' : ''}`;
   const appStyle = {
     ['--sidebar-width' as string]: `${sidebarWidth}px`,
     ...(showGitPanel ? { ['--git-panel-width' as string]: `${gitPanelWidth}px` } : {}),
+    ...(showTasksPanel ? { ['--tasks-panel-height' as string]: `${tasksPanelHeight}px` } : {}),
   } as React.CSSProperties;
 
   return (
@@ -249,7 +348,6 @@ export function App() {
         onNewSession={() => setShowNew(true)}
         onOpenSettings={() => setShowSettings(true)}
         onOpenAgentData={() => setShowAgentData(true)}
-        onOpenDiary={() => setShowDiary(true)}
         onSetWaitingOnReview={async (s, value) => {
           setSessions((prev) =>
             prev.map((x) => (x.id === s.id ? { ...x, waitingOnReview: value } : x)),
@@ -270,26 +368,59 @@ export function App() {
         ) : (
           <EmptyHeader />
         )}
-        <div className={`terminal-stack${modalOpen ? ' inert' : ''}`}>
-          {openedIds.map((id) => {
-            const session = sessions.find((s) => s.id === id);
-            if (!session) return null;
-            const visible = id === activeId;
-            return (
-              <div key={id} className={`terminal-slot${visible ? ' visible' : ''}`}>
-                <TerminalView
-                  sessionId={id}
-                  visible={visible}
-                  blurred={modalOpen}
-                  themeName={resolvedTheme}
-                  onExit={() => closeSessionTerminal(id)}
-                  onTerminalApi={handleTerminalApi}
-                />
-              </div>
-            );
-          })}
-          {!activeSession && openedIds.length === 0 && <EmptyState onNewSession={() => setShowNew(true)} />}
+        {activeSession && (
+          <SessionPromptBar
+            prompts={sessionPrompts}
+            onRun={runSessionPrompt}
+            onScrollToBottom={scrollActiveTerminalToBottom}
+          />
+        )}
+        <div className="main-pane-body">
+          <div className={`terminal-stack${modalOpen ? ' inert' : ''}`}>
+            {openedIds.map((id) => {
+              const session = sessions.find((s) => s.id === id);
+              if (!session) return null;
+              const visible = id === activeId;
+              return (
+                <div key={id} className={`terminal-slot${visible ? ' visible' : ''}`}>
+                  <TerminalView
+                    sessionId={id}
+                    visible={visible}
+                    blurred={modalOpen}
+                    themeName={resolvedTheme}
+                    onExit={() => closeSessionTerminal(id)}
+                    onTerminalApi={handleTerminalApi}
+                  />
+                </div>
+              );
+            })}
+            {!activeSession && openedIds.length === 0 && (
+              <EmptyState onNewSession={() => setShowNew(true)} />
+            )}
+          </div>
+          {showTasksPanel && (
+            <TasksPanel
+              tasksConfig={tasksConfig}
+              height={tasksPanelHeight}
+              minHeight={TASKS_PANEL_MIN_HEIGHT}
+              getMaxHeight={maxTasksPanelHeight}
+              onResize={onResizeTasksPanel}
+              onResizeEnd={onResizeTasksPanelEnd}
+              onHide={toggleTasksPanel}
+            />
+          )}
         </div>
+        {tasksPanelCollapsed && (
+          <button
+            type="button"
+            className="tasks-fab"
+            onClick={toggleTasksPanel}
+            title="Show Tasks panel"
+          >
+            <TasksIcon />
+            <span>Tasks</span>
+          </button>
+        )}
       </main>
 
       {showGitPanel && activeSession && (
@@ -345,8 +476,6 @@ export function App() {
       )}
 
       {showAgentData && <AgentDataModal onClose={() => setShowAgentData(false)} />}
-
-      {showDiary && <DiaryModal onClose={() => setShowDiary(false)} />}
 
       {vscodeMissing && (
         <VSCodeMissingModal onClose={() => setVscodeMissing(false)} />
@@ -433,6 +562,7 @@ function PaneHeader({
         {gitPanelHidden && (
           <button
             className="btn btn-ghost"
+            type="button"
             onClick={onShowGitPanel}
             title="Show Developer Panel"
           >
@@ -466,6 +596,17 @@ function EmptyHeader() {
       </div>
       <Logo />
     </header>
+  );
+}
+
+function TasksIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
   );
 }
 
