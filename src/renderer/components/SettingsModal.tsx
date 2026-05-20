@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { Settings, ThemePreference } from '@shared/types';
+import type { Settings, SessionPromptPreset, TasksConfig, ThemePreference } from '@shared/types';
+import { DEFAULT_SESSION_PROMPTS, normalizeSessionPrompts } from '@shared/session-prompts';
+import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import type { WizardConfig } from '@shared/wizard';
+import { SessionPromptsSettingsEditor } from './SessionPromptsSettingsEditor';
+import { TasksSettingsEditor } from './TasksSettingsEditor';
 import { WizardEditModal } from './WizardEditModal';
 
 type Props = {
@@ -13,6 +17,12 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
   const [codeDir, setCodeDir] = useState(current.codeDir);
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
   const [wizard, setWizard] = useState<WizardConfig>(current.wizard);
+  const [tasks, setTasks] = useState<TasksConfig>(
+    () => normalizeTasksConfig(current.tasks ?? DEFAULT_TASKS_CONFIG),
+  );
+  const [sessionPrompts, setSessionPrompts] = useState<SessionPromptPreset[]>(() =>
+    normalizeSessionPrompts(current.sessionPrompts ?? DEFAULT_SESSION_PROMPTS),
+  );
   const [busy, setBusy] = useState(false);
   const [showWizardEdit, setShowWizardEdit] = useState(false);
 
@@ -20,6 +30,8 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
     setCodeDir(current.codeDir);
     setTheme(current.theme);
     setWizard(current.wizard);
+    setTasks(normalizeTasksConfig(current.tasks ?? DEFAULT_TASKS_CONFIG));
+    setSessionPrompts(normalizeSessionPrompts(current.sessionPrompts ?? DEFAULT_SESSION_PROMPTS));
   }, [current]);
 
   const pick = async () => {
@@ -29,7 +41,7 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
 
   const save = async () => {
     setBusy(true);
-    const next = await window.api.updateSettings({ codeDir, theme, wizard });
+    const next = await window.api.updateSettings({ codeDir, theme, wizard, tasks, sessionPrompts });
     onSaved(next);
   };
 
@@ -65,6 +77,14 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="field">
+              <label className="field-label">Session prompts</label>
+              <SessionPromptsSettingsEditor value={sessionPrompts} onChange={setSessionPrompts} />
+            </div>
+            <div className="field">
+              <label className="field-label">Tasks</label>
+              <TasksSettingsEditor value={tasks} onChange={setTasks} />
             </div>
             <div className="field">
               <label className="field-label">Session wizard</label>

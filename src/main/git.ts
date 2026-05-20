@@ -183,6 +183,45 @@ export type DiffOpts = {
   oldPath?: string;
 };
 
+export type GitFileGroup = 'staged' | 'unstaged' | 'untracked';
+
+export async function stageFile(worktreePath: string, path: string, oldPath?: string): Promise<void> {
+  const args = ['add', '--'];
+  if (oldPath) args.push(oldPath);
+  args.push(path);
+  await git(worktreePath, args);
+}
+
+export async function unstageFile(worktreePath: string, path: string, oldPath?: string): Promise<void> {
+  const args = ['restore', '--staged', '--'];
+  if (oldPath) args.push(oldPath);
+  args.push(path);
+  await git(worktreePath, args);
+}
+
+export async function discardFileChanges(
+  worktreePath: string,
+  path: string,
+  group: GitFileGroup,
+  oldPath?: string,
+): Promise<void> {
+  if (group === 'untracked') {
+    await git(worktreePath, ['clean', '-f', '-d', '--', path]);
+    return;
+  }
+  if (group === 'staged') {
+    const args = ['restore', '--staged', '--worktree', '--'];
+    if (oldPath) args.push(oldPath);
+    args.push(path);
+    await git(worktreePath, args);
+    return;
+  }
+  const args = ['restore', '--worktree', '--'];
+  if (oldPath) args.push(oldPath);
+  args.push(path);
+  await git(worktreePath, args);
+}
+
 export async function getFileDiff(
   worktreePath: string,
   path: string,

@@ -15,7 +15,6 @@ type Props = {
   onNewSession: () => void;
   onOpenSettings: () => void;
   onOpenAgentData: () => void;
-  onOpenDiary: () => void;
   onSetWaitingOnReview: (session: SessionWithStatus, value: boolean) => void;
 };
 
@@ -48,7 +47,6 @@ export function Sidebar({
   onNewSession,
   onOpenSettings,
   onOpenAgentData,
-  onOpenDiary,
   onSetWaitingOnReview,
 }: Props) {
   const groups = groupByActivity(sessions);
@@ -143,7 +141,7 @@ export function Sidebar({
                       >
                         <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
                         <div className="session-name" title={s.name}>
-                          {s.name}
+                          <span className="session-name-text">{s.name}</span>
                         <div className="session-branch">
                           <span
                             className={`session-agent-tag-wrap${s.wizardBriefMarkdown ? ' session-agent-tag-wrap--wizard' : ''}`}
@@ -162,11 +160,12 @@ export function Sidebar({
                               </span>
                             ) : null}
                           </span>
-                          {s.branchName}
+                          <span className="session-branch-name">{s.branchName}</span>
                         </div>
                         </div>
                         <button
                           className="session-delete"
+                          type="button"
                           title="Delete session"
                           aria-label="Delete session"
                           onClick={(e) => {
@@ -185,14 +184,6 @@ export function Sidebar({
           })
         )}
       </div>
-      <button
-        className="sidebar-tool-btn"
-        onClick={onOpenDiary}
-        title="Open your diary"
-      >
-        <DiaryIcon />
-        <span>Diary</span>
-      </button>
       <button
         className="sidebar-tool-btn"
         onClick={onOpenAgentData}
@@ -250,20 +241,21 @@ function SessionContextMenu({
 
 function WizardHatIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 3 5 16h14L12 3z" />
-      <path d="M4 16h16v2.5H4z" />
-    </svg>
-  );
-}
-
-function DiaryIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v17a1 1 0 0 1-1 1H6.5A2.5 2.5 0 0 1 4 18.5z" />
-      <path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" />
-      <line x1="9" y1="8" x2="15" y2="8" />
-      <line x1="9" y1="12" x2="15" y2="12" />
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden
+      className="wizard-hat-icon"
+    >
+      <path d="M8 2.25 3.5 9.75h9L8 2.25z" />
+      <path d="M2.5 9.75h11v2.25H2.5V9.75z" />
+      <path
+        d="M4.25 8.85h7.5v1.1h-7.5v-1.1z"
+        fill="var(--bg-elev)"
+        opacity="0.85"
+      />
     </svg>
   );
 }

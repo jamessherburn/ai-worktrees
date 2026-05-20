@@ -5,10 +5,12 @@ import type { AgentSpendInfo } from '@shared/types';
 import type {
   CreateSessionInput,
   DeleteSessionInput,
-  DiaryItem,
+  TaskItem,
   GhSetupResult,
   GitDiffRequest,
   GitDiffResult,
+  GitFileActionRequest,
+  GitFileActionResult,
   GitStatusResult,
   OpenInVSCodeResult,
   RepoInfo,
@@ -19,7 +21,13 @@ import type {
 import { IPC } from '@shared/ipc-channels';
 import { ensureGitHubCli } from './gh-cli.js';
 import { listRepos } from './repos.js';
-import { getFileDiff, getWorktreeStatus } from './git.js';
+import {
+  discardFileChanges,
+  getFileDiff,
+  getWorktreeStatus,
+  stageFile,
+  unstageFile,
+} from './git.js';
 import { openWorktreeInVSCode } from './vscode.js';
 import { detectAgents } from './agent-detection.js';
 import {
@@ -48,11 +56,12 @@ import {
   writePty,
 } from './pty-manager.js';
 import {
-  addItem as diaryAddItem,
-  clearDoneBefore as diaryClearDoneBefore,
-  listItems as diaryListItems,
-  removeItem as diaryRemoveItem,
-  toggleDone as diaryToggleDone,
+  addItem as tasksAddItem,
+  clearDoneBefore as tasksClearDoneBefore,
+  listItems as tasksListItems,
+  moveToSection as tasksMoveToSection,
+  removeItem as tasksRemoveItem,
+  updateItem as tasksUpdateItem,
 } from './diary.js';
 
 async function pathExists(p: string): Promise<boolean> {
@@ -182,7 +191,11 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.PtyBacklog, async (_e, sessionId: string) => {
-    return { running: isRunning(sessionId), backlog: getBacklog(sessionId) };
+    return {
+      running: isRunning(sessionId),
+      backlog: getBacklog(sessionId),
+      activity: getActivityState(sessionId),
+    };
   });
 
   ipcMain.handle(IPC.PtyMarkIdle, async (_e, sessionId: string) => {
@@ -214,24 +227,39 @@ export function registerIpc(): void {
     },
   );
 
-  ipcMain.handle(IPC.DiaryList, async (): Promise<DiaryItem[]> => {
-    return diaryListItems();
+  ipcMain.handle(IPC.TasksList, async (): Promise<TaskItem[]> => tasksListItems());
+
+  ipcMain.handle(
+    IPC.TasksAdd,
+    async (_e, args: { text: string; sectionId: string }): Promise<TaskItem> =>
+      tasksAddItem(args.text, args.sectionId),
+  );
+
+  ipcMain.handle(
+    IPC.TasksUpdate,
+    async (_e, args: { id: string; text: string }): Promise<void> => {
+      await tasksUpdateItem(args.id, args.text);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.TasksMove,
+    async (_e, args: { id: string; sectionId: string }): Promise<void> => {
+      const settings = await getSettings();
+      await tasksMoveToSection(
+        args.id,
+        args.sectionId,
+        settings.tasks!.whatDidIDoSectionId,
+      );
+    },
+  );
+
+  ipcMain.handle(IPC.TasksRemove, async (_e, id: string): Promise<void> => {
+    await tasksRemoveItem(id);
   });
 
-  ipcMain.handle(IPC.DiaryAdd, async (_e, text: string): Promise<DiaryItem> => {
-    return diaryAddItem(text);
-  });
-
-  ipcMain.handle(IPC.DiaryToggleDone, async (_e, id: string): Promise<void> => {
-    await diaryToggleDone(id);
-  });
-
-  ipcMain.handle(IPC.DiaryRemove, async (_e, id: string): Promise<void> => {
-    await diaryRemoveItem(id);
-  });
-
-  ipcMain.handle(IPC.DiaryClearDoneBefore, async (_e, cutoffISO: string): Promise<number> => {
-    return diaryClearDoneBefore(cutoffISO);
+  ipcMain.handle(IPC.TasksClearDoneBefore, async (_e, cutoffISO: string): Promise<number> => {
+    return tasksClearDoneBefore(cutoffISO);
   });
 
   ipcMain.handle(IPC.GitStatus, async (_e, sessionId: string): Promise<GitStatusResult> => {
@@ -273,4 +301,25 @@ export function registerIpc(): void {
       return { ok: false, error: (err as Error).message };
     }
   });
+
+  ipcMain.handle(
+    IPC.GitFileAction,
+    async (_e, req: GitFileActionRequest): Promise<GitFileActionResult> => {
+      const session = await getSessionById(req.sessionId);
+      if (!session) return { ok: false, error: 'Session not found.' };
+      if (!(await pathExists(session.worktreePath))) {
+        return { ok: false, error: 'Worktree path no longer exists.' };
+      }
+      try {
+        const { worktreePath } = session;
+        const { path, oldPath, group, action } = req;
+        if (action === 'stage') await stageFile(worktreePath, path, oldPath);
+        else if (action === 'unstage') await unstageFile(worktreePath, path, oldPath);
+        else await discardFileChanges(worktreePath, path, group, oldPath);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
 }

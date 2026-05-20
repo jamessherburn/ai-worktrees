@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  GitFileAction,
   GitFileChange,
   GitFileChangeKind,
   GitWorktreeStatus,
@@ -31,6 +32,14 @@ const POLL_INTERVAL_MS = 3000;
 
 const EMPTY_STATUS: GitWorktreeStatus = { staged: [], unstaged: [], untracked: [] };
 
+const GROUP_ORDER: Group[] = ['staged', 'unstaged', 'untracked'];
+
+type ContextMenuState = {
+  selection: Selection;
+  x: number;
+  y: number;
+};
+
 export function DeveloperPanel({
   sessionId,
   worktreePath,
@@ -55,9 +64,16 @@ export function DeveloperPanel({
     unstaged: true,
     untracked: true,
   });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const latestStatusReq = useRef(0);
   const latestDiffReq = useRef(0);
+
+  const navigableFiles = useMemo(
+    () => buildFlatFileList(status, openSections),
+    [status, openSections],
+  );
 
   const refreshStatus = useCallback(async () => {
     const reqId = ++latestStatusReq.current;
@@ -126,6 +142,125 @@ export function DeveloperPanel({
         setDiff(result.diff);
       });
   }, [sessionId, selection, status]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [contextMenu]);
+
+  const selectFile = useCallback((sel: Selection) => {
+    setSelection(sel);
+    setOpenSections((s) => ({ ...s, [sel.group]: true }));
+  }, []);
+
+  const moveSelection = useCallback(
+    (delta: -1 | 1) => {
+      if (navigableFiles.length === 0) return;
+      const idx = selection
+        ? navigableFiles.findIndex(
+            (f) => f.group === selection.group && f.path === selection.path,
+          )
+        : -1;
+      const nextIdx =
+        idx === -1
+          ? delta === 1
+            ? 0
+            : navigableFiles.length - 1
+          : Math.min(navigableFiles.length - 1, Math.max(0, idx + delta));
+      const next = navigableFiles[nextIdx];
+      if (next) selectFile(next);
+    },
+    [navigableFiles, selection, selectFile],
+  );
+
+  useEffect(() => {
+    if (!selection) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+      if (target?.closest('.xterm')) return;
+      e.preventDefault();
+      moveSelection(e.key === 'ArrowUp' ? -1 : 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selection, moveSelection]);
+
+  useEffect(() => {
+    if (!selection) return;
+    document.querySelector('.git-file-row.active')?.scrollIntoView({ block: 'nearest' });
+  }, [selection]);
+
+  const runFileAction = useCallback(
+    async (action: GitFileAction, sel: Selection) => {
+      setContextMenu(null);
+      setActionBusy(true);
+      setError(null);
+      const prevIndex = navigableFiles.findIndex(
+        (f) => f.group === sel.group && f.path === sel.path,
+      );
+      try {
+        const result = await window.api.git.fileAction({
+          sessionId,
+          path: sel.path,
+          oldPath: sel.oldPath,
+          group: sel.group,
+          action,
+        });
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        const reqId = ++latestStatusReq.current;
+        const statusResult = await window.api.git.status(sessionId);
+        if (reqId !== latestStatusReq.current) return;
+        if (!statusResult.ok) {
+          setError(statusResult.error);
+          setStatus(EMPTY_STATUS);
+          setSelection(null);
+          return;
+        }
+        setStatus(statusResult.status);
+        const nextList = buildFlatFileList(statusResult.status, openSections);
+        if (action === 'stage') {
+          const file = statusResult.status.staged.find((f) => f.path === sel.path);
+          setSelection(
+            file
+              ? { path: file.path, oldPath: file.oldPath, group: 'staged' }
+              : nextList[prevIndex] ?? nextList[0] ?? null,
+          );
+        } else if (action === 'unstage') {
+          const file = statusResult.status.unstaged.find((f) => f.path === sel.path);
+          setSelection(
+            file
+              ? { path: file.path, oldPath: file.oldPath, group: 'unstaged' }
+              : nextList[prevIndex] ?? nextList[0] ?? null,
+          );
+        } else {
+          const neighbor =
+            nextList[prevIndex] ?? nextList[prevIndex - 1] ?? nextList[0] ?? null;
+          setSelection(neighbor);
+        }
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setActionBusy(false);
+      }
+    },
+    [sessionId, navigableFiles, openSections],
+  );
 
   const openInVSCode = useCallback(async () => {
     const result = await window.api.openInVSCode(worktreePath);
@@ -229,7 +364,14 @@ export function DeveloperPanel({
             open={openSections.staged}
             onToggle={() => setOpenSections((s) => ({ ...s, staged: !s.staged }))}
             selection={selection}
-            onSelect={setSelection}
+            disabled={actionBusy}
+            onSelect={selectFile}
+            onContextMenu={(sel, e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectFile(sel);
+              setContextMenu({ selection: sel, x: e.clientX, y: e.clientY });
+            }}
           />
           <FileGroup
             label="Unstaged"
@@ -238,7 +380,14 @@ export function DeveloperPanel({
             open={openSections.unstaged}
             onToggle={() => setOpenSections((s) => ({ ...s, unstaged: !s.unstaged }))}
             selection={selection}
-            onSelect={setSelection}
+            disabled={actionBusy}
+            onSelect={selectFile}
+            onContextMenu={(sel, e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectFile(sel);
+              setContextMenu({ selection: sel, x: e.clientX, y: e.clientY });
+            }}
           />
           <FileGroup
             label="Untracked"
@@ -247,7 +396,14 @@ export function DeveloperPanel({
             open={openSections.untracked}
             onToggle={() => setOpenSections((s) => ({ ...s, untracked: !s.untracked }))}
             selection={selection}
-            onSelect={setSelection}
+            disabled={actionBusy}
+            onSelect={selectFile}
+            onContextMenu={(sel, e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectFile(sel);
+              setContextMenu({ selection: sel, x: e.clientX, y: e.clientY });
+            }}
           />
           {totalChanges === 0 && !error && (
             <div className="git-panel-empty">Working tree clean</div>
@@ -263,7 +419,60 @@ export function DeveloperPanel({
           )}
         </div>
       </div>
+
+      {contextMenu && (
+        <GitFileContextMenu
+          selection={contextMenu.selection}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onAction={(action) => void runFileAction(action, contextMenu.selection)}
+        />
+      )}
     </aside>
+  );
+}
+
+function GitFileContextMenu({
+  selection,
+  x,
+  y,
+  onAction,
+}: {
+  selection: Selection;
+  x: number;
+  y: number;
+  onAction: (action: GitFileAction) => void;
+}) {
+  const items: { action: GitFileAction; label: string; danger?: boolean }[] = [];
+  if (selection.group === 'staged') {
+    items.push({ action: 'unstage', label: 'Unstage' });
+    items.push({ action: 'discard', label: 'Discard Changes', danger: true });
+  } else if (selection.group === 'unstaged') {
+    items.push({ action: 'stage', label: 'Stage' });
+    items.push({ action: 'discard', label: 'Discard Changes', danger: true });
+  } else {
+    items.push({ action: 'stage', label: 'Stage' });
+    items.push({ action: 'discard', label: 'Delete Untracked File', danger: true });
+  }
+
+  return (
+    <div
+      className="context-menu"
+      style={{ left: x, top: y }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {items.map((item) => (
+        <button
+          key={item.action}
+          type="button"
+          className={`context-menu-item${item.danger ? ' context-menu-item--danger' : ''}`}
+          onClick={() => onAction(item.action)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -274,7 +483,9 @@ function FileGroup({
   open,
   onToggle,
   selection,
+  disabled,
   onSelect,
+  onContextMenu,
 }: {
   label: string;
   group: Group;
@@ -282,7 +493,9 @@ function FileGroup({
   open: boolean;
   onToggle: () => void;
   selection: Selection | null;
+  disabled: boolean;
   onSelect: (s: Selection) => void;
+  onContextMenu: (s: Selection, e: React.MouseEvent) => void;
 }) {
   if (files.length === 0) return null;
   return (
@@ -304,10 +517,15 @@ function FileGroup({
             return (
               <li
                 key={`${group}-${f.path}`}
-                className={`git-file-row${active ? ' active' : ''}`}
-                onClick={() =>
-                  onSelect({ path: f.path, oldPath: f.oldPath, group })
-                }
+                className={`git-file-row${active ? ' active' : ''}${disabled ? ' disabled' : ''}`}
+                onClick={() => {
+                  if (disabled) return;
+                  onSelect({ path: f.path, oldPath: f.oldPath, group });
+                }}
+                onContextMenu={(e) => {
+                  if (disabled) return;
+                  onContextMenu({ path: f.path, oldPath: f.oldPath, group }, e);
+                }}
                 title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
               >
                 <span className={`git-file-kind ${f.kind}`}>{kindLetter(f.kind)}</span>
@@ -395,6 +613,20 @@ function listForGroup(status: GitWorktreeStatus, group: Group): GitFileChange[] 
   if (group === 'staged') return status.staged;
   if (group === 'unstaged') return status.unstaged;
   return status.untracked;
+}
+
+function buildFlatFileList(
+  status: GitWorktreeStatus,
+  openSections: Record<Group, boolean>,
+): Selection[] {
+  const out: Selection[] = [];
+  for (const group of GROUP_ORDER) {
+    if (!openSections[group]) continue;
+    for (const f of listForGroup(status, group)) {
+      out.push({ path: f.path, oldPath: f.oldPath, group });
+    }
+  }
+  return out;
 }
 
 function basename(p: string): string {
