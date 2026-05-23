@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
-import { DEFAULT_SESSION_PROMPTS, normalizeSessionPrompts } from '@shared/session-prompts';
+import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { Sidebar } from './components/Sidebar';
@@ -164,7 +164,7 @@ export function App() {
 
   const resolvedTheme = useResolvedTheme(settings.theme);
   const sessionPrompts = useMemo(
-    () => normalizeSessionPrompts(settings.sessionPrompts),
+    () => resolveSessionPrompts(settings.sessionPrompts),
     [settings.sessionPrompts],
   );
 

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import type { SessionPromptPreset } from '@shared/types';
-import { DEFAULT_SESSION_PROMPTS } from '@shared/session-prompts';
+import { cloneDefaultSessionPrompts } from '@shared/session-prompts';
 
 type Props = {
   value: SessionPromptPreset[];
@@ -7,6 +8,8 @@ type Props = {
 };
 
 export function SessionPromptsSettingsEditor({ value, onChange }: Props) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
   const update = (index: number, patch: Partial<SessionPromptPreset>) => {
     onChange(value.map((p, i) => (i === index ? { ...p, ...patch } : p)));
   };
@@ -20,8 +23,8 @@ export function SessionPromptsSettingsEditor({ value, onChange }: Props) {
   };
 
   const reset = () => {
-    if (!window.confirm('Reset session prompts to defaults?')) return;
-    onChange([...DEFAULT_SESSION_PROMPTS]);
+    onChange(cloneDefaultSessionPrompts());
+    setConfirmReset(false);
   };
 
   return (
@@ -32,7 +35,7 @@ export function SessionPromptsSettingsEditor({ value, onChange }: Props) {
       </p>
       <ul className="session-prompts-settings-list">
         {value.map((preset, index) => (
-          <li key={index} className="session-prompts-settings-row">
+          <li key={`${preset.title}-${index}`} className="session-prompts-settings-row">
             <input
               className="session-prompts-settings-title"
               value={preset.title}
@@ -63,9 +66,23 @@ export function SessionPromptsSettingsEditor({ value, onChange }: Props) {
       <button type="button" className="btn btn-ghost btn-small" onClick={add}>
         + Add prompt
       </button>
-      <button type="button" className="btn btn-ghost btn-small" onClick={reset} style={{ marginLeft: 8 }}>
-        Reset to defaults
-      </button>
+      <div className="session-prompts-settings-reset">
+        {confirmReset ? (
+          <div className="session-prompts-settings-reset-confirm">
+            <span className="muted">Reset quick prompts to the built-in defaults?</span>
+            <button type="button" className="btn btn-danger btn-small" onClick={reset}>
+              Reset
+            </button>
+            <button type="button" className="btn btn-ghost btn-small" onClick={() => setConfirmReset(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn btn-ghost btn-small" onClick={() => setConfirmReset(true)}>
+            Reset to defaults
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Settings } from '@shared/types';
-import { DEFAULT_SESSION_PROMPTS, normalizeSessionPrompts } from '@shared/session-prompts';
+import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG, normalizeWizardConfig } from '@shared/wizard';
 import { JsonStore } from './store.js';
@@ -16,12 +16,15 @@ const DEFAULTS: Settings = {
 
 const store = new JsonStore<Settings>('settings.json', DEFAULTS);
 
-function normalizeSettings(s: Settings): Settings {
+type StoredSettings = Settings & { recapPrompt?: string };
+
+function normalizeSettings(s: StoredSettings): Settings {
+  const { recapPrompt: _legacy, ...rest } = s;
   return {
-    ...s,
+    ...rest,
     wizard: normalizeWizardConfig(s.wizard),
     tasks: normalizeTasksConfig(s.tasks),
-    sessionPrompts: normalizeSessionPrompts(s.sessionPrompts),
+    sessionPrompts: resolveSessionPrompts(s.sessionPrompts, s.recapPrompt),
   };
 }
 

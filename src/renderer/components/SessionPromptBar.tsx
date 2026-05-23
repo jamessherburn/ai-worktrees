@@ -44,9 +44,9 @@ export function SessionPromptBar({ prompts, onRun, onScrollToBottom }: Props) {
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-haspopup="menu"
-          title="Send a pre-built message to this session"
+          title="Send a quick prompt to this session"
         >
-          <span>Quick message</span>
+          <span>Quick Prompts</span>
           <ChevronDownIcon />
         </button>
         <button

@@ -9,17 +9,22 @@ type Props = {
 
 export function TasksSettingsEditor({ value, onChange }: Props) {
   const [orphanIds, setOrphanIds] = useState<string[]>([]);
+  const [taskCountBySection, setTaskCountBySection] = useState<Record<string, number>>({});
   const [newSectionName, setNewSectionName] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
   useEffect(() => {
     void window.api.tasks.list().then((items: TaskItem[]) => {
       const configured = new Set(value.sections.map((s) => s.id));
-      const ids = new Set<string>();
+      const orphans = new Set<string>();
+      const counts: Record<string, number> = {};
       for (const item of items) {
-        if (!configured.has(item.sectionId)) ids.add(item.sectionId);
+        counts[item.sectionId] = (counts[item.sectionId] ?? 0) + 1;
+        if (!configured.has(item.sectionId)) orphans.add(item.sectionId);
       }
-      setOrphanIds(Array.from(ids).sort());
+      setTaskCountBySection(counts);
+      setOrphanIds(Array.from(orphans).sort());
     });
   }, [value.sections]);
 
@@ -68,29 +73,77 @@ export function TasksSettingsEditor({ value, onChange }: Props) {
     setConfirmReset(false);
   };
 
+  const removeSection = (sectionId: string) => {
+    const sections = value.sections.filter((s) => s.id !== sectionId);
+    const whatDidIDoSectionId = sections.some((s) => s.id === value.whatDidIDoSectionId)
+      ? value.whatDidIDoSectionId
+      : (sections[0]?.id ?? DEFAULT_TASKS_CONFIG.whatDidIDoSectionId);
+    onChange({ ...value, sections, whatDidIDoSectionId });
+    setPendingRemoveId(null);
+  };
+
+  const canRemoveSections = value.sections.length > 1;
+
   return (
     <div className="tasks-settings">
       <div className="field-label">Board sections</div>
       <p className="muted tasks-settings-hint">
-        Hide a section to remove its column from the board. Cards stay saved and reappear when you show the section again.
+        Hide removes a column from the board but keeps its cards. Remove deletes the section and all cards in it.
       </p>
       <ul className="tasks-settings-sections">
         {value.sections.map((section, index) => (
-          <li key={section.id} className="tasks-settings-section-row">
-            <input
-              className="tasks-settings-name"
-              value={section.name}
-              onChange={(e) => updateSection(index, { name: e.target.value })}
-              aria-label={`Section name for ${section.id}`}
-            />
-            <label className="tasks-settings-hidden">
+          <li key={section.id} className="tasks-settings-section-item">
+            <div className="tasks-settings-section-row">
               <input
-                type="checkbox"
-                checked={section.hidden === true}
-                onChange={(e) => updateSection(index, { hidden: e.target.checked })}
+                className="tasks-settings-name"
+                value={section.name}
+                onChange={(e) => updateSection(index, { name: e.target.value })}
+                aria-label={`Section name for ${section.id}`}
               />
-              Hidden
-            </label>
+              <label className="tasks-settings-hidden">
+                <input
+                  type="checkbox"
+                  checked={section.hidden === true}
+                  onChange={(e) => updateSection(index, { hidden: e.target.checked })}
+                />
+                Hidden
+              </label>
+              <button
+                type="button"
+                className="btn btn-ghost btn-small"
+                onClick={() => setPendingRemoveId(section.id)}
+                disabled={!canRemoveSections}
+                title={
+                  canRemoveSections
+                    ? 'Remove this section and delete its cards'
+                    : 'At least one section is required'
+                }
+              >
+                Remove
+              </button>
+            </div>
+            {pendingRemoveId === section.id && (
+              <div className="tasks-settings-remove-confirm">
+                <span className="muted">
+                  Remove &ldquo;{section.name}&rdquo;? {taskCountBySection[section.id] ?? 0} card
+                  {(taskCountBySection[section.id] ?? 0) === 1 ? '' : 's'} will be deleted when you save settings.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-small"
+                  onClick={() => removeSection(section.id)}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={() => setPendingRemoveId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
