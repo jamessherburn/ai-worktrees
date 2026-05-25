@@ -110,30 +110,13 @@ select:focus {
   background: var(--bg);
 }
 
-.app.with-git-panel {
-  grid-template-columns: var(--sidebar-width, 280px) 1fr var(--git-panel-width, 380px);
-}
-
-.app.with-git-panel.git-panel-fullscreen {
-  grid-template-columns: 1fr;
-}
-.app.with-git-panel.git-panel-fullscreen > .sidebar,
-.app.with-git-panel.git-panel-fullscreen > .main-pane {
-  display: none;
-}
-.app.with-git-panel.git-panel-fullscreen .git-panel-resize {
-  display: none;
-}
-.app.with-git-panel.git-panel-fullscreen .git-panel {
-  border-left: none;
-}
-
-body.resizing-git-panel,
-body.resizing-sidebar {
+body.resizing-sidebar,
+body.resizing-bottom-dock-split {
   cursor: col-resize !important;
   user-select: none !important;
 }
-body.resizing-tasks-panel {
+body.resizing-tasks-panel,
+body.resizing-bottom-dock {
   cursor: row-resize !important;
   user-select: none !important;
 }
@@ -141,9 +124,10 @@ body.resizing-settings-modal {
   cursor: nwse-resize !important;
   user-select: none !important;
 }
-body.resizing-git-panel *,
 body.resizing-sidebar *,
+body.resizing-bottom-dock-split *,
 body.resizing-tasks-panel *,
+body.resizing-bottom-dock *,
 body.resizing-settings-modal * {
   user-select: none !important;
 }
@@ -507,11 +491,23 @@ body.resizing-sidebar .sidebar-resize {
   position: relative;
 }
 
-.tasks-fab {
+.bottom-fabs {
   position: absolute;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
   z-index: 20;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.app.with-bottom-dock .bottom-fabs {
+  bottom: calc(var(--bottom-dock-height, 280px) + 16px);
+}
+
+.bottom-fab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -525,16 +521,15 @@ body.resizing-sidebar .sidebar-resize {
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--shadow);
-  -webkit-app-region: no-drag;
 }
-.tasks-fab:hover {
+.bottom-fab:hover:not(:disabled) {
   background: var(--bg-elev-2);
   border-color: var(--accent);
   color: var(--accent);
 }
-
-.app.with-tasks-panel .tasks-fab {
-  bottom: calc(var(--tasks-panel-height, 280px) + 16px);
+.bottom-fab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .pane-header {
@@ -1760,8 +1755,8 @@ body.resizing-sidebar .sidebar-resize {
   border-color: var(--accent);
 }
 
-/* ------- Tasks panel ------- */
-.tasks-panel {
+/* ------- Bottom dock (terminal + tasks) ------- */
+.bottom-dock {
   position: relative;
   flex-shrink: 0;
   border-top: 1px solid var(--border);
@@ -1771,7 +1766,7 @@ body.resizing-sidebar .sidebar-resize {
   min-height: 0;
 }
 
-.tasks-panel-resize {
+.bottom-dock-resize {
   position: absolute;
   top: 0;
   left: 0;
@@ -1780,27 +1775,114 @@ body.resizing-sidebar .sidebar-resize {
   cursor: row-resize;
   z-index: 2;
 }
-.tasks-panel-resize:hover,
-body.resizing-tasks-panel .tasks-panel-resize {
+.bottom-dock-resize:hover,
+body.resizing-bottom-dock .bottom-dock-resize {
   background: var(--accent);
 }
 
-.tasks-panel-header {
+.bottom-dock-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+.bottom-dock-slot {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bottom-dock-divider {
+  flex-shrink: 0;
+  align-self: stretch;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.bottom-dock-divider:hover,
+body.resizing-bottom-dock-split .bottom-dock-divider {
+  background: var(--accent);
+}
+
+.bottom-dock-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bottom-dock-panel-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg-elev);
   -webkit-app-region: no-drag;
 }
 
-.tasks-panel-title {
+.bottom-dock-panel-title {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.bottom-dock-panel-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.bottom-dock-placeholder-body,
+.built-in-terminal-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.built-in-terminal-panel {
+  background: var(--terminal-bg);
+}
+
+.built-in-terminal-subtitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.built-in-terminal-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.built-in-terminal-host {
+  position: absolute;
+  inset: 0;
+  padding: 8px 12px 6px;
+}
+
+/* ------- Tasks panel ------- */
+.tasks-panel {
+  background: var(--bg-elev);
 }
 
 .tasks-panel-tabs {
@@ -2201,59 +2283,9 @@ body.resizing-tasks-panel .tasks-panel-resize {
   align-items: center;
 }
 
-/* ------- Git Status Panel ------- */
-.git-panel {
-  position: relative;
-  border-left: 1px solid var(--border);
+/* ------- Git panel (bottom dock) ------- */
+.git-dock-panel {
   background: var(--bg-elev);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.git-panel-resize {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 5px;
-  cursor: col-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 120ms ease;
-}
-.git-panel-resize:hover,
-body.resizing-git-panel .git-panel-resize {
-  background: var(--accent);
-}
-
-.git-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 14px 10px;
-  border-bottom: 1px solid var(--border);
-  -webkit-app-region: drag;
-}
-
-.git-panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.git-panel-collapse-btn {
-  -webkit-app-region: no-drag;
-}
-
-.git-panel-header-actions {
-  display: flex;
-  gap: 6px;
-  -webkit-app-region: no-drag;
 }
 
 .dev-panel-toolbar {
@@ -2285,8 +2317,9 @@ body.resizing-git-panel .git-panel-resize {
   color: var(--danger);
 }
 
-.git-panel-files {
+.git-dock-panel .git-panel-files {
   flex: 0 0 40%;
+  min-height: 80px;
   overflow-y: auto;
   padding: 6px 6px 10px;
   border-bottom: 1px solid var(--border);
@@ -2427,7 +2460,7 @@ body.resizing-git-panel .git-panel-resize {
   min-width: 0;
 }
 
-.git-panel-diff {
+.git-dock-panel .git-panel-diff {
   flex: 1;
   min-height: 0;
   overflow: auto;

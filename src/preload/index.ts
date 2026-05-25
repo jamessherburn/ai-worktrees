@@ -23,6 +23,8 @@ import type { AgentAvailability, AgentId } from '@shared/agents';
 type PtyDataPayload = { sessionId: string; data: string };
 type PtyExitPayload = { sessionId: string; exitCode: number };
 type PtyActivityPayload = { sessionId: string; activity: ActivityState };
+type ShellPtyDataPayload = { sessionId: string; data: string };
+type ShellPtyExitPayload = { sessionId: string; exitCode: number };
 
 const api = {
   ensureGitHubApi: (): Promise<GhSetupResult> => ipcRenderer.invoke(IPC.GhSetupEnsure),
@@ -106,6 +108,27 @@ const api = {
       const listener = (_: unknown, payload: PtyActivityPayload) => cb(payload);
       ipcRenderer.on(IPC.PtyActivity, listener);
       return () => ipcRenderer.removeListener(IPC.PtyActivity, listener);
+    },
+  },
+  shellPty: {
+    start: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke(IPC.ShellPtyStart, { sessionId, cols, rows }) as Promise<
+        { ok: true; reattached: boolean } | { ok: false; error: string }
+      >,
+    write: (sessionId: string, data: string) =>
+      ipcRenderer.send(IPC.ShellPtyWrite, { sessionId, data }),
+    resize: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.send(IPC.ShellPtyResize, { sessionId, cols, rows }),
+    kill: (sessionId: string) => ipcRenderer.invoke(IPC.ShellPtyKill, sessionId),
+    onData: (cb: (payload: ShellPtyDataPayload) => void) => {
+      const listener = (_: unknown, payload: ShellPtyDataPayload) => cb(payload);
+      ipcRenderer.on(IPC.ShellPtyData, listener);
+      return () => ipcRenderer.removeListener(IPC.ShellPtyData, listener);
+    },
+    onExit: (cb: (payload: ShellPtyExitPayload) => void) => {
+      const listener = (_: unknown, payload: ShellPtyExitPayload) => cb(payload);
+      ipcRenderer.on(IPC.ShellPtyExit, listener);
+      return () => ipcRenderer.removeListener(IPC.ShellPtyExit, listener);
     },
   },
 };

@@ -4,25 +4,12 @@ import { visibleSectionIds } from '@shared/tasks';
 
 type Props = {
   tasksConfig: TasksConfig;
-  height: number;
-  minHeight: number;
-  getMaxHeight: () => number;
-  onResize: (height: number) => void;
-  onResizeEnd: (height: number) => void;
   onHide: () => void;
 };
 
 type Tab = 'board' | 'history';
 
-export function TasksPanel({
-  tasksConfig,
-  height,
-  minHeight,
-  getMaxHeight,
-  onResize,
-  onResizeEnd,
-  onHide,
-}: Props) {
+export function TasksPanel({ tasksConfig, onHide }: Props) {
   const [items, setItems] = useState<TaskItem[]>([]);
   const [tab, setTab] = useState<Tab>('board');
   const [error, setError] = useState<string | null>(null);
@@ -82,31 +69,6 @@ export function TasksPanel({
     () => tasksConfig.sections.filter((s) => !s.hidden),
     [tasksConfig.sections],
   );
-
-  const onResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startHeight = height;
-    document.body.classList.add('resizing-tasks-panel');
-
-    const clamp = (raw: number) => Math.min(getMaxHeight(), Math.max(minHeight, raw));
-
-    const onMove = (ev: MouseEvent) => {
-      const delta = startY - ev.clientY;
-      onResize(clamp(startHeight + delta));
-    };
-
-    const onUp = (ev: MouseEvent) => {
-      document.body.classList.remove('resizing-tasks-panel');
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      const delta = startY - ev.clientY;
-      onResizeEnd(clamp(startHeight + delta));
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
 
   const addCard = async (sectionId: string, text: string) => {
     const trimmed = text.trim();
@@ -180,16 +142,9 @@ export function TasksPanel({
     tasksConfig.sections.find((s) => s.id === tasksConfig.whatDidIDoSectionId)?.name ?? 'Done';
 
   return (
-    <section className="tasks-panel" style={{ height }}>
-      <div
-        className="tasks-panel-resize"
-        onMouseDown={onResizeMouseDown}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize Tasks panel"
-      />
-      <div className="tasks-panel-header">
-        <div className="tasks-panel-title">Tasks</div>
+    <section className="tasks-panel bottom-dock-panel">
+      <div className="bottom-dock-panel-header">
+        <div className="bottom-dock-panel-title">Tasks</div>
         <div className="tasks-panel-tabs">
           <button
             type="button"
@@ -206,9 +161,9 @@ export function TasksPanel({
             What Did I Do
           </button>
         </div>
-        <div className="tasks-panel-header-actions">
+        <div className="bottom-dock-panel-header-actions">
           <button
-            className="icon-btn tasks-panel-collapse-btn"
+            className="icon-btn"
             onClick={onHide}
             title="Hide Tasks panel"
             aria-label="Hide Tasks panel"

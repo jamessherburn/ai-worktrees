@@ -4,26 +4,24 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
 
-export type TerminalApi = {
-  paste: (text: string) => void;
-  scrollToBottom: () => void;
-};
-
 type Props = {
   sessionId: string;
-  visible: boolean;
-  blurred: boolean;
+  worktreePath: string;
   themeName: 'dark' | 'light';
-  onExit?: (sessionId: string) => void;
-  onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
+  blurred: boolean;
+  onHide: () => void;
 };
 
-export function TerminalView({ sessionId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
+export function BuiltInTerminalPanel({
+  sessionId,
+  worktreePath,
+  themeName,
+  blurred,
+  onHide,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  const onTerminalApiRef = useRef(onTerminalApi);
-  onTerminalApiRef.current = onTerminalApi;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -43,26 +41,6 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(host);
-
-    onTerminalApiRef.current?.(sessionId, {
-      paste: (text: string) => {
-        term.focus();
-        // Write to the PTY so input lands at the shell cursor; echoed output appears in xterm.
-        window.api.pty.write(sessionId, text.replace(/\n/g, '\r'));
-      },
-      scrollToBottom: () => {
-        const buffer = term.buffer.active;
-        const target = buffer.baseY + buffer.length - 1;
-        if (target >= buffer.viewportY) {
-          term.scrollToLine(target);
-        }
-        term.scrollToBottom();
-        requestAnimationFrame(() => {
-          term.scrollToBottom();
-          term.focus();
-        });
-      },
-    });
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -87,39 +65,37 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
       fitTimer = window.setTimeout(fitSafely, 32);
     };
 
-    unsubData = window.api.pty.onData(({ sessionId: id, data }) => {
+    unsubData = window.api.shellPty.onData(({ sessionId: id, data }) => {
       if (id === sessionId) term.write(data);
     });
 
-    unsubExit = window.api.pty.onExit(({ sessionId: id, exitCode }) => {
+    unsubExit = window.api.shellPty.onExit(({ sessionId: id, exitCode }) => {
       if (id !== sessionId) return;
-      term.writeln(`\r\n\x1b[2m[claude exited with code ${exitCode}]\x1b[0m`);
-      onExit?.(sessionId);
+      term.writeln(`\r\n\x1b[2m[shell exited with code ${exitCode}]\x1b[0m`);
     });
 
     const start = async () => {
       fitSafely();
-      const result = await window.api.pty.start(sessionId, term.cols, term.rows);
+      const result = await window.api.shellPty.start(sessionId, term.cols, term.rows);
       if (cancelled) return;
       if (!result.ok) {
         term.writeln(`\r\n\x1b[31m${result.error}\x1b[0m`);
         return;
       }
 
-      term.onData((data) => window.api.pty.write(sessionId, data));
-      term.onResize(({ cols, rows }) => window.api.pty.resize(sessionId, cols, rows));
+      term.onData((data) => window.api.shellPty.write(sessionId, data));
+      term.onResize(({ cols, rows }) => window.api.shellPty.resize(sessionId, cols, rows));
 
       resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(host);
 
-      if (visible && !blurred) term.focus();
+      if (!blurred) term.focus();
     };
 
     void start();
 
     return () => {
       cancelled = true;
-      onTerminalApiRef.current?.(sessionId, null);
       if (fitTimer !== undefined) window.clearTimeout(fitTimer);
       unsubData?.();
       unsubExit?.();
@@ -128,7 +104,7 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
       termRef.current = null;
       fitRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- terminal is tied to sessionId; theme updates handled separately
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- terminal tied to sessionId
   }, [sessionId]);
 
   useEffect(() => {
@@ -142,13 +118,43 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     if (!term) return;
     if (blurred) {
       term.blur();
-    } else if (visible) {
+    } else {
       requestAnimationFrame(() => {
         fitRef.current?.fit();
         term.focus();
       });
     }
-  }, [visible, blurred]);
+  }, [blurred]);
 
-  return <div className="terminal-host" ref={hostRef} aria-hidden={blurred} />;
+  return (
+    <section className="built-in-terminal-panel bottom-dock-panel">
+      <div className="bottom-dock-panel-header">
+        <div className="bottom-dock-panel-title">Terminal</div>
+        <div className="built-in-terminal-subtitle" title={worktreePath}>
+          {worktreePath}
+        </div>
+        <div className="bottom-dock-panel-header-actions">
+          <button
+            className="icon-btn"
+            onClick={onHide}
+            title="Hide Terminal panel"
+            aria-label="Hide Terminal panel"
+          >
+            <ChevronDownIcon />
+          </button>
+        </div>
+      </div>
+      <div className="built-in-terminal-body">
+        <div className="built-in-terminal-host" ref={hostRef} aria-hidden={blurred} />
+      </div>
+    </section>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
 }

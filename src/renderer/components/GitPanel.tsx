@@ -9,15 +9,7 @@ import type {
 type Props = {
   sessionId: string;
   worktreePath: string;
-  width: number;
-  minWidth: number;
-  getMaxWidth: () => number;
-  fullscreen: boolean;
-  onResize: (width: number) => void;
-  onResizeEnd: (width: number) => void;
   onHide: () => void;
-  onToggleFullscreen: () => void;
-  onVSCodeNotInstalled: () => void;
 };
 
 type Group = 'staged' | 'unstaged' | 'untracked';
@@ -40,19 +32,7 @@ type ContextMenuState = {
   y: number;
 };
 
-export function DeveloperPanel({
-  sessionId,
-  worktreePath,
-  width,
-  minWidth,
-  getMaxWidth,
-  fullscreen,
-  onResize,
-  onResizeEnd,
-  onHide,
-  onToggleFullscreen,
-  onVSCodeNotInstalled,
-}: Props) {
+export function GitPanel({ sessionId, worktreePath, onHide }: Props) {
   const [status, setStatus] = useState<GitWorktreeStatus>(EMPTY_STATUS);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -262,13 +242,6 @@ export function DeveloperPanel({
     [sessionId, navigableFiles, openSections],
   );
 
-  const openInVSCode = useCallback(async () => {
-    const result = await window.api.openInVSCode(worktreePath);
-    if (!result.ok && result.reason === 'not-installed') {
-      onVSCodeNotInstalled();
-    }
-  }, [worktreePath, onVSCodeNotInstalled]);
-
   const openInTerminal = useCallback(() => {
     void window.api.openInTerminal(worktreePath).catch(() => {
       // Terminal.app missing or AppleScript denied — best-effort; no modal for now
@@ -277,73 +250,23 @@ export function DeveloperPanel({
 
   const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
-  const onResizeMouseDown = (e: React.MouseEvent) => {
-    if (fullscreen) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = width;
-    document.body.classList.add('resizing-git-panel');
-
-    const clamp = (raw: number) => Math.min(getMaxWidth(), Math.max(minWidth, raw));
-
-    const onMove = (ev: MouseEvent) => {
-      const delta = startX - ev.clientX;
-      onResize(clamp(startWidth + delta));
-    };
-
-    const onUp = (ev: MouseEvent) => {
-      document.body.classList.remove('resizing-git-panel');
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      const delta = startX - ev.clientX;
-      onResizeEnd(clamp(startWidth + delta));
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
   return (
-    <aside className="git-panel">
-      <div
-        className="git-panel-resize"
-        onMouseDown={onResizeMouseDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize Developer Panel"
-      />
-      <div className="git-panel-header">
-        <div className="git-panel-title">Developer Panel</div>
-        <div className="git-panel-header-actions">
+    <section className="git-dock-panel bottom-dock-panel">
+      <div className="bottom-dock-panel-header">
+        <div className="bottom-dock-panel-title">Git</div>
+        <div className="bottom-dock-panel-header-actions">
           <button
-            className="icon-btn git-panel-collapse-btn"
-            onClick={onToggleFullscreen}
-            title={fullscreen ? 'Shrink Developer Panel' : 'Fullscreen Developer Panel'}
-            aria-label={fullscreen ? 'Shrink Developer Panel' : 'Fullscreen Developer Panel'}
-            aria-pressed={fullscreen}
-          >
-            {fullscreen ? <ContractIcon /> : <ExpandIcon />}
-          </button>
-          <button
-            className="icon-btn git-panel-collapse-btn"
+            className="icon-btn"
             onClick={onHide}
-            title="Hide Developer Panel"
-            aria-label="Hide Developer Panel"
+            title="Hide Git panel"
+            aria-label="Hide Git panel"
           >
-            <ChevronRightIcon />
+            <ChevronDownIcon />
           </button>
         </div>
       </div>
 
       <div className="dev-panel-toolbar">
-        <button
-          className="btn btn-ghost btn-small"
-          onClick={openInVSCode}
-          title={`Open ${worktreePath} in Visual Studio Code`}
-        >
-          <VSCodeIcon />
-          <span>Open In Visual Studio Code</span>
-        </button>
         <button
           className="btn btn-ghost btn-small"
           onClick={openInTerminal}
@@ -428,7 +351,15 @@ export function DeveloperPanel({
           onAction={(action) => void runFileAction(action, contextMenu.selection)}
         />
       )}
-    </aside>
+    </section>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 
@@ -660,16 +591,6 @@ function ChevronRightIcon() {
   );
 }
 
-function VSCodeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 3 7 12l10 9V3z" />
-      <line x1="7" y1="12" x2="3" y2="9" />
-      <line x1="7" y1="12" x2="3" y2="15" />
-    </svg>
-  );
-}
-
 function TerminalAppIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -680,24 +601,3 @@ function TerminalAppIcon() {
   );
 }
 
-function ExpandIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="15 3 21 3 21 9" />
-      <polyline points="9 21 3 21 3 15" />
-      <line x1="21" y1="3" x2="14" y2="10" />
-      <line x1="3" y1="21" x2="10" y2="14" />
-    </svg>
-  );
-}
-
-function ContractIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="4 14 10 14 10 20" />
-      <polyline points="20 10 14 10 14 4" />
-      <line x1="14" y1="10" x2="21" y2="3" />
-      <line x1="3" y1="21" x2="10" y2="14" />
-    </svg>
-  );
-}
