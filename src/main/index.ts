@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { registerIpc } from './ipc.js';
 import { migrateLegacyUserData } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
+import { gracefulShellShutdown, registerShellPtyWebContents } from './shell-pty-manager.js';
 import { getSettings } from './settings.js';
 
 const isDev = !app.isPackaged;
@@ -33,6 +34,7 @@ function createMainWindow(): BrowserWindow {
   }
 
   registerWebContents(win.webContents);
+  registerShellPtyWebContents(win.webContents);
   return win;
 }
 
@@ -57,6 +59,6 @@ app.on('before-quit', async (event) => {
   if (isQuitting) return;
   event.preventDefault();
   isQuitting = true;
-  await gracefulShutdown();
+  await Promise.all([gracefulShutdown(), gracefulShellShutdown()]);
   app.quit();
 });

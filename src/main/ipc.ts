@@ -56,6 +56,12 @@ import {
   writePty,
 } from './pty-manager.js';
 import {
+  killShellPty,
+  resizeShellPty,
+  startShellPty,
+  writeShellPty,
+} from './shell-pty-manager.js';
+import {
   addItem as tasksAddItem,
   clearDoneBefore as tasksClearDoneBefore,
   listItems as tasksListItems,
@@ -107,6 +113,7 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.DeleteSession, async (_e, input: DeleteSessionInput) => {
     killPty(input.id);
+    killShellPty(input.id);
     return deleteSession(input);
   });
 
@@ -200,6 +207,32 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.PtyMarkIdle, async (_e, sessionId: string) => {
     markSessionIdle(sessionId);
+  });
+
+  ipcMain.handle(
+    IPC.ShellPtyStart,
+    async (_e, args: { sessionId: string; cols: number; rows: number }) => {
+      const session = await getSessionById(args.sessionId);
+      if (!session) return { ok: false, error: 'Session not found.' };
+      return startShellPty({
+        sessionId: session.id,
+        cwd: session.worktreePath,
+        cols: args.cols,
+        rows: args.rows,
+      });
+    },
+  );
+
+  ipcMain.on(IPC.ShellPtyWrite, (_e, args: { sessionId: string; data: string }) => {
+    writeShellPty(args.sessionId, args.data);
+  });
+
+  ipcMain.on(IPC.ShellPtyResize, (_e, args: { sessionId: string; cols: number; rows: number }) => {
+    resizeShellPty(args.sessionId, args.cols, args.rows);
+  });
+
+  ipcMain.handle(IPC.ShellPtyKill, async (_e, sessionId: string) => {
+    killShellPty(sessionId);
   });
 
   ipcMain.handle(

@@ -9,26 +9,29 @@ import { NewSessionModal } from './components/NewSessionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
-import { DeveloperPanel } from './components/DeveloperPanel';
+import { GitPanel } from './components/GitPanel';
 import { SessionPromptBar } from './components/SessionPromptBar';
 import { TasksPanel } from './components/TasksPanel';
+import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
+import { BottomDock, type BottomDockPanelSpec } from './components/BottomDock';
 import { Logo } from './components/Logo';
 import { useResolvedTheme } from './theme';
 
 const GIT_PANEL_COLLAPSED_KEY = 'git-panel-collapsed';
-const GIT_PANEL_WIDTH_KEY = 'git-panel-width';
-const GIT_PANEL_DEFAULT_WIDTH = 380;
-const GIT_PANEL_MIN_WIDTH = 240;
 const SIDEBAR_WIDTH_KEY = 'sidebar-width';
 const SIDEBAR_DEFAULT_WIDTH = 280;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
 const MAIN_PANE_MIN_WIDTH = 80;
 const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
-const TASKS_PANEL_HEIGHT_KEY = 'tasks-panel-height';
-const TASKS_PANEL_DEFAULT_HEIGHT = 280;
-const TASKS_PANEL_MIN_HEIGHT = 160;
+const BUILTIN_TERMINAL_COLLAPSED_KEY = 'builtin-terminal-collapsed';
+const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
+const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
+const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
+const BOTTOM_TERMINAL_MIN_WIDTH = 220;
+const BOTTOM_TASKS_MIN_WIDTH = 240;
+const BOTTOM_GIT_MIN_WIDTH = 280;
 
 const DEFAULT_SETTINGS: Settings = {
   codeDir: '',
@@ -44,24 +47,14 @@ function clampSidebarWidth(value: number): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
 }
 
-function maxGitPanelWidth(sidebarWidth: number): number {
-  if (typeof window === 'undefined') return 4000;
-  return Math.max(GIT_PANEL_MIN_WIDTH, window.innerWidth - sidebarWidth - MAIN_PANE_MIN_WIDTH);
-}
-
-function clampGitPanelWidth(value: number, sidebarWidth: number): number {
-  if (!Number.isFinite(value)) return GIT_PANEL_DEFAULT_WIDTH;
-  return Math.min(maxGitPanelWidth(sidebarWidth), Math.max(GIT_PANEL_MIN_WIDTH, value));
-}
-
-function maxTasksPanelHeight(): number {
+function maxBottomDockHeight(): number {
   if (typeof window === 'undefined') return 600;
-  return Math.max(TASKS_PANEL_MIN_HEIGHT, window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT);
+  return Math.max(BOTTOM_DOCK_MIN_HEIGHT, window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT);
 }
 
-function clampTasksPanelHeight(value: number): number {
-  if (!Number.isFinite(value)) return TASKS_PANEL_DEFAULT_HEIGHT;
-  return Math.min(maxTasksPanelHeight(), Math.max(TASKS_PANEL_MIN_HEIGHT, value));
+function clampBottomDockHeight(value: number): number {
+  if (!Number.isFinite(value)) return BOTTOM_DOCK_DEFAULT_HEIGHT;
+  return Math.min(maxBottomDockHeight(), Math.max(BOTTOM_DOCK_MIN_HEIGHT, value));
 }
 
 export function App() {
@@ -73,9 +66,22 @@ export function App() {
   const [tasksPanelCollapsed, setTasksPanelCollapsed] = useState<boolean>(() => {
     return localStorage.getItem(TASKS_PANEL_COLLAPSED_KEY) !== '0';
   });
-  const [tasksPanelHeight, setTasksPanelHeight] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(TASKS_PANEL_HEIGHT_KEY));
-    return clampTasksPanelHeight(stored);
+  const [builtInTerminalCollapsed, setBuiltInTerminalCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem(BUILTIN_TERMINAL_COLLAPSED_KEY) !== '0';
+  });
+  const [gitPanelCollapsed, setGitPanelCollapsed] = useState<boolean>(() => {
+    const stored = localStorage.getItem(GIT_PANEL_COLLAPSED_KEY);
+    if (stored !== null) return stored === '1';
+    const legacyDev = localStorage.getItem('developer-panel-collapsed');
+    if (legacyDev !== null) return legacyDev !== '0';
+    return false;
+  });
+  const [bottomDockHeight, setBottomDockHeight] = useState<number>(() => {
+    const stored = Number(
+      localStorage.getItem(BOTTOM_DOCK_HEIGHT_KEY) ??
+        localStorage.getItem('tasks-panel-height'),
+    );
+    return clampBottomDockHeight(stored);
   });
   const [pendingDelete, setPendingDelete] = useState<SessionWithStatus | null>(null);
   const [openedIds, setOpenedIds] = useState<string[]>([]);
@@ -85,14 +91,6 @@ export function App() {
     const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return clampSidebarWidth(stored);
   });
-  const [gitPanelCollapsed, setGitPanelCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem(GIT_PANEL_COLLAPSED_KEY) === '1';
-  });
-  const [gitPanelWidth, setGitPanelWidth] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(GIT_PANEL_WIDTH_KEY));
-    return clampGitPanelWidth(stored, SIDEBAR_DEFAULT_WIDTH);
-  });
-  const [gitPanelFullscreen, setGitPanelFullscreen] = useState(false);
   const [ghApiBar, setGhApiBar] = useState<{
     message: string;
     tone: 'pending' | 'success' | 'error' | 'warning';
@@ -114,30 +112,7 @@ export function App() {
       localStorage.setItem(GIT_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-    setGitPanelFullscreen(false);
   }, []);
-
-  const toggleGitPanelFullscreen = useCallback(() => {
-    setGitPanelFullscreen((prev) => !prev);
-  }, []);
-
-  const onResizeGitPanel = useCallback(
-    (width: number) => {
-      setGitPanelWidth(clampGitPanelWidth(width, sidebarWidth));
-    },
-    [sidebarWidth],
-  );
-
-  const onResizeGitPanelEnd = useCallback(
-    (width: number) => {
-      const clamped = clampGitPanelWidth(width, sidebarWidth);
-      setGitPanelWidth(clamped);
-      localStorage.setItem(GIT_PANEL_WIDTH_KEY, String(Math.round(clamped)));
-    },
-    [sidebarWidth],
-  );
-
-  const getMaxGitPanelWidth = useCallback(() => maxGitPanelWidth(sidebarWidth), [sidebarWidth]);
 
   const toggleTasksPanel = useCallback(() => {
     setTasksPanelCollapsed((prev) => {
@@ -147,14 +122,22 @@ export function App() {
     });
   }, []);
 
-  const onResizeTasksPanel = useCallback((h: number) => {
-    setTasksPanelHeight(clampTasksPanelHeight(h));
+  const toggleBuiltInTerminal = useCallback(() => {
+    setBuiltInTerminalCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(BUILTIN_TERMINAL_COLLAPSED_KEY, next ? '1' : '0');
+      return next;
+    });
   }, []);
 
-  const onResizeTasksPanelEnd = useCallback((h: number) => {
-    const clamped = clampTasksPanelHeight(h);
-    setTasksPanelHeight(clamped);
-    localStorage.setItem(TASKS_PANEL_HEIGHT_KEY, String(Math.round(clamped)));
+  const onResizeBottomDock = useCallback((h: number) => {
+    setBottomDockHeight(clampBottomDockHeight(h));
+  }, []);
+
+  const onResizeBottomDockEnd = useCallback((h: number) => {
+    const clamped = clampBottomDockHeight(h);
+    setBottomDockHeight(clamped);
+    localStorage.setItem(BOTTOM_DOCK_HEIGHT_KEY, String(Math.round(clamped)));
   }, []);
 
   const tasksConfig = useMemo(
@@ -260,6 +243,14 @@ export function App() {
     [sessions, activeId],
   );
 
+  const openActiveInVSCode = useCallback(async () => {
+    if (!activeSession) return;
+    const result = await window.api.openInVSCode(activeSession.worktreePath);
+    if (!result.ok && result.reason === 'not-installed') {
+      setVscodeMissing(true);
+    }
+  }, [activeSession]);
+
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
 
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
@@ -323,15 +314,106 @@ export function App() {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
-  const showGitPanel = activeSession !== null && !gitPanelCollapsed;
   const showTasksPanel = !tasksPanelCollapsed;
-  const fullscreen = showGitPanel && gitPanelFullscreen;
-  const appClass = `app${showGitPanel ? ' with-git-panel' : ''}${fullscreen ? ' git-panel-fullscreen' : ''}${showTasksPanel ? ' with-tasks-panel' : ''}`;
+  const showBuiltInTerminal = !builtInTerminalCollapsed;
+  const showGitPanel = !gitPanelCollapsed;
+  const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
+  const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
     ['--sidebar-width' as string]: `${sidebarWidth}px`,
-    ...(showGitPanel ? { ['--git-panel-width' as string]: `${gitPanelWidth}px` } : {}),
-    ...(showTasksPanel ? { ['--tasks-panel-height' as string]: `${tasksPanelHeight}px` } : {}),
+    ...(showBottomDock ? { ['--bottom-dock-height' as string]: `${bottomDockHeight}px` } : {}),
   } as React.CSSProperties;
+
+  const bottomDockPanels = useMemo((): BottomDockPanelSpec[] => {
+    const panels: BottomDockPanelSpec[] = [];
+    if (showBuiltInTerminal) {
+      panels.push({
+        id: 'terminal',
+        minWidth: BOTTOM_TERMINAL_MIN_WIDTH,
+        content: activeSession ? (
+          <BuiltInTerminalPanel
+            key={activeSession.id}
+            sessionId={activeSession.id}
+            worktreePath={activeSession.worktreePath}
+            themeName={resolvedTheme}
+            blurred={modalOpen}
+            onHide={toggleBuiltInTerminal}
+          />
+        ) : (
+          <section className="built-in-terminal-panel bottom-dock-panel built-in-terminal-placeholder">
+            <div className="bottom-dock-panel-header">
+              <div className="bottom-dock-panel-title">Terminal</div>
+              <div className="bottom-dock-panel-header-actions">
+                <button
+                  className="icon-btn"
+                  onClick={toggleBuiltInTerminal}
+                  title="Hide Terminal panel"
+                  aria-label="Hide Terminal panel"
+                >
+                  <ChevronDownIcon />
+                </button>
+              </div>
+            </div>
+            <div className="built-in-terminal-body built-in-terminal-empty">
+              Select a session to open a shell at its worktree root.
+            </div>
+          </section>
+        ),
+      });
+    }
+    if (showTasksPanel) {
+      panels.push({
+        id: 'tasks',
+        minWidth: BOTTOM_TASKS_MIN_WIDTH,
+        content: <TasksPanel tasksConfig={tasksConfig} onHide={toggleTasksPanel} />,
+      });
+    }
+    if (showGitPanel) {
+      panels.push({
+        id: 'git',
+        minWidth: BOTTOM_GIT_MIN_WIDTH,
+        content: activeSession ? (
+          <GitPanel
+            key={activeSession.id}
+            sessionId={activeSession.id}
+            worktreePath={activeSession.worktreePath}
+            onHide={toggleGitPanel}
+          />
+        ) : (
+          <section className="git-dock-panel bottom-dock-panel bottom-dock-placeholder">
+            <div className="bottom-dock-panel-header">
+              <div className="bottom-dock-panel-title">Git</div>
+              <div className="bottom-dock-panel-header-actions">
+                <button
+                  className="icon-btn"
+                  onClick={toggleGitPanel}
+                  title="Hide Git panel"
+                  aria-label="Hide Git panel"
+                >
+                  <ChevronDownIcon />
+                </button>
+              </div>
+            </div>
+            <div className="bottom-dock-placeholder-body">
+              Select a session to view git status and diffs.
+            </div>
+          </section>
+        ),
+      });
+    }
+    return panels;
+  }, [
+    showBuiltInTerminal,
+    showTasksPanel,
+    showGitPanel,
+    activeSession,
+    resolvedTheme,
+    modalOpen,
+    tasksConfig,
+    toggleBuiltInTerminal,
+    toggleTasksPanel,
+    toggleGitPanel,
+  ]);
 
   return (
     <div className={appClass} style={appStyle}>
@@ -359,12 +441,7 @@ export function App() {
 
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader
-            session={activeSession}
-            gitPanelHidden={gitPanelCollapsed}
-            onShowGitPanel={toggleGitPanel}
-            onPasteWizardBrief={pasteWizardBrief}
-          />
+          <PaneHeader session={activeSession} onPasteWizardBrief={pasteWizardBrief} />
         ) : (
           <EmptyHeader />
         )}
@@ -398,46 +475,67 @@ export function App() {
               <EmptyState onNewSession={() => setShowNew(true)} />
             )}
           </div>
-          {showTasksPanel && (
-            <TasksPanel
-              tasksConfig={tasksConfig}
-              height={tasksPanelHeight}
-              minHeight={TASKS_PANEL_MIN_HEIGHT}
-              getMaxHeight={maxTasksPanelHeight}
-              onResize={onResizeTasksPanel}
-              onResizeEnd={onResizeTasksPanelEnd}
-              onHide={toggleTasksPanel}
+          {showBottomDock && (
+            <BottomDock
+              height={bottomDockHeight}
+              panels={bottomDockPanels}
+              minHeight={BOTTOM_DOCK_MIN_HEIGHT}
+              getMaxHeight={maxBottomDockHeight}
+              onResizeHeight={onResizeBottomDock}
+              onResizeHeightEnd={onResizeBottomDockEnd}
             />
           )}
         </div>
-        {tasksPanelCollapsed && (
+        <div className="bottom-fabs">
+          {builtInTerminalCollapsed && (
+            <button
+              type="button"
+              className="bottom-fab"
+              onClick={toggleBuiltInTerminal}
+              title="Show Terminal panel"
+            >
+              <TerminalIcon />
+              <span>Terminal</span>
+            </button>
+          )}
+          {tasksPanelCollapsed && (
+            <button
+              type="button"
+              className="bottom-fab"
+              onClick={toggleTasksPanel}
+              title="Show Tasks panel"
+            >
+              <TasksIcon />
+              <span>Tasks</span>
+            </button>
+          )}
+          {gitPanelCollapsed && (
+            <button
+              type="button"
+              className="bottom-fab"
+              onClick={toggleGitPanel}
+              title="Show Git panel"
+            >
+              <GitBranchIcon />
+              <span>Git</span>
+            </button>
+          )}
           <button
             type="button"
-            className="tasks-fab"
-            onClick={toggleTasksPanel}
-            title="Show Tasks panel"
+            className="bottom-fab"
+            onClick={() => void openActiveInVSCode()}
+            disabled={!activeSession}
+            title={
+              activeSession
+                ? `Open ${activeSession.worktreePath} in VS Code`
+                : 'Select a session to open in VS Code'
+            }
           >
-            <TasksIcon />
-            <span>Tasks</span>
+            <VSCodeIcon />
+            <span>Open In VSCode</span>
           </button>
-        )}
+        </div>
       </main>
-
-      {showGitPanel && activeSession && (
-        <DeveloperPanel
-          sessionId={activeSession.id}
-          worktreePath={activeSession.worktreePath}
-          width={gitPanelWidth}
-          minWidth={GIT_PANEL_MIN_WIDTH}
-          getMaxWidth={getMaxGitPanelWidth}
-          fullscreen={fullscreen}
-          onResize={onResizeGitPanel}
-          onResizeEnd={onResizeGitPanelEnd}
-          onHide={toggleGitPanel}
-          onToggleFullscreen={toggleGitPanelFullscreen}
-          onVSCodeNotInstalled={() => setVscodeMissing(true)}
-        />
-      )}
 
       {showNew && (
         <NewSessionModal
@@ -531,13 +629,9 @@ function VSCodeMissingModal({ onClose }: { onClose: () => void }) {
 
 function PaneHeader({
   session,
-  gitPanelHidden,
-  onShowGitPanel,
   onPasteWizardBrief,
 }: {
   session: SessionWithStatus;
-  gitPanelHidden: boolean;
-  onShowGitPanel: () => void;
   onPasteWizardBrief: () => void;
 }) {
   return (
@@ -557,17 +651,6 @@ function PaneHeader({
             title="Paste the wizard-generated briefing into the agent terminal at the cursor"
           >
             Allow Wizard Command
-          </button>
-        )}
-        {gitPanelHidden && (
-          <button
-            className="btn btn-ghost"
-            type="button"
-            onClick={onShowGitPanel}
-            title="Show Developer Panel"
-          >
-            <GitBranchIcon />
-            <span>Developer</span>
           </button>
         )}
       </div>
@@ -606,6 +689,33 @@ function TasksIcon() {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function TerminalIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  );
+}
+
+function VSCodeIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3 7 12l10 9V3z" />
+      <line x1="7" y1="12" x2="3" y2="9" />
+      <line x1="7" y1="12" x2="3" y2="15" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
     </svg>
   );
 }
