@@ -255,6 +255,11 @@ export function App() {
     }
   }, [activeSession]);
 
+  const openActiveInFileWindow = useCallback(async () => {
+    if (!activeSession) return;
+    await window.api.revealInFinder(activeSession.worktreePath);
+  }, [activeSession]);
+
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
 
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
@@ -539,6 +544,20 @@ export function App() {
             <VSCodeIcon />
             <span>Open In VSCode</span>
           </button>
+          <button
+            type="button"
+            className="bottom-action-btn"
+            onClick={() => void openActiveInFileWindow()}
+            disabled={!activeSession}
+            title={
+              activeSession
+                ? `Open ${activeSession.worktreePath} in File Window`
+                : 'Select a session to open in File Window'
+            }
+          >
+            <FileWindowIcon />
+            <span>Open In File Window</span>
+          </button>
         </footer>
       </main>
 
@@ -713,6 +732,15 @@ function VSCodeIcon() {
       <path d="M17 3 7 12l10 9V3z" />
       <line x1="7" y1="12" x2="3" y2="9" />
       <line x1="7" y1="12" x2="3" y2="15" />
+    </svg>
+  );
+}
+
+function FileWindowIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15V6a2 2 0 0 0-2-2H8l-2 3H3v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2z" />
+      <path d="M3 10h18" />
     </svg>
   );
 }
