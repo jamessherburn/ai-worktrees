@@ -141,7 +141,7 @@ export function Sidebar({
                     {items.map((s) => (
                       <div
                         key={s.id}
-                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}`}
+                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}`}
                         onClick={() => onSelect(s.id)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -158,24 +158,20 @@ export function Sidebar({
                                 Global
                               </span>
                             ) : null}
+                            {s.wizardBriefMarkdown ? (
+                              <span className="session-wizard-label" title="Wizard session">
+                                Wizard Session
+                              </span>
+                            ) : null}
                           </span>
                         <div className="session-branch">
                           <span
-                            className={`session-agent-tag-wrap${s.wizardBriefMarkdown ? ' session-agent-tag-wrap--wizard' : ''}`}
-                            title={
-                              s.wizardBriefMarkdown
-                                ? `Agent: ${getAgent(s.agentId).name} · Wizard briefing available`
-                                : `Agent: ${getAgent(s.agentId).name}`
-                            }
+                            className="session-agent-tag-wrap"
+                            title={`Agent: ${getAgent(s.agentId).name}`}
                           >
                             <span className={`session-agent-tag agent-${s.agentId}`}>
                               {getAgent(s.agentId).name}
                             </span>
-                            {s.wizardBriefMarkdown ? (
-                              <span className="session-agent-wizard-badge" aria-hidden>
-                                <WizardHatIcon />
-                              </span>
-                            ) : null}
                           </span>
                           {!s.global && <span className="session-branch-name">{s.branchName}</span>}
                         </div>
@@ -245,27 +241,6 @@ function SessionContextMenu({
         </button>
       )}
     </div>
-  );
-}
-
-function WizardHatIcon() {
-  return (
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden
-      className="wizard-hat-icon"
-    >
-      <path d="M8 2.25 3.5 9.75h9L8 2.25z" />
-      <path d="M2.5 9.75h11v2.25H2.5V9.75z" />
-      <path
-        d="M4.25 8.85h7.5v1.1h-7.5v-1.1z"
-        fill="var(--bg-elev)"
-        opacity="0.85"
-      />
-    </svg>
   );
 }
 

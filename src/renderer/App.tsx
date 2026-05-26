@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
 import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
+import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { Sidebar } from './components/Sidebar';
@@ -276,10 +277,32 @@ export function App() {
   }, [activeSession]);
 
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
+  const pendingWizardBriefRef = useRef(new Map<string, string>());
 
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
-    if (api) terminalApisRef.current.set(id, api);
-    else terminalApisRef.current.delete(id);
+    if (api) {
+      terminalApisRef.current.set(id, api);
+      const pending = pendingWizardBriefRef.current.get(id);
+      if (pending) {
+        pendingWizardBriefRef.current.delete(id);
+        window.setTimeout(() => {
+          terminalApisRef.current.get(id)?.submitPrompt(pending);
+        }, WIZARD_BRIEF_READY_DELAY_MS);
+      }
+    } else {
+      terminalApisRef.current.delete(id);
+    }
+  }, []);
+
+  const queueWizardBriefSubmit = useCallback((sessionId: string, text: string) => {
+    pendingWizardBriefRef.current.set(sessionId, text);
+    const api = terminalApisRef.current.get(sessionId);
+    if (api) {
+      pendingWizardBriefRef.current.delete(sessionId);
+      window.setTimeout(() => {
+        terminalApisRef.current.get(sessionId)?.submitPrompt(text);
+      }, WIZARD_BRIEF_READY_DELAY_MS);
+    }
   }, []);
 
   const pasteWizardBrief = useCallback(() => {
@@ -305,27 +328,31 @@ export function App() {
     window.setTimeout(retry, 50);
   }, [activeId]);
 
+  const submitPromptToSession = useCallback((sessionId: string, text: string) => {
+    const api = terminalApisRef.current.get(sessionId);
+    if (api) {
+      api.submitPrompt(text);
+      return;
+    }
+    let attempts = 0;
+    const retry = () => {
+      const next = terminalApisRef.current.get(sessionId);
+      if (next) {
+        next.submitPrompt(text);
+        return;
+      }
+      attempts += 1;
+      if (attempts < 30) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, []);
+
   const runSessionPrompt = useCallback(
     (text: string) => {
       if (!activeId) return;
-      const api = terminalApisRef.current.get(activeId);
-      if (api) {
-        api.submitPrompt(text);
-        return;
-      }
-      let attempts = 0;
-      const retry = () => {
-        const next = terminalApisRef.current.get(activeId);
-        if (next) {
-          next.submitPrompt(text);
-          return;
-        }
-        attempts += 1;
-        if (attempts < 30) window.setTimeout(retry, 50);
-      };
-      window.setTimeout(retry, 50);
+      submitPromptToSession(activeId, text);
     },
-    [activeId],
+    [activeId, submitPromptToSession],
   );
 
   const openSession = useCallback((id: string) => {
@@ -597,7 +624,11 @@ export function App() {
             setShowNew(false);
             const list = await refresh();
             const created = list.find((s) => s.id === session.id);
-            if (created) openSession(created.id);
+            if (!created) return;
+            openSession(created.id);
+            if (created.wizardBriefMarkdown) {
+              queueWizardBriefSubmit(created.id, created.wizardBriefMarkdown);
+            }
           }}
         />
       )}
@@ -695,6 +726,11 @@ function PaneHeader({
           {session.global ? (
             <span className="pane-global-label" title="Global session">
               Global
+            </span>
+          ) : null}
+          {session.wizardBriefMarkdown ? (
+            <span className="pane-wizard-label" title="Wizard session">
+              Wizard Session
             </span>
           ) : null}
         </div>
