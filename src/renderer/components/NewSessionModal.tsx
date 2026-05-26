@@ -20,9 +20,15 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [useWizardMode, setUseWizardMode] = useState(true);
+  const [isGlobalSession, setIsGlobalSession] = useState(false);
+  const [codeDir, setCodeDir] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('form');
   const [wizardConfig, setWizardConfig] = useState<WizardConfig | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void window.api.getSettings().then((s) => setCodeDir(s.codeDir));
+  }, []);
 
   useEffect(() => {
     void window.api.listRepos().then((items) => {
@@ -49,8 +55,12 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   const anyAvailable = availability ? AGENTS.some((a) => availability[a.id]) : true;
 
   const canSubmit = useMemo(
-    () => selectedAvailable && repoPath && name.trim().length > 0 && !busy,
-    [selectedAvailable, repoPath, name, busy],
+    () =>
+      selectedAvailable &&
+      (isGlobalSession || repoPath) &&
+      name.trim().length > 0 &&
+      !busy,
+    [selectedAvailable, isGlobalSession, repoPath, name, busy],
   );
 
   const runCreate = async (wizardBriefMarkdown: string | null) => {
@@ -58,7 +68,7 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     setError(null);
     try {
       const result = await window.api.createSession({
-        repoPath,
+        ...(isGlobalSession ? { global: true } : { repoPath }),
         name: name.trim(),
         agentId,
         wizardBriefMarkdown: wizardBriefMarkdown ?? undefined,
@@ -122,9 +132,27 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
       <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
         <div className="modal-header">
           <div className="modal-title">New Session</div>
-          <div className="modal-subtitle">Creates a new git worktree branched off the latest origin/main.</div>
+          <div className="modal-subtitle">
+            {isGlobalSession
+              ? 'Runs the agent at your code directory — no git worktree is created.'
+              : 'Creates a new git worktree branched off the latest origin/main.'}
+          </div>
         </div>
         <div className="modal-body">
+          <div className="field field-row">
+            <label className="wizard-mode-check">
+              <input
+                type="checkbox"
+                checked={isGlobalSession}
+                onChange={(e) => setIsGlobalSession(e.target.checked)}
+              />
+              <span>Global session</span>
+            </label>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              Run the agent at your code directory from Settings
+              {codeDir ? ` (${codeDir})` : ''} without creating a worktree or branch.
+            </div>
+          </div>
           <div className="field">
             <label className="field-label">AI Agent</label>
             <div className="agent-grid">
@@ -161,7 +189,11 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
           </div>
           <div className="field">
             <label className="field-label">Repository</label>
-            {repos === null ? (
+            {isGlobalSession ? (
+              <div className="muted" style={{ fontSize: 12 }}>
+                Not applicable — global sessions run at your code directory.
+              </div>
+            ) : repos === null ? (
               <div className="muted">Scanning repos…</div>
             ) : repos.length === 0 ? (
               <div className="modal-warn">No git repos found in your code directory. Update the code directory in Settings.</div>
@@ -186,8 +218,9 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
               spellCheck={false}
             />
             <div className="muted" style={{ fontSize: 11 }}>
-              This is also the branch name (letters, numbers, dot, underscore, slash, dash). Spaces become dashes as you
-              type.
+              {isGlobalSession
+                ? 'Letters, numbers, dot, underscore, slash, dash. Spaces become dashes as you type.'
+                : 'This is also the branch name (letters, numbers, dot, underscore, slash, dash). Spaces become dashes as you type.'}
             </div>
           </div>
           <div className="field field-row">

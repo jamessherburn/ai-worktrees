@@ -141,7 +141,7 @@ export function Sidebar({
                     {items.map((s) => (
                       <div
                         key={s.id}
-                        className={`session-row${s.id === activeId ? ' active' : ''}`}
+                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}`}
                         onClick={() => onSelect(s.id)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -151,7 +151,14 @@ export function Sidebar({
                       >
                         <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
                         <div className="session-name" title={s.name}>
-                          <span className="session-name-text">{s.name}</span>
+                          <span className="session-name-text">
+                            <span className="session-name-primary">{s.name}</span>
+                            {s.global ? (
+                              <span className="session-global-label" title="Global session">
+                                Global
+                              </span>
+                            ) : null}
+                          </span>
                         <div className="session-branch">
                           <span
                             className={`session-agent-tag-wrap${s.wizardBriefMarkdown ? ' session-agent-tag-wrap--wizard' : ''}`}
@@ -170,7 +177,7 @@ export function Sidebar({
                               </span>
                             ) : null}
                           </span>
-                          <span className="session-branch-name">{s.branchName}</span>
+                          {!s.global && <span className="session-branch-name">{s.branchName}</span>}
                         </div>
                         </div>
                         <button
