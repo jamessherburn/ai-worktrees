@@ -386,7 +386,6 @@ export function App() {
           <GitPanel
             key={activeSession.id}
             sessionId={activeSession.id}
-            worktreePath={activeSession.worktreePath}
             onHide={toggleGitPanel}
           />
         ) : (
