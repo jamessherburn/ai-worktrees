@@ -78,7 +78,7 @@ export function App() {
     if (stored !== null) return stored === '1';
     const legacyDev = localStorage.getItem('developer-panel-collapsed');
     if (legacyDev !== null) return legacyDev !== '0';
-    return false;
+    return true;
   });
   const [bottomDockHeight, setBottomDockHeight] = useState<number>(() => {
     const stored = Number(
@@ -111,28 +111,31 @@ export function App() {
   }, []);
 
   const toggleGitPanel = useCallback(() => {
+    if (!activeId) return;
     setGitPanelCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(GIT_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const toggleTasksPanel = useCallback(() => {
+    if (!activeId) return;
     setTasksPanelCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(TASKS_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const toggleBuiltInTerminal = useCallback(() => {
+    if (!activeId) return;
     setBuiltInTerminalCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(BUILTIN_TERMINAL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const onResizeBottomDock = useCallback((h: number) => {
     setBottomDockHeight(clampBottomDockHeight(h));
@@ -293,19 +296,16 @@ export function App() {
   const runSessionPrompt = useCallback(
     (text: string) => {
       if (!activeId) return;
-      // Ensure the prompt submits immediately even when inserted mid-line.
-      // Using '\n' avoids relying on a carriage-return-only "enter" in terminals/shells.
-      const payload = `${text}\n`;
       const api = terminalApisRef.current.get(activeId);
       if (api) {
-        api.paste(payload);
+        api.submitPrompt(text);
         return;
       }
       let attempts = 0;
       const retry = () => {
         const next = terminalApisRef.current.get(activeId);
         if (next) {
-          next.paste(payload);
+          next.submitPrompt(text);
           return;
         }
         attempts += 1;
@@ -325,9 +325,9 @@ export function App() {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
-  const showTasksPanel = !tasksPanelCollapsed;
-  const showBuiltInTerminal = !builtInTerminalCollapsed;
-  const showGitPanel = !gitPanelCollapsed;
+  const showTasksPanel = activeSession !== null && !tasksPanelCollapsed;
+  const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
+  const showGitPanel = activeSession !== null && !gitPanelCollapsed;
   const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
   const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
@@ -492,9 +492,10 @@ export function App() {
         </div>
         <footer className="bottom-action-bar" aria-label="Panel shortcuts">
           <div className="bottom-action-bar-left">
-            {activeSession && (
+            {sessionPrompts.length > 0 && (
               <SessionPromptBar
                 prompts={sessionPrompts}
+                disabled={!activeSession}
                 onRun={runSessionPrompt}
                 onScrollToBottom={scrollActiveTerminalToBottom}
               />
@@ -507,7 +508,12 @@ export function App() {
                 type="button"
                 className="bottom-action-btn"
                 onClick={toggleBuiltInTerminal}
-                title="Show Terminal panel"
+                disabled={!activeSession}
+                title={
+                  activeSession
+                    ? 'Show Terminal panel'
+                    : 'Select a session to open the Terminal panel'
+                }
               >
                 <TerminalIcon />
                 <span>Terminal</span>
@@ -518,7 +524,10 @@ export function App() {
                 type="button"
                 className="bottom-action-btn"
                 onClick={toggleTasksPanel}
-                title="Show Tasks panel"
+                disabled={!activeSession}
+                title={
+                  activeSession ? 'Show Tasks panel' : 'Select a session to open the Tasks panel'
+                }
               >
                 <TasksIcon />
                 <span>Tasks</span>
@@ -529,7 +538,8 @@ export function App() {
                 type="button"
                 className="bottom-action-btn"
                 onClick={toggleGitPanel}
-                title="Show Git panel"
+                disabled={!activeSession}
+                title={activeSession ? 'Show Git panel' : 'Select a session to open the Git panel'}
               >
                 <GitBranchIcon />
                 <span>Git</span>

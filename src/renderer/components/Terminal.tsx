@@ -6,6 +6,7 @@ import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
 
 export type TerminalApi = {
   paste: (text: string) => void;
+  submitPrompt: (text: string) => void;
   scrollToBottom: () => void;
 };
 
@@ -47,9 +48,13 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     onTerminalApiRef.current?.(sessionId, {
       paste: (text: string) => {
         term.focus();
-        // Write to the PTY so input lands at the shell cursor; echoed output appears in xterm.
-        // Keep '\n' intact so Enter-like submissions work reliably.
-        window.api.pty.write(sessionId, text);
+        term.input(text);
+      },
+      submitPrompt: (text: string) => {
+        term.focus();
+        const body = text.replace(/\r?\n$/, '');
+        // Route through xterm input (same path as typing) so agent prompt UIs receive Enter.
+        term.input(`${body}\r`);
       },
       scrollToBottom: () => {
         const buffer = term.buffer.active;
