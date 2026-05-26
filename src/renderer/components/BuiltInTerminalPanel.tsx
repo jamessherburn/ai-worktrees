@@ -145,7 +145,9 @@ export function BuiltInTerminalPanel({
         </div>
       </div>
       <div className="built-in-terminal-body">
-        <div className="built-in-terminal-host" ref={hostRef} aria-hidden={blurred} />
+        <div className="built-in-terminal-shell" aria-hidden={blurred}>
+          <div className="built-in-terminal-host" ref={hostRef} />
+        </div>
       </div>
     </section>
   );

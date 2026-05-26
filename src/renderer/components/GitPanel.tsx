@@ -8,7 +8,6 @@ import type {
 
 type Props = {
   sessionId: string;
-  worktreePath: string;
   onHide: () => void;
 };
 
@@ -32,7 +31,7 @@ type ContextMenuState = {
   y: number;
 };
 
-export function GitPanel({ sessionId, worktreePath, onHide }: Props) {
+export function GitPanel({ sessionId, onHide }: Props) {
   const [status, setStatus] = useState<GitWorktreeStatus>(EMPTY_STATUS);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -242,12 +241,6 @@ export function GitPanel({ sessionId, worktreePath, onHide }: Props) {
     [sessionId, navigableFiles, openSections],
   );
 
-  const openInTerminal = useCallback(() => {
-    void window.api.openInTerminal(worktreePath).catch(() => {
-      // Terminal.app missing or AppleScript denied — best-effort; no modal for now
-    });
-  }, [worktreePath]);
-
   const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
   return (
@@ -266,20 +259,10 @@ export function GitPanel({ sessionId, worktreePath, onHide }: Props) {
         </div>
       </div>
 
-      <div className="dev-panel-toolbar">
-        <button
-          className="btn btn-ghost btn-small"
-          onClick={openInTerminal}
-          title={`Open ${worktreePath} in Terminal`}
-        >
-          <TerminalAppIcon />
-          <span>Open In Terminal</span>
-        </button>
-      </div>
-
       <div className="dev-panel-body">
         {error && <div className="git-panel-error">{error}</div>}
-        <div className="git-panel-files">
+        <div className="git-panel-split">
+          <div className="git-panel-files">
           <FileGroup
             label="Staged"
             group="staged"
@@ -331,15 +314,16 @@ export function GitPanel({ sessionId, worktreePath, onHide }: Props) {
           {totalChanges === 0 && !error && (
             <div className="git-panel-empty">Working tree clean</div>
           )}
-        </div>
-        <div className="git-panel-diff">
-          {selection ? (
-            <DiffView diff={diff} error={diffError} loading={diffLoading} selection={selection} />
-          ) : (
-            <div className="git-panel-diff-empty">
-              {totalChanges === 0 ? 'No changes to show.' : 'Select a file to view its diff.'}
-            </div>
-          )}
+          </div>
+          <div className="git-panel-diff">
+            {selection ? (
+              <DiffView diff={diff} error={diffError} loading={diffLoading} selection={selection} />
+            ) : (
+              <div className="git-panel-diff-empty">
+                {totalChanges === 0 ? 'No changes to show.' : 'Select a file to view its diff.'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -587,16 +571,6 @@ function ChevronRightIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-function TerminalAppIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="14" rx="2" />
-      <path d="M7 8h6M7 12h10" />
-      <polyline points="9 16 7 14 9 12" />
     </svg>
   );
 }

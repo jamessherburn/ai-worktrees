@@ -109,9 +109,19 @@ export function Sidebar({
         <button className="btn btn-primary" onClick={onNewSession}>
           + New Session
         </button>
-        <button className="icon-btn" title="Settings" onClick={onOpenSettings} aria-label="Settings">
-          <SettingsIcon />
-        </button>
+        <div className="sidebar-actions-icons">
+          <button
+            className="icon-btn"
+            title="Agent Data"
+            onClick={onOpenAgentData}
+            aria-label="Agent Data"
+          >
+            <DocIcon />
+          </button>
+          <button className="icon-btn" title="Settings" onClick={onOpenSettings} aria-label="Settings">
+            <SettingsIcon />
+          </button>
+        </div>
       </div>
       <div className="sessions-scroll">
         {sessions.length === 0 ? (
@@ -184,14 +194,6 @@ export function Sidebar({
           })
         )}
       </div>
-      <button
-        className="sidebar-tool-btn"
-        onClick={onOpenAgentData}
-        title="See spend and edit global instructions for every agent"
-      >
-        <DocIcon />
-        <span>Agent Data</span>
-      </button>
       {menu && (
         <SessionContextMenu
           session={menu.session}

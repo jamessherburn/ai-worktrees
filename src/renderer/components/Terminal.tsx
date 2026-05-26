@@ -3,14 +3,18 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
+import type { AgentId } from '@shared/agents';
+import { normalizePromptText, SESSION_PROMPT_SUBMIT_DELAY_MS } from '@shared/session-prompt-submit';
 
 export type TerminalApi = {
   paste: (text: string) => void;
+  submitPrompt: (text: string) => void;
   scrollToBottom: () => void;
 };
 
 type Props = {
   sessionId: string;
+  agentId: AgentId;
   visible: boolean;
   blurred: boolean;
   themeName: 'dark' | 'light';
@@ -18,7 +22,7 @@ type Props = {
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
 };
 
-export function TerminalView({ sessionId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
+export function TerminalView({ sessionId, agentId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -47,8 +51,21 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     onTerminalApiRef.current?.(sessionId, {
       paste: (text: string) => {
         term.focus();
-        // Write to the PTY so input lands at the shell cursor; echoed output appears in xterm.
-        window.api.pty.write(sessionId, text.replace(/\n/g, '\r'));
+        term.input(text);
+      },
+      submitPrompt: (text: string) => {
+        term.focus();
+        const body = normalizePromptText(text);
+        // Paste prompt text first, then send Enter as a separate keypress so agent
+        // composers submit instead of treating Return as pasted newline content.
+        const delay =
+          agentId === 'claude' || agentId === 'cursor'
+            ? SESSION_PROMPT_SUBMIT_DELAY_MS
+            : 50;
+        term.paste(body);
+        window.setTimeout(() => {
+          term.input('\r');
+        }, delay);
       },
       scrollToBottom: () => {
         const buffer = term.buffer.active;
@@ -150,5 +167,9 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     }
   }, [visible, blurred]);
 
-  return <div className="terminal-host" ref={hostRef} aria-hidden={blurred} />;
+  return (
+    <div className="terminal-shell" aria-hidden={blurred}>
+      <div className="terminal-host" ref={hostRef} />
+    </div>
+  );
 }

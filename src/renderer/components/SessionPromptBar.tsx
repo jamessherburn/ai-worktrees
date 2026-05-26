@@ -3,11 +3,17 @@ import type { SessionPromptPreset } from '@shared/types';
 
 type Props = {
   prompts: SessionPromptPreset[];
+  disabled?: boolean;
   onRun: (text: string) => void;
   onScrollToBottom: () => void;
 };
 
-export function SessionPromptBar({ prompts, onRun, onScrollToBottom }: Props) {
+export function SessionPromptBar({
+  prompts,
+  disabled = false,
+  onRun,
+  onScrollToBottom,
+}: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -28,9 +34,14 @@ export function SessionPromptBar({ prompts, onRun, onScrollToBottom }: Props) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
   if (prompts.length === 0) return null;
 
   const run = (text: string) => {
+    if (disabled) return;
     setOpen(false);
     onRun(text);
   };
@@ -40,25 +51,38 @@ export function SessionPromptBar({ prompts, onRun, onScrollToBottom }: Props) {
       <div className="session-prompt-bar-actions">
         <button
           type="button"
-          className="session-prompt-trigger"
-          onClick={() => setOpen((v) => !v)}
+          className="bottom-action-btn session-prompt-trigger"
+          onClick={() => {
+            if (disabled) return;
+            setOpen((v) => !v);
+          }}
+          disabled={disabled}
           aria-expanded={open}
           aria-haspopup="menu"
-          title="Send a quick prompt to this session"
+          title={
+            disabled
+              ? 'Select a session to use quick prompts'
+              : 'Send a quick prompt to this session'
+          }
         >
           <span>Quick Prompts</span>
           <ChevronDownIcon />
         </button>
         <button
           type="button"
-          className="btn btn-ghost btn-small session-prompt-scroll-btn"
+          className="bottom-action-btn session-prompt-scroll-btn"
           onClick={onScrollToBottom}
-          title="Scroll to the bottom of this session"
+          disabled={disabled}
+          title={
+            disabled
+              ? 'Select a session to scroll the terminal'
+              : 'Scroll to the bottom of this session'
+          }
         >
           Scroll to bottom
         </button>
       </div>
-      {open && (
+      {open && !disabled && (
         <div className="session-prompt-menu" role="menu">
           {prompts.map((p, i) => (
             <button

@@ -19,9 +19,10 @@ import { useResolvedTheme } from './theme';
 
 const GIT_PANEL_COLLAPSED_KEY = 'git-panel-collapsed';
 const SIDEBAR_WIDTH_KEY = 'sidebar-width';
-const SIDEBAR_DEFAULT_WIDTH = 280;
+const SIDEBAR_DEFAULT_WIDTH = 400;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
+const SIDEBAR_UPGRADE_THRESHOLD = 340;
 const MAIN_PANE_MIN_WIDTH = 80;
 const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
 const BUILTIN_TERMINAL_COLLAPSED_KEY = 'builtin-terminal-collapsed';
@@ -29,6 +30,7 @@ const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
 const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
 const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
+const BOTTOM_ACTION_BAR_HEIGHT = 48;
 const BOTTOM_TERMINAL_MIN_WIDTH = 220;
 const BOTTOM_TASKS_MIN_WIDTH = 240;
 const BOTTOM_GIT_MIN_WIDTH = 280;
@@ -47,9 +49,19 @@ function clampSidebarWidth(value: number): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
 }
 
+function readInitialSidebarWidth(): number {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  if (!Number.isFinite(stored) || stored <= 0) return SIDEBAR_DEFAULT_WIDTH;
+  if (stored <= SIDEBAR_UPGRADE_THRESHOLD) return SIDEBAR_DEFAULT_WIDTH;
+  return clampSidebarWidth(stored);
+}
+
 function maxBottomDockHeight(): number {
   if (typeof window === 'undefined') return 600;
-  return Math.max(BOTTOM_DOCK_MIN_HEIGHT, window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT);
+  return Math.max(
+    BOTTOM_DOCK_MIN_HEIGHT,
+    window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT - BOTTOM_ACTION_BAR_HEIGHT,
+  );
 }
 
 function clampBottomDockHeight(value: number): number {
@@ -74,7 +86,7 @@ export function App() {
     if (stored !== null) return stored === '1';
     const legacyDev = localStorage.getItem('developer-panel-collapsed');
     if (legacyDev !== null) return legacyDev !== '0';
-    return false;
+    return true;
   });
   const [bottomDockHeight, setBottomDockHeight] = useState<number>(() => {
     const stored = Number(
@@ -87,10 +99,7 @@ export function App() {
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [vscodeMissing, setVscodeMissing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return clampSidebarWidth(stored);
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => readInitialSidebarWidth());
   const [ghApiBar, setGhApiBar] = useState<{
     message: string;
     tone: 'pending' | 'success' | 'error' | 'warning';
@@ -107,28 +116,31 @@ export function App() {
   }, []);
 
   const toggleGitPanel = useCallback(() => {
+    if (!activeId) return;
     setGitPanelCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(GIT_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const toggleTasksPanel = useCallback(() => {
+    if (!activeId) return;
     setTasksPanelCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(TASKS_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const toggleBuiltInTerminal = useCallback(() => {
+    if (!activeId) return;
     setBuiltInTerminalCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(BUILTIN_TERMINAL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [activeId]);
 
   const onResizeBottomDock = useCallback((h: number) => {
     setBottomDockHeight(clampBottomDockHeight(h));
@@ -218,6 +230,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    if (Number.isFinite(stored) && stored > 0 && stored <= SIDEBAR_UPGRADE_THRESHOLD) {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_DEFAULT_WIDTH));
+    }
+  }, []);
+
+  useEffect(() => {
     void window.api.getSettings().then(setSettings);
   }, []);
 
@@ -249,6 +268,11 @@ export function App() {
     if (!result.ok && result.reason === 'not-installed') {
       setVscodeMissing(true);
     }
+  }, [activeSession]);
+
+  const openActiveInFileWindow = useCallback(async () => {
+    if (!activeSession) return;
+    await window.api.revealInFinder(activeSession.worktreePath);
   }, [activeSession]);
 
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
@@ -284,17 +308,16 @@ export function App() {
   const runSessionPrompt = useCallback(
     (text: string) => {
       if (!activeId) return;
-      const payload = `${text}\r`;
       const api = terminalApisRef.current.get(activeId);
       if (api) {
-        api.paste(payload);
+        api.submitPrompt(text);
         return;
       }
       let attempts = 0;
       const retry = () => {
         const next = terminalApisRef.current.get(activeId);
         if (next) {
-          next.paste(payload);
+          next.submitPrompt(text);
           return;
         }
         attempts += 1;
@@ -314,13 +337,14 @@ export function App() {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
-  const showTasksPanel = !tasksPanelCollapsed;
-  const showBuiltInTerminal = !builtInTerminalCollapsed;
-  const showGitPanel = !gitPanelCollapsed;
+  const showTasksPanel = activeSession !== null && !tasksPanelCollapsed;
+  const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
+  const showGitPanel = activeSession !== null && !gitPanelCollapsed;
   const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
   const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
     ['--sidebar-width' as string]: `${sidebarWidth}px`,
+    ['--bottom-action-bar-height' as string]: `${BOTTOM_ACTION_BAR_HEIGHT}px`,
     ...(showBottomDock ? { ['--bottom-dock-height' as string]: `${bottomDockHeight}px` } : {}),
   } as React.CSSProperties;
 
@@ -376,7 +400,6 @@ export function App() {
           <GitPanel
             key={activeSession.id}
             sessionId={activeSession.id}
-            worktreePath={activeSession.worktreePath}
             onHide={toggleGitPanel}
           />
         ) : (
@@ -445,13 +468,6 @@ export function App() {
         ) : (
           <EmptyHeader />
         )}
-        {activeSession && (
-          <SessionPromptBar
-            prompts={sessionPrompts}
-            onRun={runSessionPrompt}
-            onScrollToBottom={scrollActiveTerminalToBottom}
-          />
-        )}
         <div className="main-pane-body">
           <div className={`terminal-stack${modalOpen ? ' inert' : ''}`}>
             {openedIds.map((id) => {
@@ -462,6 +478,7 @@ export function App() {
                 <div key={id} className={`terminal-slot${visible ? ' visible' : ''}`}>
                   <TerminalView
                     sessionId={id}
+                    agentId={session.agentId}
                     visible={visible}
                     blurred={modalOpen}
                     themeName={resolvedTheme}
@@ -486,55 +503,91 @@ export function App() {
             />
           )}
         </div>
-        <div className="bottom-fabs">
-          {builtInTerminalCollapsed && (
+        <footer className="bottom-action-bar" aria-label="Panel shortcuts">
+          <div className="bottom-action-bar-left">
+            {sessionPrompts.length > 0 && (
+              <SessionPromptBar
+                prompts={sessionPrompts}
+                disabled={!activeSession}
+                onRun={runSessionPrompt}
+                onScrollToBottom={scrollActiveTerminalToBottom}
+              />
+            )}
+          </div>
+
+          <div className="bottom-action-bar-right">
+            {builtInTerminalCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleBuiltInTerminal}
+                disabled={!activeSession}
+                title={
+                  activeSession
+                    ? 'Show Terminal panel'
+                    : 'Select a session to open the Terminal panel'
+                }
+              >
+                <TerminalIcon />
+                <span>Terminal</span>
+              </button>
+            )}
+            {tasksPanelCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleTasksPanel}
+                disabled={!activeSession}
+                title={
+                  activeSession ? 'Show Tasks panel' : 'Select a session to open the Tasks panel'
+                }
+              >
+                <TasksIcon />
+                <span>Tasks</span>
+              </button>
+            )}
+            {gitPanelCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleGitPanel}
+                disabled={!activeSession}
+                title={activeSession ? 'Show Git panel' : 'Select a session to open the Git panel'}
+              >
+                <GitBranchIcon />
+                <span>Git</span>
+              </button>
+            )}
             <button
               type="button"
-              className="bottom-fab"
-              onClick={toggleBuiltInTerminal}
-              title="Show Terminal panel"
+              className="bottom-action-btn"
+              onClick={() => void openActiveInVSCode()}
+              disabled={!activeSession}
+              title={
+                activeSession
+                  ? `Open ${activeSession.worktreePath} in VS Code`
+                  : 'Select a session to open in VS Code'
+              }
             >
-              <TerminalIcon />
-              <span>Terminal</span>
+              <VSCodeIcon />
+              <span>Open In VSCode</span>
             </button>
-          )}
-          {tasksPanelCollapsed && (
             <button
               type="button"
-              className="bottom-fab"
-              onClick={toggleTasksPanel}
-              title="Show Tasks panel"
+              className="bottom-action-btn"
+              onClick={() => void openActiveInFileWindow()}
+              disabled={!activeSession}
+              title={
+                activeSession
+                  ? `Open ${activeSession.worktreePath} in File Window`
+                  : 'Select a session to open in File Window'
+              }
             >
-              <TasksIcon />
-              <span>Tasks</span>
+              <FileWindowIcon />
+              <span>Open In File Window</span>
             </button>
-          )}
-          {gitPanelCollapsed && (
-            <button
-              type="button"
-              className="bottom-fab"
-              onClick={toggleGitPanel}
-              title="Show Git panel"
-            >
-              <GitBranchIcon />
-              <span>Git</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="bottom-fab"
-            onClick={() => void openActiveInVSCode()}
-            disabled={!activeSession}
-            title={
-              activeSession
-                ? `Open ${activeSession.worktreePath} in VS Code`
-                : 'Select a session to open in VS Code'
-            }
-          >
-            <VSCodeIcon />
-            <span>Open In VSCode</span>
-          </button>
-        </div>
+          </div>
+        </footer>
       </main>
 
       {showNew && (
@@ -708,6 +761,15 @@ function VSCodeIcon() {
       <path d="M17 3 7 12l10 9V3z" />
       <line x1="7" y1="12" x2="3" y2="9" />
       <line x1="7" y1="12" x2="3" y2="15" />
+    </svg>
+  );
+}
+
+function FileWindowIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15V6a2 2 0 0 0-2-2H8l-2 3H3v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2z" />
+      <path d="M3 10h18" />
     </svg>
   );
 }
