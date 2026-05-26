@@ -491,43 +491,39 @@ body.resizing-sidebar .sidebar-resize {
   position: relative;
 }
 
-.bottom-fabs {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  z-index: 20;
+.bottom-action-bar {
+  flex-shrink: 0;
   display: flex;
-  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-height: var(--bottom-action-bar-height, 48px);
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
   -webkit-app-region: no-drag;
 }
 
-.app.with-bottom-dock .bottom-fabs {
-  bottom: calc(var(--bottom-dock-height, 280px) + 16px);
-}
-
-.bottom-fab {
+.bottom-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-strong);
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
   color: var(--text);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: var(--shadow);
 }
-.bottom-fab:hover:not(:disabled) {
-  background: var(--bg-elev-2);
-  border-color: var(--accent);
+.bottom-action-btn:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--border-strong);
   color: var(--accent);
 }
-.bottom-fab:disabled {
+.bottom-action-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -616,7 +612,7 @@ body.resizing-sidebar .sidebar-resize {
 
 .session-prompt-menu {
   position: absolute;
-  top: calc(100% - 4px);
+  bottom: calc(100% + 6px);
   left: 16px;
   z-index: 30;
   min-width: 200px;
@@ -2504,7 +2500,7 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 /* GitHub API (gh) startup status */
 .gh-api-status-bar {
   position: fixed;
-  bottom: 14px;
+  bottom: calc(var(--bottom-action-bar-height, 48px) + 14px);
   right: 14px;
   z-index: 800;
   display: flex;

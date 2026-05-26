@@ -29,6 +29,7 @@ const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
 const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
 const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
+const BOTTOM_ACTION_BAR_HEIGHT = 48;
 const BOTTOM_TERMINAL_MIN_WIDTH = 220;
 const BOTTOM_TASKS_MIN_WIDTH = 240;
 const BOTTOM_GIT_MIN_WIDTH = 280;
@@ -49,7 +50,10 @@ function clampSidebarWidth(value: number): number {
 
 function maxBottomDockHeight(): number {
   if (typeof window === 'undefined') return 600;
-  return Math.max(BOTTOM_DOCK_MIN_HEIGHT, window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT);
+  return Math.max(
+    BOTTOM_DOCK_MIN_HEIGHT,
+    window.innerHeight - 56 - MAIN_PANE_MIN_HEIGHT - BOTTOM_ACTION_BAR_HEIGHT,
+  );
 }
 
 function clampBottomDockHeight(value: number): number {
@@ -321,6 +325,7 @@ export function App() {
   const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
     ['--sidebar-width' as string]: `${sidebarWidth}px`,
+    ['--bottom-action-bar-height' as string]: `${BOTTOM_ACTION_BAR_HEIGHT}px`,
     ...(showBottomDock ? { ['--bottom-dock-height' as string]: `${bottomDockHeight}px` } : {}),
   } as React.CSSProperties;
 
@@ -486,11 +491,11 @@ export function App() {
             />
           )}
         </div>
-        <div className="bottom-fabs">
+        <footer className="bottom-action-bar" aria-label="Panel shortcuts">
           {builtInTerminalCollapsed && (
             <button
               type="button"
-              className="bottom-fab"
+              className="bottom-action-btn"
               onClick={toggleBuiltInTerminal}
               title="Show Terminal panel"
             >
@@ -501,7 +506,7 @@ export function App() {
           {tasksPanelCollapsed && (
             <button
               type="button"
-              className="bottom-fab"
+              className="bottom-action-btn"
               onClick={toggleTasksPanel}
               title="Show Tasks panel"
             >
@@ -512,7 +517,7 @@ export function App() {
           {gitPanelCollapsed && (
             <button
               type="button"
-              className="bottom-fab"
+              className="bottom-action-btn"
               onClick={toggleGitPanel}
               title="Show Git panel"
             >
@@ -522,7 +527,7 @@ export function App() {
           )}
           <button
             type="button"
-            className="bottom-fab"
+            className="bottom-action-btn"
             onClick={() => void openActiveInVSCode()}
             disabled={!activeSession}
             title={
@@ -534,7 +539,7 @@ export function App() {
             <VSCodeIcon />
             <span>Open In VSCode</span>
           </button>
-        </div>
+        </footer>
       </main>
 
       {showNew && (
