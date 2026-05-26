@@ -16,7 +16,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 880,
     minHeight: 560,
     title: 'AI Worktrees',
-    backgroundColor: isLight ? '#F3F3F3' : '#181818',
+    backgroundColor: isLight ? '#F3F3F3' : '#141414',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 16 },
     webPreferences: {

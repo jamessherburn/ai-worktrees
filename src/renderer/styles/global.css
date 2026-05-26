@@ -1,23 +1,23 @@
 @import url('@xterm/xterm/css/xterm.css');
 
 :root {
-  /* Dark (default) — Cursor-inspired neutrals + blue accent */
-  --bg: #181818;
-  --bg-elev: #252526;
-  --bg-elev-2: #2D2D2D;
-  --border: #3C3C3C;
-  --border-strong: #4E4E4E;
-  --text: #CCCCCC;
-  --text-dim: #A0A0A0;
-  --text-muted: #6E6E6E;
-  --accent: #3794FF;
-  --accent-strong: #4BA3FF;
+  /* Dark (default) — closer to Cursor dark */
+  --bg: #141414;
+  --bg-elev: #181818;
+  --bg-elev-2: #1c1c1c;
+  --border: #2a2a2a;
+  --border-strong: #333333;
+  --text: #cccccc;
+  --text-dim: #858585;
+  --text-muted: #5a5a5a;
+  --accent: #007acc;
+  --accent-strong: #0098ff;
   --accent-on: #ffffff;
   --danger: #f14c4c;
   --success: #3fb950;
   --warning: #cca700;
-  --terminal-bg: #1E1E1E;
-  --shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --terminal-bg: #0f0f0f;
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
 
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
   font-size: 13px;
@@ -2299,23 +2299,20 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   background: var(--bg-elev);
 }
 
-.dev-panel-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
-}
-
 .dev-panel-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.git-panel-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(96px, 1fr) minmax(96px, 1.25fr);
+  grid-template-columns: 1fr;
 }
 
 .git-panel-error {
@@ -2329,8 +2326,7 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 }
 
 .git-dock-panel .git-panel-files {
-  flex: 0 0 40%;
-  min-height: 80px;
+  min-height: 0;
   overflow-y: auto;
   padding: 6px 6px 10px;
   border-bottom: 1px solid var(--border);
@@ -2472,7 +2468,6 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 }
 
 .git-dock-panel .git-panel-diff {
-  flex: 1;
   min-height: 0;
   overflow: auto;
   background: var(--bg);
