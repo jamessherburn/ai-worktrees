@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import { promisify } from 'node:util';
 import type { GitFileChange, GitFileChangeKind, GitWorktreeStatus } from '@shared/types';
 
@@ -86,11 +87,31 @@ export async function addWorktree(opts: {
   ]);
 }
 
+function isUnregisteredWorktreeError(err: unknown): boolean {
+  if (!(err instanceof GitError)) return false;
+  const text = `${err.message}\n${err.stderr}`;
+  return /is not a working tree/i.test(text);
+}
+
+async function removeOrphanWorktreeDirectory(worktreePath: string): Promise<void> {
+  await fs.rm(worktreePath, { recursive: true, force: true });
+}
+
 export async function removeWorktree(repoPath: string, worktreePath: string, force: boolean): Promise<void> {
   const args = ['worktree', 'remove'];
   if (force) args.push('--force');
   args.push(worktreePath);
-  await git(repoPath, args);
+  try {
+    await git(repoPath, args);
+  } catch (err) {
+    if (!isUnregisteredWorktreeError(err)) throw err;
+    await removeOrphanWorktreeDirectory(worktreePath);
+    try {
+      await git(repoPath, ['worktree', 'prune']);
+    } catch {
+      // ignore: nothing to prune
+    }
+  }
 }
 
 export async function deleteBranch(repoPath: string, branch: string): Promise<void> {
