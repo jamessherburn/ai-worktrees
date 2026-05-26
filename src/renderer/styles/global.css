@@ -704,8 +704,15 @@ body.resizing-sidebar .sidebar-resize {
 .terminal-host {
   position: absolute;
   inset: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.terminal-shell {
+  position: absolute;
+  inset: 0;
+  padding: 12px 16px 10px 16px;
   background: var(--terminal-bg);
-  padding: 10px 14px 6px;
 }
 
 /* ------- Empty state ------- */
@@ -1873,7 +1880,15 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 .built-in-terminal-host {
   position: absolute;
   inset: 0;
-  padding: 8px 12px 6px;
+  padding: 0;
+  background: transparent;
+}
+
+.built-in-terminal-shell {
+  position: absolute;
+  inset: 0;
+  padding: 10px 12px 8px 12px;
+  background: var(--terminal-bg);
 }
 
 /* ------- Tasks panel ------- */

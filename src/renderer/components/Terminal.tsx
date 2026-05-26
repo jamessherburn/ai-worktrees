@@ -150,5 +150,9 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
     }
   }, [visible, blurred]);
 
-  return <div className="terminal-host" ref={hostRef} aria-hidden={blurred} />;
+  return (
+    <div className="terminal-shell" aria-hidden={blurred}>
+      <div className="terminal-host" ref={hostRef} />
+    </div>
+  );
 }
