@@ -48,7 +48,7 @@ export function TerminalView({ sessionId, agentId, visible, blurred, themeName, 
     term.loadAddon(new WebLinksAddon());
     term.open(host);
 
-    onTerminalApiRef.current?.(sessionId, {
+    const terminalApi: TerminalApi = {
       paste: (text: string) => {
         term.focus();
         term.input(text);
@@ -79,7 +79,7 @@ export function TerminalView({ sessionId, agentId, visible, blurred, themeName, 
           term.focus();
         });
       },
-    });
+    };
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -122,6 +122,8 @@ export function TerminalView({ sessionId, agentId, visible, blurred, themeName, 
         term.writeln(`\r\n\x1b[31m${result.error}\x1b[0m`);
         return;
       }
+
+      onTerminalApiRef.current?.(sessionId, terminalApi);
 
       term.onData((data) => window.api.pty.write(sessionId, data));
       term.onResize(({ cols, rows }) => window.api.pty.resize(sessionId, cols, rows));
