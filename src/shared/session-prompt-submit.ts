@@ -1,19 +1,5 @@
-import type { AgentId } from './agents';
+export const SESSION_PROMPT_SUBMIT_DELAY_MS = 80;
 
-// Ctrl+Enter sequences understood by multiline terminal agent composers.
-const CTRL_ENTER = '\x1b[13;5~';
-
-export function buildSessionPromptSubmitPayload(agentId: AgentId, text: string): string {
-  const body = text.replace(/\r?\n$/, '');
-  // Clear the current input line, insert the prompt, then submit.
-  const clearLine = '\x15';
-  switch (agentId) {
-    case 'claude':
-    case 'cursor':
-    case 'codex':
-    case 'gemini':
-      return `${clearLine}${body}${CTRL_ENTER}`;
-    default:
-      return `${clearLine}${body}\r`;
-  }
+export function normalizePromptText(text: string): string {
+  return text.replace(/\r?\n$/, '');
 }

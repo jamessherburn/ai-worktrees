@@ -19,9 +19,10 @@ import { useResolvedTheme } from './theme';
 
 const GIT_PANEL_COLLAPSED_KEY = 'git-panel-collapsed';
 const SIDEBAR_WIDTH_KEY = 'sidebar-width';
-const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_DEFAULT_WIDTH = 400;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
+const SIDEBAR_UPGRADE_THRESHOLD = 340;
 const MAIN_PANE_MIN_WIDTH = 80;
 const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
 const BUILTIN_TERMINAL_COLLAPSED_KEY = 'builtin-terminal-collapsed';
@@ -46,6 +47,13 @@ const DEFAULT_SETTINGS: Settings = {
 function clampSidebarWidth(value: number): number {
   if (!Number.isFinite(value)) return SIDEBAR_DEFAULT_WIDTH;
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
+}
+
+function readInitialSidebarWidth(): number {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  if (!Number.isFinite(stored) || stored <= 0) return SIDEBAR_DEFAULT_WIDTH;
+  if (stored <= SIDEBAR_UPGRADE_THRESHOLD) return SIDEBAR_DEFAULT_WIDTH;
+  return clampSidebarWidth(stored);
 }
 
 function maxBottomDockHeight(): number {
@@ -91,10 +99,7 @@ export function App() {
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [vscodeMissing, setVscodeMissing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return clampSidebarWidth(stored);
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => readInitialSidebarWidth());
   const [ghApiBar, setGhApiBar] = useState<{
     message: string;
     tone: 'pending' | 'success' | 'error' | 'warning';
@@ -222,6 +227,13 @@ export function App() {
       unsub();
       if (dismissTimer !== undefined) window.clearTimeout(dismissTimer);
     };
+  }, []);
+
+  useEffect(() => {
+    const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    if (Number.isFinite(stored) && stored > 0 && stored <= SIDEBAR_UPGRADE_THRESHOLD) {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_DEFAULT_WIDTH));
+    }
   }, []);
 
   useEffect(() => {
