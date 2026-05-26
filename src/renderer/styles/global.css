@@ -303,6 +303,40 @@ body.resizing-sidebar .sidebar-resize {
   background: var(--bg-elev-2);
   border-color: var(--border-strong);
 }
+.session-row--global {
+  border-color: #1e3a8a;
+}
+.session-row--global:hover,
+.session-row--global.active {
+  border-color: #2563eb;
+}
+[data-theme='light'] .session-row--global {
+  border-color: #1d4ed8;
+}
+[data-theme='light'] .session-row--global:hover,
+[data-theme='light'] .session-row--global.active {
+  border-color: #2563eb;
+}
+
+.session-global-label {
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid #2563eb;
+  background: color-mix(in srgb, #2563eb 14%, transparent);
+  color: #60a5fa;
+  vertical-align: middle;
+}
+[data-theme='light'] .session-global-label {
+  color: #1d4ed8;
+  border-color: #1d4ed8;
+  background: color-mix(in srgb, #1d4ed8 10%, transparent);
+}
 
 .session-name {
   flex: 1;
@@ -315,11 +349,17 @@ body.resizing-sidebar .sidebar-resize {
 }
 
 .session-name-text {
-  display: block;
+  display: flex;
+  align-items: center;
   min-width: 0;
-  white-space: nowrap;
+  gap: 6px;
+}
+
+.session-name-primary {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-branch {
@@ -682,6 +722,28 @@ body.resizing-sidebar .sidebar-resize {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pane-global-label {
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #2563eb;
+  background: color-mix(in srgb, #2563eb 14%, transparent);
+  color: #60a5fa;
+}
+[data-theme='light'] .pane-global-label {
+  color: #1d4ed8;
+  border-color: #1d4ed8;
+  background: color-mix(in srgb, #1d4ed8 10%, transparent);
 }
 
 .pane-subtitle {

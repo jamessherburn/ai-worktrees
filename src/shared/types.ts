@@ -15,6 +15,8 @@ export type Session = {
   waitingOnReview?: boolean;
   /** When set, the session header offers pasting this briefing into the agent terminal. */
   wizardBriefMarkdown?: string;
+  /** Runs the agent at the code directory from settings; no git worktree is created. */
+  global?: boolean;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';
@@ -61,10 +63,12 @@ export type RepoInfo = {
 };
 
 export type CreateSessionInput = {
-  repoPath: string;
+  repoPath?: string;
   name: string;
   agentId: AgentId;
   wizardBriefMarkdown?: string | null;
+  /** When true, runs at the code directory from settings without creating a worktree. */
+  global?: boolean;
 };
 
 export type DeleteSessionInput = {
