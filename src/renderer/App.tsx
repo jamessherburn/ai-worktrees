@@ -293,7 +293,9 @@ export function App() {
   const runSessionPrompt = useCallback(
     (text: string) => {
       if (!activeId) return;
-      const payload = `${text}\r`;
+      // Ensure the prompt submits immediately even when inserted mid-line.
+      // Using '\n' avoids relying on a carriage-return-only "enter" in terminals/shells.
+      const payload = `${text}\n`;
       const api = terminalApisRef.current.get(activeId);
       if (api) {
         api.paste(payload);
@@ -454,13 +456,6 @@ export function App() {
         ) : (
           <EmptyHeader />
         )}
-        {activeSession && (
-          <SessionPromptBar
-            prompts={sessionPrompts}
-            onRun={runSessionPrompt}
-            onScrollToBottom={scrollActiveTerminalToBottom}
-          />
-        )}
         <div className="main-pane-body">
           <div className={`terminal-stack${modalOpen ? ' inert' : ''}`}>
             {openedIds.map((id) => {
@@ -496,67 +491,79 @@ export function App() {
           )}
         </div>
         <footer className="bottom-action-bar" aria-label="Panel shortcuts">
-          {builtInTerminalCollapsed && (
+          <div className="bottom-action-bar-left">
+            {activeSession && (
+              <SessionPromptBar
+                prompts={sessionPrompts}
+                onRun={runSessionPrompt}
+                onScrollToBottom={scrollActiveTerminalToBottom}
+              />
+            )}
+          </div>
+
+          <div className="bottom-action-bar-right">
+            {builtInTerminalCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleBuiltInTerminal}
+                title="Show Terminal panel"
+              >
+                <TerminalIcon />
+                <span>Terminal</span>
+              </button>
+            )}
+            {tasksPanelCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleTasksPanel}
+                title="Show Tasks panel"
+              >
+                <TasksIcon />
+                <span>Tasks</span>
+              </button>
+            )}
+            {gitPanelCollapsed && (
+              <button
+                type="button"
+                className="bottom-action-btn"
+                onClick={toggleGitPanel}
+                title="Show Git panel"
+              >
+                <GitBranchIcon />
+                <span>Git</span>
+              </button>
+            )}
             <button
               type="button"
               className="bottom-action-btn"
-              onClick={toggleBuiltInTerminal}
-              title="Show Terminal panel"
+              onClick={() => void openActiveInVSCode()}
+              disabled={!activeSession}
+              title={
+                activeSession
+                  ? `Open ${activeSession.worktreePath} in VS Code`
+                  : 'Select a session to open in VS Code'
+              }
             >
-              <TerminalIcon />
-              <span>Terminal</span>
+              <VSCodeIcon />
+              <span>Open In VSCode</span>
             </button>
-          )}
-          {tasksPanelCollapsed && (
             <button
               type="button"
               className="bottom-action-btn"
-              onClick={toggleTasksPanel}
-              title="Show Tasks panel"
+              onClick={() => void openActiveInFileWindow()}
+              disabled={!activeSession}
+              title={
+                activeSession
+                  ? `Open ${activeSession.worktreePath} in File Window`
+                  : 'Select a session to open in File Window'
+              }
             >
-              <TasksIcon />
-              <span>Tasks</span>
+              <FileWindowIcon />
+              <span>Open In File Window</span>
             </button>
-          )}
-          {gitPanelCollapsed && (
-            <button
-              type="button"
-              className="bottom-action-btn"
-              onClick={toggleGitPanel}
-              title="Show Git panel"
-            >
-              <GitBranchIcon />
-              <span>Git</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="bottom-action-btn"
-            onClick={() => void openActiveInVSCode()}
-            disabled={!activeSession}
-            title={
-              activeSession
-                ? `Open ${activeSession.worktreePath} in VS Code`
-                : 'Select a session to open in VS Code'
-            }
-          >
-            <VSCodeIcon />
-            <span>Open In VSCode</span>
-          </button>
-          <button
-            type="button"
-            className="bottom-action-btn"
-            onClick={() => void openActiveInFileWindow()}
-            disabled={!activeSession}
-            title={
-              activeSession
-                ? `Open ${activeSession.worktreePath} in File Window`
-                : 'Select a session to open in File Window'
-            }
-          >
-            <FileWindowIcon />
-            <span>Open In File Window</span>
-          </button>
+          </div>
         </footer>
       </main>
 

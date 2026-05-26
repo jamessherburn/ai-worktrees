@@ -48,7 +48,8 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
       paste: (text: string) => {
         term.focus();
         // Write to the PTY so input lands at the shell cursor; echoed output appears in xterm.
-        window.api.pty.write(sessionId, text.replace(/\n/g, '\r'));
+        // Keep '\n' intact so Enter-like submissions work reliably.
+        window.api.pty.write(sessionId, text);
       },
       scrollToBottom: () => {
         const buffer = term.buffer.active;
