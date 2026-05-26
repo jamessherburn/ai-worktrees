@@ -1,23 +1,23 @@
 @import url('@xterm/xterm/css/xterm.css');
 
 :root {
-  /* Dark (default) */
-  --bg: #14101F;
-  --bg-elev: #1B1530;
-  --bg-elev-2: #221A3B;
-  --border: #2E2349;
-  --border-strong: #3D2E63;
-  --text: #ECE7F6;
-  --text-dim: #9B92B5;
-  --text-muted: #6B6286;
-  --accent: #7C5BD6;
-  --accent-strong: #8E6FE0;
+  /* Dark (default) — Cursor-inspired neutrals + blue accent */
+  --bg: #181818;
+  --bg-elev: #252526;
+  --bg-elev-2: #2D2D2D;
+  --border: #3C3C3C;
+  --border-strong: #4E4E4E;
+  --text: #CCCCCC;
+  --text-dim: #A0A0A0;
+  --text-muted: #6E6E6E;
+  --accent: #3794FF;
+  --accent-strong: #4BA3FF;
   --accent-on: #ffffff;
-  --danger: #ef6377;
-  --success: #4cd1a1;
-  --warning: #f0b86e;
-  --terminal-bg: #0E0A1A;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  --danger: #f14c4c;
+  --success: #3fb950;
+  --warning: #cca700;
+  --terminal-bg: #1E1E1E;
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
   font-size: 13px;
@@ -28,22 +28,22 @@
 }
 
 [data-theme='light'] {
-  --bg: #F7F5FB;
+  --bg: #F3F3F3;
   --bg-elev: #ffffff;
-  --bg-elev-2: #EFEAF7;
-  --border: #E2DBF1;
-  --border-strong: #CFC3E8;
-  --text: #1F1A2E;
-  --text-dim: #5C5375;
-  --text-muted: #877EA0;
-  --accent: #6E4FD3;
-  --accent-strong: #5B3CC2;
+  --bg-elev-2: #F0F0F0;
+  --border: #E5E5E5;
+  --border-strong: #CECECE;
+  --text: #333333;
+  --text-dim: #616161;
+  --text-muted: #8A8A8A;
+  --accent: #0066BF;
+  --accent-strong: #005AAD;
   --accent-on: #ffffff;
-  --danger: #d8455a;
-  --success: #2ab37e;
-  --warning: #c8893f;
-  --terminal-bg: #fafbfc;
-  --shadow: 0 24px 60px rgba(46, 35, 73, 0.16);
+  --danger: #c72e2e;
+  --success: #1f8a4c;
+  --warning: #9a6f00;
+  --terminal-bg: #FFFFFF;
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
   color-scheme: light;
 }
 
@@ -397,9 +397,9 @@ body.resizing-sidebar .sidebar-resize {
 }
 
 .session-agent-tag.agent-cursor {
-  color: #9F84EB;
-  background: color-mix(in srgb, #9F84EB 14%, transparent);
-  border-color: color-mix(in srgb, #9F84EB 32%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
 }
 
 .session-agent-tag.agent-gemini {
