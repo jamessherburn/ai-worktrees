@@ -3,6 +3,8 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
+import type { AgentId } from '@shared/agents';
+import { buildSessionPromptSubmitPayload } from '@shared/session-prompt-submit';
 
 export type TerminalApi = {
   paste: (text: string) => void;
@@ -12,6 +14,7 @@ export type TerminalApi = {
 
 type Props = {
   sessionId: string;
+  agentId: AgentId;
   visible: boolean;
   blurred: boolean;
   themeName: 'dark' | 'light';
@@ -19,7 +22,7 @@ type Props = {
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
 };
 
-export function TerminalView({ sessionId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
+export function TerminalView({ sessionId, agentId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -52,9 +55,7 @@ export function TerminalView({ sessionId, visible, blurred, themeName, onExit, o
       },
       submitPrompt: (text: string) => {
         term.focus();
-        const body = text.replace(/\r?\n$/, '');
-        // Route through xterm input (same path as typing) so agent prompt UIs receive Enter.
-        term.input(`${body}\r`);
+        window.api.pty.write(sessionId, buildSessionPromptSubmitPayload(agentId, text));
       },
       scrollToBottom: () => {
         const buffer = term.buffer.active;

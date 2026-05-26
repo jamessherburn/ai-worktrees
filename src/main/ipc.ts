@@ -1,5 +1,6 @@
 import { dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { exec, execFile } from 'node:child_process';
+import { resolve } from 'node:path';
 import type { AgentId } from '@shared/agents';
 import type { AgentSpendInfo } from '@shared/types';
 import type {
@@ -142,7 +143,9 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.RevealInFinder, async (_e, path: string) => {
-    shell.showItemInFolder(path);
+    const resolved = resolve(path);
+    const result = await shell.openPath(resolved);
+    if (result) throw new Error(result);
   });
 
   ipcMain.handle(IPC.OpenInITerm, async (_e, path: string) => {

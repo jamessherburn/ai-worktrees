@@ -19,7 +19,7 @@ import { useResolvedTheme } from './theme';
 
 const GIT_PANEL_COLLAPSED_KEY = 'git-panel-collapsed';
 const SIDEBAR_WIDTH_KEY = 'sidebar-width';
-const SIDEBAR_DEFAULT_WIDTH = 280;
+const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
 const MAIN_PANE_MIN_WIDTH = 80;
@@ -466,6 +466,7 @@ export function App() {
                 <div key={id} className={`terminal-slot${visible ? ' visible' : ''}`}>
                   <TerminalView
                     sessionId={id}
+                    agentId={session.agentId}
                     visible={visible}
                     blurred={modalOpen}
                     themeName={resolvedTheme}

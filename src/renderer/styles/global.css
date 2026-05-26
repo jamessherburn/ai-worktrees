@@ -176,6 +176,13 @@ body.resizing-sidebar .sidebar-resize {
   padding: 4px 12px 12px;
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.sidebar-actions-icons {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
 }
 
 .btn {
@@ -1360,36 +1367,6 @@ body.resizing-sidebar .sidebar-resize {
 .usage-error {
   color: var(--danger);
   font-size: 11px;
-}
-
-/* ------- CLAUDE.md edit button ------- */
-.sidebar-tool-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-  text-align: left;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  width: 100%;
-}
-
-.sidebar-tool-btn:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-}
-
-.sidebar-tool-btn svg {
-  flex-shrink: 0;
-  opacity: 0.8;
 }
 
 /* ------- Agent Data modal ------- */
