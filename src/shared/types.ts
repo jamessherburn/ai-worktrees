@@ -55,6 +55,8 @@ export type Settings = {
   tasks?: TasksConfig;
   /** Pre-built prompts shown in each session row (pasted into the terminal with Enter). */
   sessionPrompts?: SessionPromptPreset[];
+  /** When true, sidebar lists in-progress sessions by launch date instead of activity groups. */
+  orderSessionsByLaunchDate?: boolean;
 };
 
 export type RepoInfo = {

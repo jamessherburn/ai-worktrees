@@ -76,6 +76,9 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
   const [sessionPrompts, setSessionPrompts] = useState<SessionPromptPreset[]>(() =>
     resolveSessionPrompts(current.sessionPrompts),
   );
+  const [orderSessionsByLaunchDate, setOrderSessionsByLaunchDate] = useState(
+    current.orderSessionsByLaunchDate ?? false,
+  );
   const [tab, setTab] = useState<SettingsTab>('general');
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -92,7 +95,8 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
     setTheme(current.theme);
     setWizard(current.wizard);
     setTasks(normalizeTasksConfig(current.tasks ?? DEFAULT_TASKS_CONFIG));
-  }, [current.codeDir, current.theme, current.wizard, current.tasks]);
+    setOrderSessionsByLaunchDate(current.orderSessionsByLaunchDate ?? false);
+  }, [current.codeDir, current.theme, current.wizard, current.tasks, current.orderSessionsByLaunchDate]);
 
   useEffect(() => {
     const onResize = () => {
@@ -183,6 +187,7 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
         wizard: wizardParsed.value,
         tasks,
         sessionPrompts: resolveSessionPrompts(sessionPrompts),
+        orderSessionsByLaunchDate,
       });
       persistModalSize(size);
       onSaved(next);
@@ -271,6 +276,21 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="field">
+                <label className="checkbox" htmlFor={`${baseId}-order-by-launch-date`}>
+                  <input
+                    id={`${baseId}-order-by-launch-date`}
+                    type="checkbox"
+                    checked={orderSessionsByLaunchDate}
+                    onChange={(e) => setOrderSessionsByLaunchDate(e.target.checked)}
+                  />
+                  Order sessions by launch date
+                </label>
+                <p className="settings-field-hint">
+                  Keep in-progress sessions in the order they were started instead of grouping by
+                  working, idle, and stopped activity.
+                </p>
               </div>
             </div>
           )}

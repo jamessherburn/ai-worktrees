@@ -473,6 +473,7 @@ export function App() {
         width={sidebarWidth}
         minWidth={SIDEBAR_MIN_WIDTH}
         maxWidth={SIDEBAR_MAX_WIDTH}
+        orderSessionsByLaunchDate={settings.orderSessionsByLaunchDate ?? false}
         onResize={onResizeSidebar}
         onResizeEnd={onResizeSidebarEnd}
         onSelect={openSession}

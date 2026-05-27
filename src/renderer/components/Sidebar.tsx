@@ -8,6 +8,7 @@ type Props = {
   width: number;
   minWidth: number;
   maxWidth: number;
+  orderSessionsByLaunchDate: boolean;
   onResize: (width: number) => void;
   onResizeEnd: (width: number) => void;
   onSelect: (id: string) => void;
@@ -19,12 +20,18 @@ type Props = {
 };
 
 type ActivityGroup = 'working' | 'waiting-on-review' | 'idle' | 'stopped';
+type LaunchGroup = 'in-progress' | 'stopped';
 
 const GROUP_ORDER: ActivityGroup[] = ['working', 'waiting-on-review', 'idle', 'stopped'];
+const LAUNCH_GROUP_ORDER: LaunchGroup[] = ['in-progress', 'stopped'];
 const GROUP_LABELS: Record<ActivityGroup, string> = {
   working: 'Working',
   'waiting-on-review': 'Waiting On Review',
   idle: 'Idle',
+  stopped: 'Stopped',
+};
+const LAUNCH_GROUP_LABELS: Record<LaunchGroup, string> = {
+  'in-progress': 'In Progress',
   stopped: 'Stopped',
 };
 
@@ -40,6 +47,7 @@ export function Sidebar({
   width,
   minWidth,
   maxWidth,
+  orderSessionsByLaunchDate,
   onResize,
   onResizeEnd,
   onSelect,
@@ -49,7 +57,8 @@ export function Sidebar({
   onOpenAgentData,
   onSetWaitingOnReview,
 }: Props) {
-  const groups = groupByActivity(sessions);
+  const activityGroups = groupByActivity(sessions);
+  const launchGroups = groupByLaunchOrder(sessions);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
   const onResizeMouseDown = (e: React.MouseEvent) => {
@@ -128,9 +137,33 @@ export function Sidebar({
           <div className="repo-label" style={{ textAlign: 'center', marginTop: 24 }}>
             No sessions yet
           </div>
+        ) : orderSessionsByLaunchDate ? (
+          LAUNCH_GROUP_ORDER.map((group) => {
+            const items = launchGroups[group];
+            if (items.length === 0) return null;
+            return (
+              <div key={group} className="activity-group">
+                <div className="activity-label">{LAUNCH_GROUP_LABELS[group]}</div>
+                {items.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    session={s}
+                    active={s.id === activeId}
+                    onSelect={onSelect}
+                    onDelete={onDelete}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMenu({ session: s, x: e.clientX, y: e.clientY });
+                    }}
+                  />
+                ))}
+              </div>
+            );
+          })
         ) : (
           GROUP_ORDER.map((group) => {
-            const repos = groups[group];
+            const repos = activityGroups[group];
             if (repos.length === 0) return null;
             return (
               <div key={group} className="activity-group">
@@ -139,56 +172,18 @@ export function Sidebar({
                   <div key={repo} className="repo-group">
                     <div className="repo-label">{repo}</div>
                     {items.map((s) => (
-                      <div
+                      <SessionRow
                         key={s.id}
-                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}`}
-                        onClick={() => onSelect(s.id)}
+                        session={s}
+                        active={s.id === activeId}
+                        onSelect={onSelect}
+                        onDelete={onDelete}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           setMenu({ session: s, x: e.clientX, y: e.clientY });
                         }}
-                      >
-                        <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
-                        <div className="session-name" title={s.name}>
-                          <span className="session-name-text">
-                            <span className="session-name-primary">{s.name}</span>
-                            {s.global ? (
-                              <span className="session-global-label" title="Global session">
-                                Global
-                              </span>
-                            ) : null}
-                            {s.wizardBriefMarkdown ? (
-                              <span className="session-wizard-label" title="Wizard session">
-                                Wizard Session
-                              </span>
-                            ) : null}
-                          </span>
-                        <div className="session-branch">
-                          <span
-                            className="session-agent-tag-wrap"
-                            title={`Agent: ${getAgent(s.agentId).name}`}
-                          >
-                            <span className={`session-agent-tag agent-${s.agentId}`}>
-                              {getAgent(s.agentId).name}
-                            </span>
-                          </span>
-                          {!s.global && <span className="session-branch-name">{s.branchName}</span>}
-                        </div>
-                        </div>
-                        <button
-                          className="session-delete"
-                          type="button"
-                          title="Delete session"
-                          aria-label="Delete session"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(s);
-                          }}
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
+                      />
                     ))}
                   </div>
                 ))}
@@ -209,6 +204,63 @@ export function Sidebar({
         />
       )}
     </aside>
+  );
+}
+
+function SessionRow({
+  session: s,
+  active,
+  onSelect,
+  onDelete,
+  onContextMenu,
+}: {
+  session: SessionWithStatus;
+  active: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (session: SessionWithStatus) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className={`session-row${active ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}`}
+      onClick={() => onSelect(s.id)}
+      onContextMenu={onContextMenu}
+    >
+      <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
+      <div className="session-name" title={s.name}>
+        <span className="session-name-text">
+          <span className="session-name-primary">{s.name}</span>
+          {s.global ? (
+            <span className="session-global-label" title="Global session">
+              Global
+            </span>
+          ) : null}
+          {s.wizardBriefMarkdown ? (
+            <span className="session-wizard-label" title="Wizard session">
+              Wizard Session
+            </span>
+          ) : null}
+        </span>
+        <div className="session-branch">
+          <span className="session-agent-tag-wrap" title={`Agent: ${getAgent(s.agentId).name}`}>
+            <span className={`session-agent-tag agent-${s.agentId}`}>{getAgent(s.agentId).name}</span>
+          </span>
+          {!s.global && <span className="session-branch-name">{s.branchName}</span>}
+        </div>
+      </div>
+      <button
+        className="session-delete"
+        type="button"
+        title="Delete session"
+        aria-label="Delete session"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(s);
+        }}
+      >
+        <TrashIcon />
+      </button>
+    </div>
   );
 }
 
@@ -265,6 +317,31 @@ function activityGroupFor(s: SessionWithStatus): ActivityGroup {
   if (s.waitingOnReview) return 'waiting-on-review';
   if (s.status !== 'running') return 'stopped';
   return s.activity === 'working' ? 'working' : 'idle';
+}
+
+function isInProgressSession(s: SessionWithStatus): boolean {
+  if (s.status === 'running') return true;
+  return s.status === 'stopped' && s.lastStartedAt === null;
+}
+
+function launchSortKey(s: SessionWithStatus): string {
+  return s.lastStartedAt ?? s.createdAt;
+}
+
+function groupByLaunchOrder(sessions: SessionWithStatus[]): Record<LaunchGroup, SessionWithStatus[]> {
+  const buckets: Record<LaunchGroup, SessionWithStatus[]> = {
+    'in-progress': [],
+    stopped: [],
+  };
+  for (const s of sessions) {
+    buckets[isInProgressSession(s) ? 'in-progress' : 'stopped'].push(s);
+  }
+  const sortByLaunch = (items: SessionWithStatus[]) =>
+    [...items].sort((a, b) => launchSortKey(a).localeCompare(launchSortKey(b)));
+  return {
+    'in-progress': sortByLaunch(buckets['in-progress']),
+    stopped: sortByLaunch(buckets.stopped),
+  };
 }
 
 function groupByActivity(sessions: SessionWithStatus[]): Record<ActivityGroup, [string, SessionWithStatus[]][]> {
