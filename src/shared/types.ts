@@ -43,9 +43,17 @@ export type TasksConfig = {
   whatDidIDoSectionId: string;
 };
 
+/** Leaf prompt nested under a parent; cannot have further children. */
+export type SessionPromptChild = {
+  title: string;
+  text: string;
+};
+
 export type SessionPromptPreset = {
   title: string;
   text: string;
+  /** Optional child prompts (max one level; children cannot nest). */
+  children?: SessionPromptChild[];
 };
 
 export type Settings = {

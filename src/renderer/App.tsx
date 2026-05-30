@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
 import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
 import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
@@ -11,7 +11,7 @@ import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
 import { GitPanel } from './components/GitPanel';
-import { SessionPromptBar } from './components/SessionPromptBar';
+import { SessionPromptDock } from './components/SessionPromptDock';
 import { TasksPanel } from './components/TasksPanel';
 import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
 import { BottomDock, type BottomDockPanelSpec } from './components/BottomDock';
@@ -126,13 +126,12 @@ export function App() {
   }, [activeId]);
 
   const toggleTasksPanel = useCallback(() => {
-    if (!activeId) return;
     setTasksPanelCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(TASKS_PANEL_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, [activeId]);
+  }, []);
 
   const toggleBuiltInTerminal = useCallback(() => {
     if (!activeId) return;
@@ -364,7 +363,7 @@ export function App() {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
-  const showTasksPanel = activeSession !== null && !tasksPanelCollapsed;
+  const showTasksPanel = !tasksPanelCollapsed;
   const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
   const showGitPanel = activeSession !== null && !gitPanelCollapsed;
   const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
@@ -491,9 +490,35 @@ export function App() {
 
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader session={activeSession} onPasteWizardBrief={pasteWizardBrief} />
+          <PaneHeader session={activeSession} onPasteWizardBrief={pasteWizardBrief}>
+            <PaneToolbar
+              activeSession={activeSession}
+              builtInTerminalCollapsed={builtInTerminalCollapsed}
+              tasksPanelCollapsed={tasksPanelCollapsed}
+              gitPanelCollapsed={gitPanelCollapsed}
+              onToggleBuiltInTerminal={toggleBuiltInTerminal}
+              onToggleTasksPanel={toggleTasksPanel}
+              onToggleGitPanel={toggleGitPanel}
+              onScrollToBottom={scrollActiveTerminalToBottom}
+              onOpenInVSCode={() => void openActiveInVSCode()}
+              onOpenInFileWindow={() => void openActiveInFileWindow()}
+            />
+          </PaneHeader>
         ) : (
-          <EmptyHeader />
+          <EmptyHeader>
+            <PaneToolbar
+              activeSession={null}
+              builtInTerminalCollapsed={builtInTerminalCollapsed}
+              tasksPanelCollapsed={tasksPanelCollapsed}
+              gitPanelCollapsed={gitPanelCollapsed}
+              onToggleBuiltInTerminal={toggleBuiltInTerminal}
+              onToggleTasksPanel={toggleTasksPanel}
+              onToggleGitPanel={toggleGitPanel}
+              onScrollToBottom={scrollActiveTerminalToBottom}
+              onOpenInVSCode={() => void openActiveInVSCode()}
+              onOpenInFileWindow={() => void openActiveInFileWindow()}
+            />
+          </EmptyHeader>
         )}
         <div className="main-pane-body">
           <div className={`terminal-stack${modalOpen ? ' inert' : ''}`}>
@@ -530,91 +555,15 @@ export function App() {
             />
           )}
         </div>
-        <footer className="bottom-action-bar" aria-label="Panel shortcuts">
-          <div className="bottom-action-bar-left">
-            {sessionPrompts.length > 0 && (
-              <SessionPromptBar
-                prompts={sessionPrompts}
-                disabled={!activeSession}
-                onRun={runSessionPrompt}
-                onScrollToBottom={scrollActiveTerminalToBottom}
-              />
-            )}
-          </div>
-
-          <div className="bottom-action-bar-right">
-            {builtInTerminalCollapsed && (
-              <button
-                type="button"
-                className="bottom-action-btn"
-                onClick={toggleBuiltInTerminal}
-                disabled={!activeSession}
-                title={
-                  activeSession
-                    ? 'Show Terminal panel'
-                    : 'Select a session to open the Terminal panel'
-                }
-              >
-                <TerminalIcon />
-                <span>Terminal</span>
-              </button>
-            )}
-            {tasksPanelCollapsed && (
-              <button
-                type="button"
-                className="bottom-action-btn"
-                onClick={toggleTasksPanel}
-                disabled={!activeSession}
-                title={
-                  activeSession ? 'Show Tasks panel' : 'Select a session to open the Tasks panel'
-                }
-              >
-                <TasksIcon />
-                <span>Tasks</span>
-              </button>
-            )}
-            {gitPanelCollapsed && (
-              <button
-                type="button"
-                className="bottom-action-btn"
-                onClick={toggleGitPanel}
-                disabled={!activeSession}
-                title={activeSession ? 'Show Git panel' : 'Select a session to open the Git panel'}
-              >
-                <GitBranchIcon />
-                <span>Git</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="bottom-action-btn"
-              onClick={() => void openActiveInVSCode()}
+        {sessionPrompts.length > 0 && (
+          <footer className="bottom-action-bar" aria-label="Quick prompts">
+            <SessionPromptDock
+              prompts={sessionPrompts}
               disabled={!activeSession}
-              title={
-                activeSession
-                  ? `Open ${activeSession.worktreePath} in VS Code`
-                  : 'Select a session to open in VS Code'
-              }
-            >
-              <VSCodeIcon />
-              <span>Open In VSCode</span>
-            </button>
-            <button
-              type="button"
-              className="bottom-action-btn"
-              onClick={() => void openActiveInFileWindow()}
-              disabled={!activeSession}
-              title={
-                activeSession
-                  ? `Open ${activeSession.worktreePath} in File Window`
-                  : 'Select a session to open in File Window'
-              }
-            >
-              <FileWindowIcon />
-              <span>Open In File Window</span>
-            </button>
-          </div>
-        </footer>
+              onRun={runSessionPrompt}
+            />
+          </footer>
+        )}
       </main>
 
       {showNew && (
@@ -712,12 +661,119 @@ function VSCodeMissingModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+type PaneToolbarProps = {
+  activeSession: SessionWithStatus | null;
+  builtInTerminalCollapsed: boolean;
+  tasksPanelCollapsed: boolean;
+  gitPanelCollapsed: boolean;
+  onToggleBuiltInTerminal: () => void;
+  onToggleTasksPanel: () => void;
+  onToggleGitPanel: () => void;
+  onScrollToBottom: () => void;
+  onOpenInVSCode: () => void;
+  onOpenInFileWindow: () => void;
+};
+
+function PaneToolbar({
+  activeSession,
+  builtInTerminalCollapsed,
+  tasksPanelCollapsed,
+  gitPanelCollapsed,
+  onToggleBuiltInTerminal,
+  onToggleTasksPanel,
+  onToggleGitPanel,
+  onScrollToBottom,
+  onOpenInVSCode,
+  onOpenInFileWindow,
+}: PaneToolbarProps) {
+  const hasSession = activeSession !== null;
+
+  const terminalOpen = hasSession && !builtInTerminalCollapsed;
+  const tasksOpen = !tasksPanelCollapsed;
+  const gitOpen = hasSession && !gitPanelCollapsed;
+
+  return (
+    <div className="pane-toolbar" role="toolbar" aria-label="Session tools">
+      <button
+        type="button"
+        className={`icon-btn pane-toolbar-btn${terminalOpen ? ' pane-toolbar-btn--active' : ''}`}
+        onClick={onToggleBuiltInTerminal}
+        disabled={!hasSession}
+        title={
+          hasSession
+            ? terminalOpen
+              ? 'Hide Terminal'
+              : 'Terminal'
+            : 'Select a session for Terminal'
+        }
+        aria-label={hasSession ? 'Terminal' : 'Terminal (select a session)'}
+        aria-pressed={terminalOpen}
+      >
+        <TerminalIcon />
+      </button>
+      <button
+        type="button"
+        className={`icon-btn pane-toolbar-btn${tasksOpen ? ' pane-toolbar-btn--active' : ''}`}
+        onClick={onToggleTasksPanel}
+        title={tasksOpen ? 'Hide Tasks' : 'Tasks'}
+        aria-label="Tasks"
+        aria-pressed={tasksOpen}
+      >
+        <TasksIcon />
+      </button>
+      <button
+        type="button"
+        className={`icon-btn pane-toolbar-btn${gitOpen ? ' pane-toolbar-btn--active' : ''}`}
+        onClick={onToggleGitPanel}
+        disabled={!hasSession}
+        title={hasSession ? (gitOpen ? 'Hide Git' : 'Git') : 'Select a session for Git'}
+        aria-label={hasSession ? 'Git' : 'Git (select a session)'}
+        aria-pressed={gitOpen}
+      >
+        <GitBranchIcon />
+      </button>
+      <button
+        type="button"
+        className="icon-btn pane-toolbar-btn"
+        onClick={onOpenInVSCode}
+        disabled={!hasSession}
+        title={hasSession ? 'Open In VSCode' : 'Select a session to open in VS Code'}
+        aria-label={hasSession ? 'Open In VSCode' : 'Open In VSCode (select a session)'}
+      >
+        <VSCodeIcon />
+      </button>
+      <button
+        type="button"
+        className="icon-btn pane-toolbar-btn"
+        onClick={onOpenInFileWindow}
+        disabled={!hasSession}
+        title={hasSession ? 'Open In File Window' : 'Select a session to open in File Window'}
+        aria-label={hasSession ? 'Open In File Window' : 'Open In File Window (select a session)'}
+      >
+        <FileWindowIcon />
+      </button>
+      <button
+        type="button"
+        className="icon-btn pane-toolbar-btn"
+        onClick={onScrollToBottom}
+        disabled={!hasSession}
+        title={hasSession ? 'Scroll to bottom' : 'Select a session to scroll the terminal'}
+        aria-label={hasSession ? 'Scroll to bottom' : 'Scroll to bottom (select a session)'}
+      >
+        <ChevronDownIcon />
+      </button>
+    </div>
+  );
+}
+
 function PaneHeader({
   session,
   onPasteWizardBrief,
+  children,
 }: {
   session: SessionWithStatus;
   onPasteWizardBrief: () => void;
+  children: ReactNode;
 }) {
   return (
     <header className="pane-header">
@@ -741,10 +797,10 @@ function PaneHeader({
             : `${session.repoName} · ${session.branchName} · ${session.worktreePath}`}
         </div>
       </div>
-      <div className="pane-actions">
+      <div className="pane-header-trailing">
         {session.wizardBriefMarkdown && (
           <button
-            className="btn btn-ghost"
+            className="btn btn-ghost pane-wizard-cmd-btn"
             type="button"
             onClick={onPasteWizardBrief}
             title="Paste the wizard-generated briefing into the agent terminal at the cursor"
@@ -752,8 +808,9 @@ function PaneHeader({
             Allow Wizard Command
           </button>
         )}
+        {children}
+        <Logo />
       </div>
-      <Logo />
     </header>
   );
 }
@@ -769,14 +826,17 @@ function GitBranchIcon() {
   );
 }
 
-function EmptyHeader() {
+function EmptyHeader({ children }: { children: ReactNode }) {
   return (
     <header className="pane-header">
       <div className="header-info">
         <div className="pane-title">AI Worktrees</div>
         <div className="pane-subtitle">Manage AI coding-agent sessions across your repos.</div>
       </div>
-      <Logo />
+      <div className="pane-header-trailing">
+        {children}
+        <Logo />
+      </div>
     </header>
   );
 }
@@ -822,7 +882,17 @@ function FileWindowIcon() {
 
 function ChevronDownIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
