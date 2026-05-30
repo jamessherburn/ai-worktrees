@@ -39,7 +39,8 @@ const LEGACY_THREE_PROMPT_DEFAULTS: SessionPromptPreset[] = [
   },
 ];
 
-export const DEFAULT_SESSION_PROMPTS: SessionPromptPreset[] = [
+/** Built-in defaults shipped before the grouped quick-response / git prompts. */
+const LEGACY_SIX_PROMPT_DEFAULTS: SessionPromptPreset[] = [
   {
     title: 'Session recap',
     text: 'Summarize what we have done in this session, what is still open, and any decisions or blockers worth remembering.',
@@ -66,6 +67,35 @@ export const DEFAULT_SESSION_PROMPTS: SessionPromptPreset[] = [
   },
 ];
 
+export const DEFAULT_SESSION_PROMPTS: SessionPromptPreset[] = [
+  {
+    title: 'Quick Responses',
+    text: '',
+    children: [
+      { title: 'Yes', text: 'Yes' },
+      { title: 'No', text: 'No' },
+      {
+        title: 'Simplify Response',
+        text: 'Please simplify your last response.  I struggled to understand it.',
+      },
+    ],
+  },
+  {
+    title: 'Git',
+    text: '',
+    children: [
+      {
+        title: 'Create Pull Request',
+        text: 'Please can you create a pull request for the changes made here.',
+      },
+      {
+        title: 'Stage Changes',
+        text: 'Please can you merge this branch into the staging branch.  Be sure to checkout the latest staging branch first before attempting to merge.  Delete the current local staging branch and re-pull from origin if staging already exists locally and the branch is diverged.',
+      },
+    ],
+  },
+];
+
 export function cloneDefaultSessionPrompts(): SessionPromptPreset[] {
   return DEFAULT_SESSION_PROMPTS.map((p) => ({
     title: p.title,
@@ -87,7 +117,8 @@ function matchesPresetList(
 function isLegacyBuiltInDefaults(prompts: SessionPromptPreset[]): boolean {
   return (
     matchesPresetList(prompts, LEGACY_TWO_PROMPT_DEFAULTS) ||
-    matchesPresetList(prompts, LEGACY_THREE_PROMPT_DEFAULTS)
+    matchesPresetList(prompts, LEGACY_THREE_PROMPT_DEFAULTS) ||
+    matchesPresetList(prompts, LEGACY_SIX_PROMPT_DEFAULTS)
   );
 }
 
