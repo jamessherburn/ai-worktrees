@@ -1,4 +1,22 @@
-import type { SessionPromptPreset } from './types';
+import type { SessionPromptChild, SessionPromptPreset } from './types';
+
+function normalizeChild(raw: SessionPromptChild): SessionPromptChild | null {
+  const title = raw.title?.trim();
+  const text = raw.text?.trim();
+  if (!title || !text) return null;
+  return { title, text };
+}
+
+function normalizePreset(raw: SessionPromptPreset): SessionPromptPreset | null {
+  const title = raw.title?.trim();
+  const text = raw.text?.trim() ?? '';
+  const children = (raw.children ?? [])
+    .map(normalizeChild)
+    .filter((c): c is SessionPromptChild => c !== null);
+  if (!title) return null;
+  if (!text && children.length === 0) return null;
+  return children.length > 0 ? { title, text, children } : { title, text };
+}
 
 /** Built-in defaults shipped before the curated six-prompt set. */
 const LEGACY_TWO_PROMPT_DEFAULTS: SessionPromptPreset[] = [
@@ -49,7 +67,11 @@ export const DEFAULT_SESSION_PROMPTS: SessionPromptPreset[] = [
 ];
 
 export function cloneDefaultSessionPrompts(): SessionPromptPreset[] {
-  return DEFAULT_SESSION_PROMPTS.map((p) => ({ title: p.title, text: p.text }));
+  return DEFAULT_SESSION_PROMPTS.map((p) => ({
+    title: p.title,
+    text: p.text,
+    ...(p.children?.length ? { children: p.children.map((c) => ({ ...c })) } : {}),
+  }));
 }
 
 function matchesPresetList(
@@ -77,8 +99,8 @@ export function resolveSessionPrompts(
   if (!raw?.length) return cloneDefaultSessionPrompts();
 
   const out = raw
-    .filter((p) => p.title?.trim() && p.text?.trim())
-    .map((p) => ({ title: p.title.trim(), text: p.text.trim() }));
+    .map((p) => normalizePreset(p))
+    .filter((p): p is SessionPromptPreset => p !== null);
 
   if (out.length === 0) return cloneDefaultSessionPrompts();
 
