@@ -35,7 +35,7 @@ export function SessionPromptsSettingsEditor({ value, onChange }: Props) {
       </p>
       <ul className="session-prompts-settings-list">
         {value.map((preset, index) => (
-          <li key={`${preset.title}-${index}`} className="session-prompts-settings-row">
+          <li key={index} className="session-prompts-settings-row">
             <input
               className="session-prompts-settings-title"
               value={preset.title}
