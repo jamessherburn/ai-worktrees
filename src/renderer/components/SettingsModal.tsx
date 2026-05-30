@@ -64,9 +64,20 @@ type Props = {
   current: Settings;
   onClose: () => void;
   onSaved: (settings: Settings) => void;
+  onSettingsChange?: (settings: Settings) => void;
 };
 
-export function SettingsModal({ current, onClose, onSaved }: Props) {
+function applySettingsToForm(settings: Settings) {
+  return {
+    codeDir: settings.codeDir,
+    theme: settings.theme,
+    wizard: settings.wizard,
+    tasks: normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
+    sessionPrompts: resolveSessionPrompts(settings.sessionPrompts),
+  };
+}
+
+export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: Props) {
   const [codeDir, setCodeDir] = useState(current.codeDir);
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
   const [wizard, setWizard] = useState<WizardConfig>(current.wizard);
@@ -79,6 +90,8 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
   const [tab, setTab] = useState<SettingsTab>('general');
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [transferMessage, setTransferMessage] = useState<string | null>(null);
+  const [transferBusy, setTransferBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState<ModalSize>(() => loadModalSize());
   const [sizeBeforeExpand, setSizeBeforeExpand] = useState<ModalSize | null>(null);
@@ -105,6 +118,59 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
   const pick = async () => {
     const next = await window.api.pickDirectory(codeDir);
     if (next) setCodeDir(next);
+  };
+
+  const applyImportedSettings = (next: Settings) => {
+    const form = applySettingsToForm(next);
+    setCodeDir(form.codeDir);
+    setTheme(form.theme);
+    setWizard(form.wizard);
+    setTasks(form.tasks);
+    setSessionPrompts(form.sessionPrompts);
+    initialSectionIdsRef.current = new Set(form.tasks.sections.map((s) => s.id));
+    onSettingsChange?.(next);
+  };
+
+  const exportSettings = async () => {
+    setTransferBusy(true);
+    setTransferMessage(null);
+    setSaveError(null);
+    try {
+      const result = await window.api.exportSettings();
+      if (!result.ok) {
+        if ('error' in result) setTransferMessage(result.error);
+        return;
+      }
+      setTransferMessage(`Settings exported to ${result.path}`);
+    } catch (err) {
+      setTransferMessage((err as Error).message);
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
+  const importSettings = async () => {
+    const confirmed = window.confirm(
+      'Replace all settings with the imported file? Unsaved changes in this dialog will be lost.',
+    );
+    if (!confirmed) return;
+
+    setTransferBusy(true);
+    setTransferMessage(null);
+    setSaveError(null);
+    try {
+      const result = await window.api.importSettings();
+      if (!result.ok) {
+        if ('error' in result) setTransferMessage(result.error);
+        return;
+      }
+      applyImportedSettings(result.settings);
+      setTransferMessage('Settings imported successfully.');
+    } catch (err) {
+      setTransferMessage((err as Error).message);
+    } finally {
+      setTransferBusy(false);
+    }
   };
 
   const toggleExpanded = () => {
@@ -270,6 +336,45 @@ export function SettingsModal({ current, onClose, onSaved }: Props) {
                       {opt[0].toUpperCase() + opt.slice(1)}
                     </button>
                   ))}
+                </div>
+              </div>
+              <div className="settings-section">
+                <h3 className="settings-section-title">Backup</h3>
+                <div className="settings-card">
+                  <p className="settings-card-text">
+                    Export all settings as JSON, or import a file from another install. Sessions and
+                    task cards are not included.
+                  </p>
+                  <div className="settings-transfer-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={exportSettings}
+                      disabled={busy || transferBusy}
+                    >
+                      Export settings…
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={importSettings}
+                      disabled={busy || transferBusy}
+                    >
+                      Import settings…
+                    </button>
+                  </div>
+                  {transferMessage && (
+                    <p
+                      className={`settings-transfer-message${
+                        transferMessage.endsWith('successfully.') ||
+                        transferMessage.startsWith('Settings exported')
+                          ? ' settings-transfer-message-ok'
+                          : ''
+                      }`}
+                    >
+                      {transferMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

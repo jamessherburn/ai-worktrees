@@ -18,6 +18,7 @@ import type {
   SessionWithStatus,
   Settings,
 } from '@shared/types';
+import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import type { AgentAvailability, AgentId } from '@shared/agents';
 
 type PtyDataPayload = { sessionId: string; data: string };
@@ -43,6 +44,8 @@ const api = {
   getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.GetSettings),
   updateSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke(IPC.UpdateSettings, patch),
+  exportSettings: (): Promise<SettingsExportResult> => ipcRenderer.invoke(IPC.ExportSettings),
+  importSettings: (): Promise<SettingsImportResult> => ipcRenderer.invoke(IPC.ImportSettings),
   pickDirectory: (defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke(IPC.PickDirectory, defaultPath),
   revealInFinder: (path: string) => ipcRenderer.invoke(IPC.RevealInFinder, path),

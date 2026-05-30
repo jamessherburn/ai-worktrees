@@ -19,6 +19,8 @@ import type {
   Settings,
   SessionWithStatus,
 } from '@shared/types';
+import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
+import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
 import { ensureGitHubCli } from './gh-cli.js';
 import { listRepos } from './repos.js';
@@ -44,7 +46,7 @@ import {
   listSessions,
   setSessionWaitingOnReview,
 } from './sessions.js';
-import { getSettings, updateSettings } from './settings.js';
+import { getSettings, replaceSettings, updateSettings } from './settings.js';
 import {
   getActivityState,
   getBacklog,
@@ -131,6 +133,45 @@ export function registerIpc(): void {
     const next = await updateSettings(patch);
     if (patch.theme) nativeTheme.themeSource = patch.theme;
     return next;
+  });
+
+  ipcMain.handle(IPC.ExportSettings, async (): Promise<SettingsExportResult> => {
+    const settings = await getSettings();
+    const result = await dialog.showSaveDialog({
+      title: 'Export settings',
+      defaultPath: 'ai-worktrees-settings.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { ok: false, cancelled: true };
+    }
+    try {
+      await fs.writeFile(result.filePath, settingsExportToJson(settings), 'utf-8');
+      return { ok: true, path: result.filePath };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.ImportSettings, async (): Promise<SettingsImportResult> => {
+    const result = await dialog.showOpenDialog({
+      title: 'Import settings',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, cancelled: true };
+    }
+    try {
+      const raw = await fs.readFile(result.filePaths[0], 'utf-8');
+      const parsed = parseSettingsImportJson(raw);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      const next = await replaceSettings(parsed.value);
+      nativeTheme.themeSource = next.theme;
+      return { ok: true, settings: next };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
   });
 
   ipcMain.handle(IPC.PickDirectory, async (_e, defaultPath?: string): Promise<string | null> => {
