@@ -650,6 +650,7 @@ export function App() {
         <SettingsModal
           current={settings}
           onClose={() => setShowSettings(false)}
+          onSettingsChange={setSettings}
           onSaved={(next) => {
             setSettings(next);
             setShowSettings(false);

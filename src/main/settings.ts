@@ -39,3 +39,9 @@ export async function updateSettings(patch: Partial<Settings>): Promise<Settings
     return normalizeSettings(next);
   });
 }
+
+export async function replaceSettings(settings: Settings): Promise<Settings> {
+  const normalized = normalizeSettings(settings as StoredSettings);
+  await store.write(normalized);
+  return normalized;
+}

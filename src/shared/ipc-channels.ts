@@ -5,6 +5,8 @@ export const IPC = {
   ListRepos: 'repos:list',
   GetSettings: 'settings:get',
   UpdateSettings: 'settings:update',
+  ExportSettings: 'settings:export',
+  ImportSettings: 'settings:import',
   PickDirectory: 'dialog:pickDirectory',
   RevealInFinder: 'shell:revealInFinder',
   OpenInITerm: 'shell:openInITerm',

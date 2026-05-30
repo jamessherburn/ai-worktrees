@@ -1762,6 +1762,24 @@ body.resizing-sidebar .sidebar-resize {
   line-height: 1.5;
 }
 
+.settings-transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-transfer-message {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.settings-transfer-message-ok {
+  color: var(--success, #3d9a5f);
+}
+
 .settings-modal-footer {
   flex-shrink: 0;
   padding: 14px 28px 18px;
