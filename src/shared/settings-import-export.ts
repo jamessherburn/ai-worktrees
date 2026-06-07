@@ -1,4 +1,5 @@
-import type { SessionPromptPreset, Settings, TasksConfig, ThemePreference } from './types';
+import type { SessionLabel, SessionPromptPreset, Settings, TasksConfig, ThemePreference } from './types';
+import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from './session-labels';
 import { resolveSessionPrompts } from './session-prompts';
 import { normalizeTasksConfig } from './tasks';
 import { normalizeWizardConfig } from './wizard';
@@ -75,6 +76,9 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
       sessionPrompts: resolveSessionPrompts(
         candidate.sessionPrompts as SessionPromptPreset[] | undefined,
         legacyRecapPrompt,
+      ),
+      sessionLabels: normalizeSessionLabels(
+        (candidate.sessionLabels as SessionLabel[] | undefined) ?? DEFAULT_SESSION_LABELS,
       ),
     },
   };

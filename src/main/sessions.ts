@@ -6,8 +6,11 @@ import type {
   CreateSessionResult,
   DeleteSessionInput,
   Session,
+  SessionQuickNote,
 } from '@shared/types';
+import { quickNotesForSession } from '@shared/session-quick-notes';
 import { DEFAULT_AGENT_ID } from '@shared/agents';
+import { normalizeSession, normalizeSessionLabelIds } from '@shared/session-labels';
 import {
   addWorktree,
   deleteBranch,
@@ -25,12 +28,22 @@ const store = new JsonStore<SessionsFile>('sessions.json', { sessions: [] });
 
 const NAME_PATTERN = /^[a-zA-Z0-9._/-]+$/;
 
-export async function listSessions(): Promise<Session[]> {
-  const data = await store.read();
-  return data.sessions.map((s) => ({
+function normalizeSessionRecord(s: Session): Session {
+  const base = normalizeSession({
     ...s,
     agentId: s.agentId ?? DEFAULT_AGENT_ID,
-  }));
+  });
+  const quickNotes = quickNotesForSession(base);
+  const { notes: _legacy, ...rest } = base;
+  return {
+    ...rest,
+    quickNotes: quickNotes.length ? quickNotes : undefined,
+  };
+}
+
+export async function listSessions(): Promise<Session[]> {
+  const data = await store.read();
+  return data.sessions.map((s) => normalizeSessionRecord(s));
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -165,8 +178,70 @@ export async function markSessionStarted(id: string): Promise<void> {
 
 export async function setSessionWaitingOnReview(id: string, value: boolean): Promise<void> {
   await store.update((current) => ({
+    sessions: current.sessions.map((s) => {
+      if (s.id !== id) return s;
+      const normalized = normalizeSession({ ...s, agentId: s.agentId ?? DEFAULT_AGENT_ID });
+      let labelIds = normalizeSessionLabelIds(normalized.labelIds);
+      const waitingId = 'waiting-on-review';
+      if (value && !labelIds.includes(waitingId)) {
+        labelIds = [...labelIds, waitingId];
+      } else if (!value) {
+        labelIds = labelIds.filter((lid) => lid !== waitingId);
+      }
+      const { waitingOnReview: _legacy, ...rest } = normalized;
+      return { ...rest, labelIds: labelIds.length ? labelIds : undefined };
+    }),
+  }));
+}
+
+export async function setSessionMuted(id: string, value: boolean): Promise<void> {
+  await store.update((current) => ({
     sessions: current.sessions.map((s) =>
-      s.id === id ? { ...s, waitingOnReview: value } : s,
+      s.id === id ? { ...s, muted: value || undefined } : s,
+    ),
+  }));
+}
+
+export async function addSessionQuickNote(id: string, text: string): Promise<SessionQuickNote> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error('Note text is required.');
+  const note: SessionQuickNote = {
+    id: randomUUID(),
+    text: trimmed,
+    createdAt: new Date().toISOString(),
+  };
+  await store.update((current) => ({
+    sessions: current.sessions.map((s) => {
+      if (s.id !== id) return s;
+      const existing = quickNotesForSession(s);
+      const { notes: _legacy, ...rest } = s;
+      return { ...rest, quickNotes: [...existing, note] };
+    }),
+  }));
+  return note;
+}
+
+export async function removeSessionQuickNote(id: string, noteId: string): Promise<void> {
+  await store.update((current) => ({
+    sessions: current.sessions.map((s) => {
+      if (s.id !== id) return s;
+      const existing = quickNotesForSession(s).filter((n) => n.id !== noteId);
+      const { notes: _legacy, ...rest } = s;
+      return { ...rest, quickNotes: existing.length ? existing : undefined };
+    }),
+  }));
+}
+
+export async function setSessionLabels(id: string, labelIds: string[]): Promise<void> {
+  const normalized = normalizeSessionLabelIds(labelIds);
+  await store.update((current) => ({
+    sessions: current.sessions.map((s) =>
+      s.id === id
+        ? {
+            ...normalizeSession({ ...s, agentId: s.agentId ?? DEFAULT_AGENT_ID }),
+            labelIds: normalized.length ? normalized : undefined,
+          }
+        : s,
     ),
   }));
 }

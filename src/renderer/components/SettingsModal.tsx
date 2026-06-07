@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { Settings, SessionPromptPreset, TasksConfig, ThemePreference } from '@shared/types';
+import type { SessionLabel, Settings, SessionPromptPreset, TasksConfig, ThemePreference } from '@shared/types';
 import { resolveSessionPrompts } from '@shared/session-prompts';
+import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
+import { SessionLabelsEditor } from './SessionLabelsEditor';
 import type { WizardConfig } from '@shared/wizard';
 import { parseWizardConfigJson, wizardConfigToJson } from '@shared/wizard';
 import { SessionPromptsSettingsEditor } from './SessionPromptsSettingsEditor';
@@ -16,10 +18,11 @@ const MIN_WIDTH = 520;
 const MIN_HEIGHT = 360;
 const VIEWPORT_MARGIN = 24;
 
-type SettingsTab = 'general' | 'prompts' | 'wizard' | 'tasks';
+type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'labels', label: 'Labels' },
   { id: 'prompts', label: 'Quick Prompts' },
   { id: 'wizard', label: 'Wizard' },
   { id: 'tasks', label: 'Tasks' },
@@ -62,6 +65,7 @@ function persistModalSize(size: ModalSize) {
 
 type Props = {
   current: Settings;
+  initialTab?: SettingsTab;
   onClose: () => void;
   onSaved: (settings: Settings) => void;
   onSettingsChange?: (settings: Settings) => void;
@@ -74,10 +78,11 @@ function applySettingsToForm(settings: Settings) {
     wizard: settings.wizard,
     tasks: normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
     sessionPrompts: resolveSessionPrompts(settings.sessionPrompts),
+    sessionLabels: normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
   };
 }
 
-export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: Props) {
+export function SettingsModal({ current, initialTab, onClose, onSaved, onSettingsChange }: Props) {
   const [codeDir, setCodeDir] = useState(current.codeDir);
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
   const [wizard, setWizard] = useState<WizardConfig>(current.wizard);
@@ -87,7 +92,10 @@ export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: P
   const [sessionPrompts, setSessionPrompts] = useState<SessionPromptPreset[]>(() =>
     resolveSessionPrompts(current.sessionPrompts),
   );
-  const [tab, setTab] = useState<SettingsTab>('general');
+  const [sessionLabels, setSessionLabels] = useState<SessionLabel[]>(() =>
+    normalizeSessionLabels(current.sessionLabels ?? DEFAULT_SESSION_LABELS),
+  );
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'general');
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [transferMessage, setTransferMessage] = useState<string | null>(null);
@@ -127,6 +135,7 @@ export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: P
     setWizard(form.wizard);
     setTasks(form.tasks);
     setSessionPrompts(form.sessionPrompts);
+    setSessionLabels(form.sessionLabels);
     initialSectionIdsRef.current = new Set(form.tasks.sections.map((s) => s.id));
     onSettingsChange?.(next);
   };
@@ -249,6 +258,7 @@ export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: P
         wizard: wizardParsed.value,
         tasks,
         sessionPrompts: resolveSessionPrompts(sessionPrompts),
+        sessionLabels: normalizeSessionLabels(sessionLabels),
       });
       persistModalSize(size);
       onSaved(next);
@@ -342,8 +352,9 @@ export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: P
                 <h3 className="settings-section-title">Backup</h3>
                 <div className="settings-card">
                   <p className="settings-card-text">
-                    Export all settings as JSON, or import a file from another install. Sessions and
-                    task cards are not included.
+                    Export all settings as JSON, or import a file from another install. Includes labels,
+                    quick prompts, wizard, and tasks configuration. Sessions and task cards are not
+                    included.
                   </p>
                   <div className="settings-transfer-actions">
                     <button
@@ -377,6 +388,16 @@ export function SettingsModal({ current, onClose, onSaved, onSettingsChange }: P
                   )}
                 </div>
               </div>
+            </div>
+          )}
+          {tab === 'labels' && (
+            <div
+              role="tabpanel"
+              id={panelId('labels')}
+              aria-labelledby={`${baseId}-tab-labels`}
+              className="settings-modal-panel"
+            >
+              <SessionLabelsEditor labels={sessionLabels} onChange={setSessionLabels} />
             </div>
           )}
           {tab === 'prompts' && (

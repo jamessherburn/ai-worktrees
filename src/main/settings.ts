@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Settings } from '@shared/types';
 import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
+import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
 import { DEFAULT_WIZARD_CONFIG, normalizeWizardConfig } from '@shared/wizard';
 import { JsonStore } from './store.js';
 
@@ -12,6 +13,7 @@ const DEFAULTS: Settings = {
   wizard: DEFAULT_WIZARD_CONFIG,
   tasks: DEFAULT_TASKS_CONFIG,
   sessionPrompts: DEFAULT_SESSION_PROMPTS,
+  sessionLabels: DEFAULT_SESSION_LABELS,
 };
 
 const store = new JsonStore<Settings>('settings.json', DEFAULTS);
@@ -25,6 +27,7 @@ function normalizeSettings(s: StoredSettings): Settings {
     wizard: normalizeWizardConfig(s.wizard),
     tasks: normalizeTasksConfig(s.tasks),
     sessionPrompts: resolveSessionPrompts(s.sessionPrompts, s.recapPrompt),
+    sessionLabels: normalizeSessionLabels(s.sessionLabels),
   };
 }
 

@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/ipc-channels';
 import type {
+  GitHubMonitorRequest,
+  GitHubMonitorResult,
+  GitHubMonitorStatus,
+} from '@shared/github-monitor';
+import type {
   ActivityState,
   AgentSpendInfo,
   CreateSessionInput,
@@ -15,6 +20,7 @@ import type {
   GitStatusResult,
   OpenInVSCodeResult,
   RepoInfo,
+  SessionQuickNote,
   SessionWithStatus,
   Settings,
 } from '@shared/types';
@@ -29,6 +35,11 @@ type ShellPtyExitPayload = { sessionId: string; exitCode: number };
 
 const api = {
   ensureGitHubApi: (): Promise<GhSetupResult> => ipcRenderer.invoke(IPC.GhSetupEnsure),
+  githubMonitor: {
+    status: (): Promise<GitHubMonitorStatus> => ipcRenderer.invoke(IPC.GitHubMonitorStatus),
+    fetch: (request: GitHubMonitorRequest): Promise<GitHubMonitorResult> =>
+      ipcRenderer.invoke(IPC.GitHubMonitorFetch, request),
+  },
   onGitHubApiSetupProgress: (cb: (message: string) => void) => {
     const listener = (_: unknown, message: string) => cb(message);
     ipcRenderer.on(IPC.GhSetupProgress, listener);
@@ -37,6 +48,14 @@ const api = {
   listSessions: (): Promise<SessionWithStatus[]> => ipcRenderer.invoke(IPC.ListSessions),
   setWaitingOnReview: (sessionId: string, value: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.SessionsSetWaitingOnReview, { sessionId, value }),
+  setSessionLabels: (sessionId: string, labelIds: string[]): Promise<void> =>
+    ipcRenderer.invoke(IPC.SessionsSetLabels, { sessionId, labelIds }),
+  setSessionMuted: (sessionId: string, value: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC.SessionsSetMuted, { sessionId, value }),
+  addSessionQuickNote: (sessionId: string, text: string): Promise<SessionQuickNote> =>
+    ipcRenderer.invoke(IPC.SessionsAddQuickNote, { sessionId, text }),
+  removeSessionQuickNote: (sessionId: string, noteId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.SessionsRemoveQuickNote, { sessionId, noteId }),
   createSession: (input: CreateSessionInput): Promise<CreateSessionResult> =>
     ipcRenderer.invoke(IPC.CreateSession, input),
   deleteSession: (input: DeleteSessionInput) => ipcRenderer.invoke(IPC.DeleteSession, input),
