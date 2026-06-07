@@ -18,7 +18,7 @@ function createMainWindow(): BrowserWindow {
     title: 'AI Worktrees',
     backgroundColor: isLight ? '#F3F3F3' : '#141414',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 16 },
+    trafficLightPosition: { x: 18, y: 16 },
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       contextIsolation: true,

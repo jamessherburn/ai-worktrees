@@ -9,6 +9,8 @@ import type {
 type Props = {
   sessionId: string;
   onHide: () => void;
+  /** When true, omits dock chrome for embedding in the flight deck modal grid. */
+  embedded?: boolean;
 };
 
 type Group = 'staged' | 'unstaged' | 'untracked';
@@ -31,7 +33,7 @@ type ContextMenuState = {
   y: number;
 };
 
-export function GitPanel({ sessionId, onHide }: Props) {
+export function GitPanel({ sessionId, onHide, embedded }: Props) {
   const [status, setStatus] = useState<GitWorktreeStatus>(EMPTY_STATUS);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -244,22 +246,24 @@ export function GitPanel({ sessionId, onHide }: Props) {
   const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
   return (
-    <section className="git-dock-panel bottom-dock-panel">
-      <div className="bottom-dock-panel-header">
-        <div className="bottom-dock-panel-title">Git</div>
-        <div className="bottom-dock-panel-header-actions">
-          <button
-            className="icon-btn"
-            onClick={onHide}
-            title="Hide Git panel"
-            aria-label="Hide Git panel"
-          >
-            <ChevronDownIcon />
-          </button>
+    <section className={`git-dock-panel${embedded ? ' git-dock-panel--embedded' : ' bottom-dock-panel'}`}>
+      {!embedded && (
+        <div className="bottom-dock-panel-header">
+          <div className="bottom-dock-panel-title">Git</div>
+          <div className="bottom-dock-panel-header-actions">
+            <button
+              className="icon-btn"
+              onClick={onHide}
+              title="Hide Git panel"
+              aria-label="Hide Git panel"
+            >
+              <ChevronDownIcon />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="dev-panel-body">
+      <div className={`dev-panel-body${embedded ? ' dev-panel-body--embedded' : ''}`}>
         {error && <div className="git-panel-error">{error}</div>}
         <div className="git-panel-split">
           <div className="git-panel-files">

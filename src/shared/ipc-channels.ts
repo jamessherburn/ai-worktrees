@@ -27,6 +27,10 @@ export const IPC = {
   ShellPtyData: 'shell-pty:data',
   ShellPtyExit: 'shell-pty:exit',
   SessionsSetWaitingOnReview: 'sessions:setWaitingOnReview',
+  SessionsSetLabels: 'sessions:setLabels',
+  SessionsSetMuted: 'sessions:setMuted',
+  SessionsAddQuickNote: 'sessions:addQuickNote',
+  SessionsRemoveQuickNote: 'sessions:removeQuickNote',
   ReadAgentInstructions: 'agentInstructions:read',
   WriteAgentInstructions: 'agentInstructions:write',
   GetAgentSpend: 'agentSpend:get',
@@ -43,6 +47,8 @@ export const IPC = {
   AgentsDetect: 'agents:detect',
   GhSetupEnsure: 'gh-setup:ensure',
   GhSetupProgress: 'gh-setup:progress',
+  GitHubMonitorStatus: 'github-monitor:status',
+  GitHubMonitorFetch: 'github-monitor:fetch',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

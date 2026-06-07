@@ -22,7 +22,9 @@ import type {
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
+import type { GitHubMonitorRequest, GitHubMonitorResult, GitHubMonitorStatus } from '@shared/github-monitor';
 import { ensureGitHubCli } from './gh-cli.js';
+import { fetchGitHubMonitorStats, getGitHubMonitorStatus } from './github-monitor.js';
 import { listRepos } from './repos.js';
 import {
   discardFileChanges,
@@ -44,6 +46,10 @@ import {
   deleteSession,
   getSessionById,
   listSessions,
+  setSessionLabels,
+  setSessionMuted,
+  addSessionQuickNote,
+  removeSessionQuickNote,
   setSessionWaitingOnReview,
 } from './sessions.js';
 import { getSettings, replaceSettings, updateSettings } from './settings.js';
@@ -105,6 +111,17 @@ export function registerIpc(): void {
       wc.send(IPC.GhSetupProgress, message);
     });
   });
+
+  ipcMain.handle(IPC.GitHubMonitorStatus, async (): Promise<GitHubMonitorStatus> => {
+    return getGitHubMonitorStatus();
+  });
+
+  ipcMain.handle(
+    IPC.GitHubMonitorFetch,
+    async (_e, request: GitHubMonitorRequest): Promise<GitHubMonitorResult> => {
+      return fetchGitHubMonitorStats(request);
+    },
+  );
 
   ipcMain.handle(IPC.ListSessions, async (): Promise<SessionWithStatus[]> => {
     return decorate(await listSessions());
@@ -283,6 +300,34 @@ export function registerIpc(): void {
     IPC.SessionsSetWaitingOnReview,
     async (_e, args: { sessionId: string; value: boolean }) => {
       await setSessionWaitingOnReview(args.sessionId, args.value);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SessionsSetLabels,
+    async (_e, args: { sessionId: string; labelIds: string[] }) => {
+      await setSessionLabels(args.sessionId, args.labelIds);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SessionsSetMuted,
+    async (_e, args: { sessionId: string; value: boolean }) => {
+      await setSessionMuted(args.sessionId, args.value);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SessionsAddQuickNote,
+    async (_e, args: { sessionId: string; text: string }) => {
+      return addSessionQuickNote(args.sessionId, args.text);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.SessionsRemoveQuickNote,
+    async (_e, args: { sessionId: string; noteId: string }) => {
+      await removeSessionQuickNote(args.sessionId, args.noteId);
     },
   );
 

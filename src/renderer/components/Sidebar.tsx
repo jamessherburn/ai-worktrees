@@ -1,9 +1,25 @@
-import { useEffect, useState } from 'react';
-import type { SessionWithStatus } from '@shared/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { SessionLabel, SessionWithStatus } from '@shared/types';
 import { getAgent } from '@shared/agents';
+import {
+  activityKindFor,
+  labelsForSession,
+  sessionLabelMap,
+  statusDotClass,
+} from '@shared/session-labels';
+import { SessionLabelChips } from './SessionLabelChips';
+import { SessionLabelMenu } from './SessionLabelMenu';
+import type { AppView } from './app-view';
+import { ViewSwitcher } from './ViewSwitcher';
 
 type Props = {
+  view: AppView;
+  onViewChange: (view: AppView) => void;
+  compact?: boolean;
+  hidden?: boolean;
+  showSessions: boolean;
   sessions: SessionWithStatus[];
+  sessionLabels: SessionLabel[];
   activeId: string | null;
   width: number;
   minWidth: number;
@@ -15,15 +31,16 @@ type Props = {
   onNewSession: () => void;
   onOpenSettings: () => void;
   onOpenAgentData: () => void;
-  onSetWaitingOnReview: (session: SessionWithStatus, value: boolean) => void;
+  onSetSessionLabels: (session: SessionWithStatus, labelIds: string[]) => void;
+  onToggleMuted: (session: SessionWithStatus, muted: boolean) => void;
+  onManageLabels: () => void;
 };
 
-type ActivityGroup = 'working' | 'waiting-on-review' | 'idle' | 'stopped';
+type ActivityGroup = 'working' | 'idle' | 'stopped';
 
-const GROUP_ORDER: ActivityGroup[] = ['working', 'waiting-on-review', 'idle', 'stopped'];
+const GROUP_ORDER: ActivityGroup[] = ['working', 'idle', 'stopped'];
 const GROUP_LABELS: Record<ActivityGroup, string> = {
   working: 'Working',
-  'waiting-on-review': 'Waiting On Review',
   idle: 'Idle',
   stopped: 'Stopped',
 };
@@ -35,7 +52,13 @@ type ContextMenuState = {
 };
 
 export function Sidebar({
+  view,
+  onViewChange,
+  compact = false,
+  hidden = false,
+  showSessions,
   sessions,
+  sessionLabels,
   activeId,
   width,
   minWidth,
@@ -47,8 +70,11 @@ export function Sidebar({
   onNewSession,
   onOpenSettings,
   onOpenAgentData,
-  onSetWaitingOnReview,
+  onSetSessionLabels,
+  onToggleMuted,
+  onManageLabels,
 }: Props) {
+  const labelMap = useMemo(() => sessionLabelMap(sessionLabels), [sessionLabels]);
   const groups = groupByActivity(sessions);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
@@ -94,37 +120,59 @@ export function Sidebar({
   }, [menu]);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${compact ? ' sidebar--compact' : ''}${hidden ? ' sidebar--hidden' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-title">AI Worktrees</div>
+        <div className="sidebar-header-drag" aria-hidden />
+        <div className="sidebar-header-main">
+          {!compact && <div className="sidebar-title">AI Worktrees</div>}
+          <ViewSwitcher view={view} onChange={onViewChange} compact={compact} />
+        </div>
       </div>
-      <div
-        className="sidebar-resize"
-        onMouseDown={onResizeMouseDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-      />
+      {!compact && !hidden && (
+        <div
+          className="sidebar-resize"
+          onMouseDown={onResizeMouseDown}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+        />
+      )}
       <div className="sidebar-actions">
-        <button className="btn btn-primary" onClick={onNewSession}>
-          + New Session
-        </button>
+        {compact ? (
+          <button className="sidebar-compact-btn" onClick={onNewSession} title="New Session" aria-label="New Session">
+            <PlusIcon />
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={onNewSession}>
+            + New Session
+          </button>
+        )}
         <div className="sidebar-actions-icons">
           <button
-            className="icon-btn"
+            className={compact ? 'sidebar-compact-btn' : 'icon-btn'}
             title="Agent Data"
             onClick={onOpenAgentData}
             aria-label="Agent Data"
           >
             <DocIcon />
           </button>
-          <button className="icon-btn" title="Settings" onClick={onOpenSettings} aria-label="Settings">
+          <button
+            className={compact ? 'sidebar-compact-btn' : 'icon-btn'}
+            title="Settings"
+            onClick={onOpenSettings}
+            aria-label="Settings"
+          >
             <SettingsIcon />
           </button>
         </div>
       </div>
       <div className="sessions-scroll">
-        {sessions.length === 0 ? (
+        {!showSessions ? (
+          <div className="sidebar-view-hint">
+            <p>Sessions are monitored on the Flight Deck.</p>
+            <p className="muted">Switch to Workspace to focus on one session at a time.</p>
+          </div>
+        ) : sessions.length === 0 ? (
           <div className="repo-label" style={{ textAlign: 'center', marginTop: 24 }}>
             No sessions yet
           </div>
@@ -141,7 +189,7 @@ export function Sidebar({
                     {items.map((s) => (
                       <div
                         key={s.id}
-                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}`}
+                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}${s.muted ? ' session-row--muted' : ''}`}
                         onClick={() => onSelect(s.id)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -149,7 +197,7 @@ export function Sidebar({
                           setMenu({ session: s, x: e.clientX, y: e.clientY });
                         }}
                       >
-                        <span className={`status-dot ${dotClass(s)}`} title={dotClass(s)} />
+                        <span className={`status-dot ${statusDotClass(s)}`} title={statusDotClass(s)} />
                         <div className="session-name" title={s.name}>
                           <span className="session-name-text">
                             <span className="session-name-primary">{s.name}</span>
@@ -164,17 +212,23 @@ export function Sidebar({
                               </span>
                             ) : null}
                           </span>
-                        <div className="session-branch">
-                          <span
-                            className="session-agent-tag-wrap"
-                            title={`Agent: ${getAgent(s.agentId).name}`}
-                          >
-                            <span className={`session-agent-tag agent-${s.agentId}`}>
-                              {getAgent(s.agentId).name}
+                          <div className="session-branch">
+                            <span
+                              className="session-agent-tag-wrap"
+                              title={`Agent: ${getAgent(s.agentId).name}`}
+                            >
+                              <span className={`session-agent-tag agent-${s.agentId}`}>
+                                {getAgent(s.agentId).name}
+                              </span>
                             </span>
-                          </span>
-                          {!s.global && <span className="session-branch-name">{s.branchName}</span>}
-                        </div>
+                            {!s.global && <span className="session-branch-name">{s.branchName}</span>}
+                          </div>
+                          <div className="session-row-labels">
+                            <SessionLabelChips
+                              labels={labelsForSession(s, labelMap)}
+                              compact
+                            />
+                          </div>
                         </div>
                         <button
                           className="session-delete"
@@ -198,49 +252,26 @@ export function Sidebar({
         )}
       </div>
       {menu && (
-        <SessionContextMenu
+        <SessionLabelMenu
           session={menu.session}
+          labels={sessionLabels}
           x={menu.x}
           y={menu.y}
-          onSetWaitingOnReview={(value) => {
-            onSetWaitingOnReview(menu.session, value);
+          onToggleLabel={(s, labelIds) => {
+            onSetSessionLabels(s, labelIds);
             setMenu(null);
+          }}
+          onToggleMuted={(s, muted) => {
+            onToggleMuted(s, muted);
+            setMenu(null);
+          }}
+          onManageLabels={() => {
+            setMenu(null);
+            onManageLabels();
           }}
         />
       )}
     </aside>
-  );
-}
-
-function SessionContextMenu({
-  session,
-  x,
-  y,
-  onSetWaitingOnReview,
-}: {
-  session: SessionWithStatus;
-  x: number;
-  y: number;
-  onSetWaitingOnReview: (value: boolean) => void;
-}) {
-  const isWaiting = session.waitingOnReview === true;
-  return (
-    <div
-      className="context-menu"
-      style={{ left: x, top: y }}
-      onClick={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {isWaiting ? (
-        <button className="context-menu-item" onClick={() => onSetWaitingOnReview(false)}>
-          Mark As Active
-        </button>
-      ) : (
-        <button className="context-menu-item" onClick={() => onSetWaitingOnReview(true)}>
-          Mark As Waiting On Review
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -255,29 +286,22 @@ function DocIcon() {
   );
 }
 
-function dotClass(s: SessionWithStatus): string {
-  if (s.waitingOnReview) return 'waiting-on-review';
-  if (s.status !== 'running') return s.status;
-  return s.activity ?? 'idle';
-}
-
 function activityGroupFor(s: SessionWithStatus): ActivityGroup {
-  if (s.waitingOnReview) return 'waiting-on-review';
-  if (s.status !== 'running') return 'stopped';
-  return s.activity === 'working' ? 'working' : 'idle';
+  const kind = activityKindFor(s);
+  if (kind === 'working') return 'working';
+  if (kind === 'idle') return 'idle';
+  return 'stopped';
 }
 
 function groupByActivity(sessions: SessionWithStatus[]): Record<ActivityGroup, [string, SessionWithStatus[]][]> {
   const buckets: Record<ActivityGroup, SessionWithStatus[]> = {
     working: [],
-    'waiting-on-review': [],
     idle: [],
     stopped: [],
   };
   for (const s of sessions) buckets[activityGroupFor(s)].push(s);
   return {
     working: groupByRepo(buckets.working),
-    'waiting-on-review': groupByRepo(buckets['waiting-on-review']),
     idle: groupByRepo(buckets.idle),
     stopped: groupByRepo(buckets.stopped),
   };
@@ -293,6 +317,15 @@ function groupByRepo(sessions: SessionWithStatus[]): [string, SessionWithStatus[
   return Array.from(map.entries())
     .map(([repo, items]) => [repo, items.sort((a, b) => a.name.localeCompare(b.name))] as [string, SessionWithStatus[]])
     .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
 }
 
 function SettingsIcon() {

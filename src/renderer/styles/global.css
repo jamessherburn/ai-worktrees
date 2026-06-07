@@ -1,15 +1,20 @@
 @import url('@xterm/xterm/css/xterm.css');
 
 :root {
+  /* macOS hiddenInset title bar safe area */
+  --titlebar-inset-left: 80px;
+  --titlebar-inset-top: 8px;
+  --titlebar-height: 42px;
+
   /* Dark (default) — closer to Cursor dark */
   --bg: #141414;
-  --bg-elev: #181818;
-  --bg-elev-2: #1c1c1c;
-  --border: #2a2a2a;
-  --border-strong: #333333;
-  --text: #cccccc;
-  --text-dim: #858585;
-  --text-muted: #5a5a5a;
+  --bg-elev: #1a1a1a;
+  --bg-elev-2: #222222;
+  --border: #2f2f2f;
+  --border-strong: #3a3a3a;
+  --text: #d4d4d4;
+  --text-dim: #8f8f8f;
+  --text-muted: #6b6b6b;
   --accent: #007acc;
   --accent-strong: #0098ff;
   --accent-on: #ffffff;
@@ -17,7 +22,7 @@
   --success: #3fb950;
   --warning: #cca700;
   --terminal-bg: #0f0f0f;
-  --shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --wizard-rainbow-gradient: linear-gradient(
     135deg,
     #ef4444,
@@ -134,11 +139,19 @@ body.resizing-settings-modal {
   cursor: nwse-resize !important;
   user-select: none !important;
 }
+body.flight-deck-workspace-open {
+  overflow: hidden;
+}
+body.flight-deck-snapping {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
 body.resizing-sidebar *,
 body.resizing-bottom-dock-split *,
 body.resizing-tasks-panel *,
 body.resizing-bottom-dock *,
-body.resizing-settings-modal * {
+body.resizing-settings-modal *,
+body.flight-deck-snapping * {
   user-select: none !important;
 }
 
@@ -170,8 +183,96 @@ body.resizing-sidebar .sidebar-resize {
 }
 
 .sidebar-header {
-  padding: 38px 16px 12px;
+  display: grid;
+  grid-template-rows: var(--titlebar-height) auto;
+  flex-shrink: 0;
+}
+
+.sidebar-header-drag {
+  grid-row: 1;
   -webkit-app-region: drag;
+}
+
+.sidebar-header-main {
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 10px 16px;
+  min-width: 0;
+}
+
+.sidebar--compact .sidebar-header-main {
+  padding: 0 6px 8px;
+  align-items: stretch;
+}
+
+.sidebar--compact .sidebar-actions {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+}
+
+.sidebar--compact .sidebar-actions-icons {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar--compact .sessions-scroll {
+  display: none;
+}
+
+.sidebar--hidden {
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-compact-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-compact-btn:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.view-switcher--compact {
+  flex-direction: column;
+  width: 100%;
+  padding: 2px;
+  gap: 0;
+}
+
+.view-switcher--compact .view-switcher-btn {
+  width: 100%;
+  padding: 7px 0;
+  justify-content: center;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.view-switcher--compact .view-switcher-btn:first-child {
+  border-radius: 5px 5px 0 0;
+}
+
+.view-switcher--compact .view-switcher-btn:last-child {
+  border-radius: 0 0 5px 5px;
+}
+
+.view-switcher--compact .view-switcher-btn.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+  color: var(--accent);
 }
 
 .sidebar-title {
@@ -180,6 +281,43 @@ body.resizing-sidebar .sidebar-resize {
   letter-spacing: 0.02em;
   color: var(--text-dim);
   text-transform: uppercase;
+}
+
+.view-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+.view-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: background 120ms, color 120ms;
+}
+
+.view-switcher-btn:hover {
+  color: var(--text);
+}
+
+.view-switcher-btn.active {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .sidebar-actions {
@@ -314,11 +452,11 @@ body.resizing-sidebar .sidebar-resize {
   border-color: var(--border-strong);
 }
 .session-row--global {
-  border-color: #1e3a8a;
+  border-color: color-mix(in srgb, #3b82f6 42%, var(--border));
 }
 .session-row--global:hover,
 .session-row--global.active {
-  border-color: #2563eb;
+  border-color: color-mix(in srgb, #3b82f6 65%, var(--border-strong));
 }
 [data-theme='light'] .session-row--global {
   border-color: #1d4ed8;
@@ -2849,4 +2987,1579 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ── Flight Deck ─────────────────────────────────────────────────────────── */
+
+.flight-deck {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.flight-deck-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: var(--titlebar-height) 18px 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.flight-deck-header-main,
+.flight-deck-instruments-summary,
+.flight-deck-brand {
+  -webkit-app-region: no-drag;
+}
+
+.flight-deck-header-main {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+}
+
+.flight-deck-brand {
+  min-width: 0;
+}
+
+.flight-deck-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.flight-deck-subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.flight-deck-instruments-summary {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+}
+
+.flight-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  border-right: 1px solid var(--border);
+}
+
+.flight-gauge:last-child {
+  border-right: none;
+}
+
+.flight-gauge-value {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.flight-gauge-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.flight-gauge--working .flight-gauge-value { color: var(--success); }
+.flight-gauge--idle .flight-gauge-value { color: var(--danger); }
+.flight-gauge--stopped .flight-gauge-value { color: var(--text-muted); }
+
+.flight-gauge--highlight {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  animation: flight-gauge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes flight-gauge-pulse {
+  0%, 100% { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+  50% { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+}
+
+.flight-deck-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sidebar-view-hint {
+  padding: 20px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.sidebar-view-hint p {
+  margin: 0 0 8px;
+}
+
+.flight-deck-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.flight-deck-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.flight-deck-filter-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.flight-deck-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flight-deck-filter-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.flight-deck-filter-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.flight-deck-filter-chip.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
+  color: var(--text);
+}
+
+.flight-deck-label-filter.active {
+  border-color: var(--label-color, var(--accent));
+  background: color-mix(in srgb, var(--label-color, var(--accent)) 18%, var(--bg-elev-2));
+}
+
+.flight-deck-manage-labels {
+  border-style: dashed;
+}
+
+.flight-deck-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.flight-deck-grid {
+  flex: 1 0 auto;
+  padding: 16px 18px 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  align-content: start;
+  align-items: stretch;
+}
+
+.flight-deck-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.flight-instrument {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  outline: none;
+}
+
+.flight-instrument:focus-visible .flight-instrument-frame {
+  border-color: var(--accent);
+}
+
+.flight-instrument-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  width: 100%;
+  padding: 12px 14px;
+  min-height: var(--flight-card-height, 140px);
+  height: var(--flight-card-height, auto);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition: border-color 150ms, transform 120ms, box-shadow 150ms;
+}
+
+.flight-instrument:hover .flight-instrument-frame {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 14px color-mix(in srgb, #000 28%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+}
+
+.flight-instrument-heat {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+}
+
+.flight-instrument--working .flight-instrument-heat {
+  opacity: 1;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    color-mix(in srgb, var(--success) 22%, transparent) 0%,
+    transparent 70%
+  );
+  animation: flight-heat-working 3s ease-in-out infinite;
+}
+
+.flight-instrument--idle .flight-instrument-heat {
+  opacity: 1;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    color-mix(in srgb, var(--danger) 35%, transparent) 0%,
+    color-mix(in srgb, var(--warning) 12%, transparent) 45%,
+    transparent 75%
+  );
+  animation: flight-heat-idle 1.8s ease-in-out infinite;
+}
+
+.flight-instrument--idle .flight-instrument-frame {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.flight-instrument--working .flight-instrument-frame {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.flight-instrument--stopped .flight-instrument-frame,
+.flight-instrument--orphaned .flight-instrument-frame {
+  opacity: 0.82;
+}
+
+@keyframes flight-heat-idle {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+@keyframes flight-heat-working {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.85; }
+}
+
+.flight-instrument-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flight-instrument-mute {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 120ms, color 120ms, background 120ms;
+}
+
+.flight-instrument:hover .flight-instrument-mute,
+.flight-instrument-mute.active {
+  opacity: 1;
+}
+
+.flight-instrument-mute.active {
+  color: var(--text-dim);
+}
+
+.flight-instrument--muted .flight-instrument-frame {
+  opacity: 0.42;
+  filter: grayscale(0.85) blur(0.4px);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.flight-instrument--muted .flight-instrument-heat {
+  display: none;
+}
+
+.flight-instrument--muted:hover .flight-instrument-frame {
+  opacity: 0.55;
+}
+
+.session-row--muted {
+  opacity: 0.55;
+}
+
+.session-row--muted .session-name-primary {
+  color: var(--text-muted);
+}
+
+.flight-instrument-name {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flight-instrument-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.flight-instrument-activity {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flight-instrument--idle .flight-instrument-activity {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.flight-instrument--working .flight-instrument-activity {
+  color: var(--success);
+}
+
+.flight-instrument-repo {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flight-instrument-labels {
+  min-height: 22px;
+}
+
+.flight-instrument-footer {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.flight-instrument-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Flight Deck session workspace (modal) ────────────────────────────────── */
+
+.flight-deck-workspace-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg) 6%, rgba(0, 0, 0, 0.12));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.flight-deck-workspace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1520px, calc(100vw - 24px));
+  height: min(940px, calc(100vh - 24px));
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: var(--bg);
+  overflow: hidden;
+  box-shadow:
+    0 24px 64px color-mix(in srgb, #000 45%, transparent),
+    0 8px 24px color-mix(in srgb, #000 25%, transparent);
+}
+
+[data-theme='light'] .flight-deck-workspace {
+  box-shadow:
+    0 24px 56px color-mix(in srgb, #000 14%, transparent),
+    0 8px 20px color-mix(in srgb, #000 8%, transparent);
+}
+
+.flight-deck-workspace-top {
+  position: relative;
+  z-index: 1;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border-radius: 12px 12px 0 0;
+}
+
+.flight-deck-workspace-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px 14px 20px;
+}
+
+.flight-deck-workspace-top-main {
+  min-width: 0;
+  flex: 1;
+  -webkit-app-region: no-drag;
+}
+
+.flight-deck-workspace-top-actions {
+  -webkit-app-region: no-drag;
+}
+
+.flight-deck-workspace-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.flight-deck-workspace-top .flight-deck-modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.flight-deck-workspace-top .flight-deck-modal-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.flight-deck-workspace-top .session-label-chips {
+  margin-top: 6px;
+}
+
+/* Workspace controls — subtle, borderless, no harsh white chips */
+.flight-deck-workspace-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.flight-deck-workspace-icon-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.flight-deck-workspace-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.flight-deck-workspace-link-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.flight-deck-workspace-link-btn:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.flight-deck-workspace-canvas {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+  background: transparent;
+}
+
+.flight-deck-snap-preview {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 2;
+  box-sizing: border-box;
+  transition: left 80ms ease, top 80ms ease, width 80ms ease, height 80ms ease;
+}
+
+.flight-deck-grid-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  z-index: 1;
+  transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease;
+}
+
+.flight-deck-grid-window--dragging {
+  z-index: 3;
+  transition: none;
+}
+
+.flight-deck-grid-window--dragging .flight-deck-grid-window-card {
+  opacity: 0.8;
+  transform: scale(0.99);
+}
+
+.flight-deck-grid-window-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: var(--bg-elev);
+  box-shadow:
+    0 8px 32px color-mix(in srgb, #000 28%, transparent),
+    0 2px 8px color-mix(in srgb, #000 14%, transparent);
+  transition: box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+
+[data-theme='light'] .flight-deck-grid-window-card {
+  box-shadow:
+    0 8px 28px color-mix(in srgb, #000 10%, transparent),
+    0 1px 4px color-mix(in srgb, #000 6%, transparent);
+}
+
+.flight-deck-grid-window-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: color-mix(in srgb, var(--bg-elev-2) 55%, var(--bg-elev));
+  cursor: grab;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.flight-deck-grid-window-titlebar:active {
+  cursor: grabbing;
+}
+
+.flight-deck-grid-window-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.flight-deck-grid-window-titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.flight-deck-grid-window-close,
+.flight-deck-grid-window-action,
+.flight-deck-snap-menu-trigger {
+  width: 24px;
+  height: 24px;
+}
+
+.flight-deck-grid-window-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--terminal-bg);
+}
+
+.flight-deck-grid-window--git .flight-deck-grid-window-body {
+  background: var(--bg-elev);
+}
+
+.flight-deck-grid-window-body .terminal-shell,
+.flight-deck-grid-window-body .built-in-terminal-panel,
+.flight-deck-grid-window-body .git-dock-panel {
+  position: absolute;
+  inset: 0;
+}
+
+.flight-deck-grid-window-body .xterm {
+  height: 100%;
+}
+
+.flight-deck-snap-menu {
+  position: relative;
+}
+
+.flight-deck-snap-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 148px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 22%, transparent);
+  z-index: 10;
+}
+
+.flight-deck-snap-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flight-deck-snap-menu-item:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.flight-deck-workspace-bottom {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(200px, 0.85fr);
+  gap: 16px;
+  align-items: stretch;
+  padding: 12px 20px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  background: var(--bg-elev);
+  border-radius: 0 0 12px 12px;
+  min-height: 84px;
+}
+
+.flight-deck-workspace-bottom-prompts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: visible;
+}
+
+.flight-deck-workspace-no-prompts {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.flight-deck-workspace-bottom .session-prompt-dock-shell {
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  border-color: color-mix(in srgb, var(--border) 50%, transparent);
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+.flight-deck-workspace-bottom .session-prompt-dock-nav {
+  color: var(--text-muted);
+}
+
+.flight-deck-workspace-bottom .session-prompt-dock-nav:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.flight-deck-workspace-bottom .session-prompt-dock-chip {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: color-mix(in srgb, var(--border) 45%, transparent);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.flight-deck-workspace-bottom .session-prompt-dock-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--accent);
+}
+
+.session-quick-notes {
+  position: relative;
+  min-width: 0;
+}
+
+.session-quick-notes-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-quick-notes-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.session-quick-notes-input::placeholder {
+  color: var(--text-muted);
+}
+
+.session-quick-notes-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.session-quick-notes-toggle {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.session-quick-notes-toggle:hover,
+.session-quick-notes-toggle--open {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.session-quick-notes-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.session-quick-notes-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(320px, 42vw);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 32px color-mix(in srgb, #000 20%, transparent);
+  z-index: 20;
+}
+
+.session-quick-notes-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.session-quick-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-quick-notes-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 7px;
+}
+
+.session-quick-notes-item:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.session-quick-notes-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.session-quick-notes-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.session-quick-notes-time {
+  font-size: 10px;
+}
+
+.session-quick-notes-remove {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.session-quick-notes-item:hover .session-quick-notes-remove {
+  opacity: 1;
+}
+
+.session-quick-notes-remove:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+/* Light mode — brighter frosted glass, less grey wash */
+[data-theme='light'] .flight-deck-workspace-backdrop {
+  background: color-mix(in srgb, #ffffff 10%, rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+[data-theme='light'] .flight-deck-workspace-top,
+[data-theme='light'] .flight-deck-workspace-bottom {
+  background: color-mix(in srgb, #ffffff 90%, transparent);
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+[data-theme='light'] .flight-deck-grid-window-card {
+  border-color: color-mix(in srgb, var(--border) 85%, transparent);
+  background: #ffffff;
+  box-shadow:
+    0 4px 20px color-mix(in srgb, #000 7%, transparent),
+    0 1px 3px color-mix(in srgb, #000 4%, transparent);
+}
+
+[data-theme='light'] .flight-deck-grid-window-titlebar {
+  background: color-mix(in srgb, #fafafa 80%, #ffffff);
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+[data-theme='light'] .flight-deck-modal-panel-toggles {
+  background: color-mix(in srgb, #ffffff 85%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+[data-theme='light'] .flight-deck-panel-toggle--active {
+  background: color-mix(in srgb, var(--accent) 10%, #ffffff);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+[data-theme='light'] .flight-deck-workspace-icon-btn:hover:not(:disabled),
+[data-theme='light'] .flight-deck-workspace-link-btn:hover {
+  background: color-mix(in srgb, var(--accent) 7%, #ffffff);
+  color: var(--text);
+}
+
+[data-theme='light'] .flight-deck-workspace-bottom .session-prompt-dock-shell {
+  background: color-mix(in srgb, #ffffff 82%, transparent);
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+[data-theme='light'] .flight-deck-workspace-bottom .session-prompt-dock-chip {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  color: var(--text-dim);
+}
+
+[data-theme='light'] .flight-deck-workspace-bottom .session-prompt-dock-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 8%, #ffffff);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+[data-theme='light'] .flight-deck-workspace-bottom .session-prompt-dock-nav:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 7%, #ffffff);
+  color: var(--text);
+}
+
+[data-theme='light'] .session-quick-notes-input,
+[data-theme='light'] .session-quick-notes-toggle {
+  background: color-mix(in srgb, #ffffff 85%, transparent);
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+[data-theme='light'] .session-quick-notes-panel {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 8%, transparent);
+}
+
+[data-theme='light'] .session-quick-notes-item:hover {
+  background: color-mix(in srgb, var(--accent) 5%, #ffffff);
+}
+
+[data-theme='light'] .flight-deck-snap-menu-dropdown {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: 0 6px 20px color-mix(in srgb, #000 8%, transparent);
+}
+
+[data-theme='light'] .flight-deck-snap-menu-item:hover {
+  background: color-mix(in srgb, var(--accent) 7%, #ffffff);
+}
+
+[data-theme='light'] .flight-deck-snap-preview {
+  background: color-mix(in srgb, var(--accent) 5%, #ffffff);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.flight-deck-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.flight-deck-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.flight-deck-modal-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.flight-deck-modal-activity {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.flight-deck-modal-title-block {
+  min-width: 0;
+  flex: 1;
+}
+
+.flight-deck-modal-repo {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 11px;
+}
+
+.flight-deck-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.flight-deck-modal-panel-toggles {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.flight-deck-panel-toggle {
+  width: 28px;
+  height: 28px;
+}
+
+.flight-deck-panel-toggle--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+
+.flight-deck-panel-toggle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.built-in-terminal-panel--embedded {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.built-in-terminal-body--embedded {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.git-dock-panel--embedded {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.dev-panel-body--embedded {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Session labels ──────────────────────────────────────────────────────── */
+
+.session-label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.session-label-chips--compact .session-label-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.session-label-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--label-color);
+  background: color-mix(in srgb, var(--label-color) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--label-color) 40%, transparent);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row-labels {
+  margin-top: 3px;
+}
+
+.context-menu-heading {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.context-menu-item--check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--label-color, var(--border)) 50%, var(--border));
+  background: color-mix(in srgb, var(--label-color, transparent) 12%, transparent);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+.session-labels-editor-intro {
+  margin: 0 0 14px;
+  max-width: 52em;
+}
+
+.session-labels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.session-labels-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-labels-color {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  cursor: pointer;
+}
+
+.session-labels-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-labels-remove {
+  color: var(--text-muted);
+}
+
+.session-labels-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── GitHub monitor (Flight Deck) ─────────────────────────────────────────── */
+
+.gh-monitor {
+  flex-shrink: 0;
+  margin-top: auto;
+  margin-left: 18px;
+  margin-right: 18px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.gh-monitor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.gh-monitor-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gh-monitor-subtitle {
+  margin: 2px 0 0;
+  font-size: 10px;
+}
+
+.gh-monitor-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-monitor-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gh-monitor-control-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.gh-monitor-select {
+  min-width: 140px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.gh-monitor-refresh {
+  margin-bottom: 1px;
+}
+
+.gh-monitor-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.gh-monitor-status--loading {
+  flex-direction: row;
+  align-items: center;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+}
+
+.gh-monitor-status--unavailable {
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-elev-2));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+}
+
+.gh-monitor-status--error {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev-2));
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+}
+
+.gh-monitor-status-title {
+  font-weight: 600;
+}
+
+.gh-monitor-status-message {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.gh-monitor-status-hint {
+  margin: 0;
+  font-size: 11px;
+}
+
+.gh-monitor-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.gh-monitor-total {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 72px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+}
+
+.gh-monitor-total-value {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.gh-monitor-total-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-align: center;
+}
+
+.gh-monitor-total--accent .gh-monitor-total-value { color: var(--accent); }
+.gh-monitor-total--success .gh-monitor-total-value { color: var(--success); }
+.gh-monitor-total--warning .gh-monitor-total-value { color: var(--warning); }
+.gh-monitor-total--danger .gh-monitor-total-value { color: var(--danger); }
+
+.gh-monitor-charts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (max-width: 1100px) {
+  .gh-monitor-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .gh-monitor-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gh-metric-chart {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-metric-chart-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.gh-metric-chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gh-metric-chart-max {
+  font-size: 10px;
+}
+
+.gh-metric-chart-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: 58px;
+}
+
+.gh-metric-bar-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 2px;
+}
+
+.gh-metric-bar-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  min-height: 0;
+}
+
+.gh-metric-bar-value {
+  font-size: 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.gh-metric-bar-value--zero {
+  color: var(--text-muted);
+  font-weight: 500;
+  opacity: 0.45;
+}
+
+.gh-metric-bar-track {
+  width: 100%;
+  max-width: 14px;
+  height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.gh-metric-bar {
+  width: 100%;
+  min-height: 0;
+  border-radius: 2px 2px 1px 1px;
+  transition: height 200ms ease;
+  opacity: 0.9;
+}
+
+.gh-metric-bar-label {
+  font-size: 8px;
+  color: var(--text-muted);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: 32px;
+  overflow: hidden;
+}
+
+.gh-monitor-foot {
+  margin-top: 6px;
+  font-size: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.gh-monitor-skipped {
+  text-align: right;
+  max-width: 100%;
+}
+
+/* ── Dark mode polish ─────────────────────────────────────────────────────── */
+
+[data-theme='dark'] input:focus,
+[data-theme='dark'] select:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-strong) 75%, var(--text-muted));
+}
+
+[data-theme='dark'] .settings-modal-tab.active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent),
+    0 1px 3px color-mix(in srgb, #000 35%, transparent);
+}
+
+[data-theme='dark'] .flight-deck-workspace-canvas {
+  background: color-mix(in srgb, var(--bg) 88%, #000);
+}
+
+[data-theme='dark'] .flight-deck-modal-panel-toggles {
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+}
+
+[data-theme='dark'] .flight-deck-panel-toggle--active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+[data-theme='dark'] .flight-deck-workspace-bottom .session-prompt-dock-shell,
+[data-theme='dark'] .session-quick-notes-input,
+[data-theme='dark'] .session-quick-notes-toggle {
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+}
+
+[data-theme='dark'] .gh-monitor {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+}
+
+[data-theme='dark'] .gh-metric-bar {
+  opacity: 1;
+}
+
+[data-theme='dark'] .context-menu,
+[data-theme='dark'] .session-prompt-dock-flyout,
+[data-theme='dark'] .session-prompt-menu,
+[data-theme='dark'] .session-quick-notes-panel,
+[data-theme='dark'] .flight-deck-snap-menu-dropdown {
+  border-color: color-mix(in srgb, var(--border-strong) 85%, #fff 6%);
+  box-shadow:
+    0 12px 40px color-mix(in srgb, #000 50%, transparent),
+    0 0 0 1px color-mix(in srgb, #fff 4%, transparent);
+}
+
+[data-theme='dark'] .session-row.active {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-elev-2));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
+}
+
+[data-theme='dark'] .flight-deck-filter-chip.active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2));
 }

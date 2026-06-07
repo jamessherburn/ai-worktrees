@@ -1,6 +1,19 @@
 import type { AgentId } from './agents';
 import type { WizardConfig } from './wizard';
 
+export type SessionLabel = {
+  id: string;
+  name: string;
+  /** CSS color (typically hex). */
+  color: string;
+};
+
+export type SessionQuickNote = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
 export type Session = {
   id: string;
   name: string;
@@ -12,6 +25,15 @@ export type Session = {
   agentId: AgentId;
   createdAt: string;
   lastStartedAt: string | null;
+  /** Custom label ids applied to this session. */
+  labelIds?: string[];
+  /** When true, the session is visually de-emphasised on the Flight Deck. */
+  muted?: boolean;
+  /** @deprecated Migrated to quickNotes on read; no longer written. */
+  notes?: string;
+  /** Short-lived quick notes for this session (Flight Deck workspace). */
+  quickNotes?: SessionQuickNote[];
+  /** @deprecated Migrated to labelIds on read; no longer written. */
   waitingOnReview?: boolean;
   /** When set, the session header offers pasting this briefing into the agent terminal. */
   wizardBriefMarkdown?: string;
@@ -63,6 +85,8 @@ export type Settings = {
   tasks?: TasksConfig;
   /** Pre-built prompts shown in each session row (pasted into the terminal with Enter). */
   sessionPrompts?: SessionPromptPreset[];
+  /** User-defined labels for categorizing sessions. */
+  sessionLabels?: SessionLabel[];
 };
 
 export type RepoInfo = {

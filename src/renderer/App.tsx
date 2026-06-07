@@ -4,6 +4,10 @@ import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-
 import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
+import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
+import type { AppView } from './components/app-view';
+import { FlightDeck } from './components/FlightDeck';
+import { FlightDeckSessionModal } from './components/FlightDeckSessionModal';
 import { Sidebar } from './components/Sidebar';
 import { TerminalView, type TerminalApi } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
@@ -23,6 +27,7 @@ const SIDEBAR_WIDTH_KEY = 'sidebar-width';
 const SIDEBAR_DEFAULT_WIDTH = 400;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
+const SIDEBAR_COMPACT_WIDTH = 72;
 const SIDEBAR_UPGRADE_THRESHOLD = 340;
 const MAIN_PANE_MIN_WIDTH = 80;
 const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
@@ -42,7 +47,10 @@ const DEFAULT_SETTINGS: Settings = {
   wizard: DEFAULT_WIZARD_CONFIG,
   tasks: DEFAULT_TASKS_CONFIG,
   sessionPrompts: DEFAULT_SESSION_PROMPTS,
+  sessionLabels: DEFAULT_SESSION_LABELS,
 };
+
+type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks';
 
 
 function clampSidebarWidth(value: number): number {
@@ -71,6 +79,9 @@ function clampBottomDockHeight(value: number): number {
 }
 
 export function App() {
+  const [view, setView] = useState<AppView>('flight-deck');
+  const [flightDeckModalId, setFlightDeckModalId] = useState<string | null>(null);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionWithStatus[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -163,12 +174,18 @@ export function App() {
     [settings.sessionPrompts],
   );
 
+  const sessionLabels = useMemo(
+    () => normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
+    [settings.sessionLabels],
+  );
+
   const modalOpen =
     showNew ||
     showSettings ||
     showAgentData ||
     pendingDelete !== null ||
-    vscodeMissing;
+    vscodeMissing ||
+    flightDeckModalId !== null;
 
   const refresh = useCallback(async () => {
     const list = await window.api.listSessions();
@@ -275,6 +292,17 @@ export function App() {
     await window.api.revealInFinder(activeSession.worktreePath);
   }, [activeSession]);
 
+  const openSessionInVSCode = useCallback(async (session: SessionWithStatus) => {
+    const result = await window.api.openInVSCode(session.worktreePath);
+    if (!result.ok && result.reason === 'not-installed') {
+      setVscodeMissing(true);
+    }
+  }, []);
+
+  const openSessionInFinder = useCallback(async (session: SessionWithStatus) => {
+    await window.api.revealInFinder(session.worktreePath);
+  }, []);
+
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
   const pendingWizardBriefRef = useRef(new Map<string, string>());
 
@@ -359,6 +387,89 @@ export function App() {
     setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }, []);
 
+  const setSessionLabels = useCallback(
+    async (sessionId: string, labelIds: string[]) => {
+      setSessions((prev) =>
+        prev.map((x) => (x.id === sessionId ? { ...x, labelIds } : x)),
+      );
+      await window.api.setSessionLabels(sessionId, labelIds);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const setSessionMuted = useCallback(
+    async (sessionId: string, muted: boolean) => {
+      setSessions((prev) =>
+        prev.map((x) => (x.id === sessionId ? { ...x, muted: muted || undefined } : x)),
+      );
+      await window.api.setSessionMuted(sessionId, muted);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const addSessionQuickNote = useCallback(async (sessionId: string, text: string) => {
+    const note = await window.api.addSessionQuickNote(sessionId, text);
+    setSessions((prev) =>
+      prev.map((x) =>
+        x.id === sessionId
+          ? { ...x, quickNotes: [...(x.quickNotes ?? []), note] }
+          : x,
+      ),
+    );
+  }, []);
+
+  const removeSessionQuickNote = useCallback(async (sessionId: string, noteId: string) => {
+    await window.api.removeSessionQuickNote(sessionId, noteId);
+    setSessions((prev) =>
+      prev.map((x) => {
+        if (x.id !== sessionId) return x;
+        const next = (x.quickNotes ?? []).filter((n) => n.id !== noteId);
+        return { ...x, quickNotes: next.length ? next : undefined };
+      }),
+    );
+  }, []);
+
+  const runFlightDeckPrompt = useCallback(
+    (text: string) => {
+      if (!flightDeckModalId) return;
+      submitPromptToSession(flightDeckModalId, text);
+    },
+    [flightDeckModalId, submitPromptToSession],
+  );
+
+  const scrollFlightDeckTerminalToBottom = useCallback(() => {
+    if (!flightDeckModalId) return;
+    const api = terminalApisRef.current.get(flightDeckModalId);
+    if (api) {
+      api.scrollToBottom();
+      return;
+    }
+    let attempts = 0;
+    const retry = () => {
+      attempts += 1;
+      terminalApisRef.current.get(flightDeckModalId)?.scrollToBottom();
+      if (attempts < 20) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, [flightDeckModalId]);
+
+  const openFlightDeckSession = useCallback((id: string) => {
+    setFlightDeckModalId(id);
+    setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
+
+  const openManageLabels = useCallback(() => {
+    setSettingsInitialTab('labels');
+    setShowSettings(true);
+  }, []);
+
+  const flightDeckModalSession = useMemo(
+    () => (flightDeckModalId ? sessions.find((s) => s.id === flightDeckModalId) ?? null : null),
+    [sessions, flightDeckModalId],
+  );
+
   const closeSessionTerminal = useCallback((id: string) => {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
@@ -367,9 +478,11 @@ export function App() {
   const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
   const showGitPanel = activeSession !== null && !gitPanelCollapsed;
   const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
-  const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
+  const sidebarCompact = view === 'flight-deck';
+  const effectiveSidebarWidth = sidebarCompact ? SIDEBAR_COMPACT_WIDTH : sidebarWidth;
+  const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}${sidebarCompact ? ' app--sidebar-compact' : ''}`;
   const appStyle = {
-    ['--sidebar-width' as string]: `${sidebarWidth}px`,
+    ['--sidebar-width' as string]: `${effectiveSidebarWidth}px`,
     ['--bottom-action-bar-height' as string]: `${BOTTOM_ACTION_BAR_HEIGHT}px`,
     ...(showBottomDock ? { ['--bottom-dock-height' as string]: `${bottomDockHeight}px` } : {}),
   } as React.CSSProperties;
@@ -467,7 +580,12 @@ export function App() {
   return (
     <div className={appClass} style={appStyle}>
       <Sidebar
+        view={view}
+        onViewChange={setView}
+        compact={sidebarCompact}
+        showSessions={view === 'workspace'}
         sessions={sessions}
+        sessionLabels={sessionLabels}
         activeId={activeId}
         width={sidebarWidth}
         minWidth={SIDEBAR_MIN_WIDTH}
@@ -477,17 +595,28 @@ export function App() {
         onSelect={openSession}
         onDelete={(s) => setPendingDelete(s)}
         onNewSession={() => setShowNew(true)}
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenAgentData={() => setShowAgentData(true)}
-        onSetWaitingOnReview={async (s, value) => {
-          setSessions((prev) =>
-            prev.map((x) => (x.id === s.id ? { ...x, waitingOnReview: value } : x)),
-          );
-          await window.api.setWaitingOnReview(s.id, value);
-          await refresh();
+        onOpenSettings={() => {
+          setSettingsInitialTab(undefined);
+          setShowSettings(true);
         }}
+        onOpenAgentData={() => setShowAgentData(true)}
+        onSetSessionLabels={(s, labelIds) => void setSessionLabels(s.id, labelIds)}
+        onToggleMuted={(s, muted) => void setSessionMuted(s.id, muted)}
+        onManageLabels={openManageLabels}
       />
 
+      {view === 'flight-deck' ? (
+        <FlightDeck
+          sessions={sessions}
+          sessionLabels={sessionLabels}
+          onSelectSession={openFlightDeckSession}
+          onSetSessionLabels={(s, labelIds) => void setSessionLabels(s.id, labelIds)}
+          onToggleMuted={(s, muted) => void setSessionMuted(s.id, muted)}
+          onRevealInFinder={(s) => void openSessionInFinder(s)}
+          onOpenInVSCode={(s) => void openSessionInVSCode(s)}
+          onManageLabels={openManageLabels}
+        />
+      ) : (
       <main className="main-pane">
         {activeSession ? (
           <PaneHeader session={activeSession} onPasteWizardBrief={pasteWizardBrief}>
@@ -565,6 +694,28 @@ export function App() {
           </footer>
         )}
       </main>
+      )}
+
+      {flightDeckModalSession && (
+        <FlightDeckSessionModal
+          session={flightDeckModalSession}
+          sessionLabels={sessionLabels}
+          sessionPrompts={sessionPrompts}
+          themeName={resolvedTheme}
+          blurred={showNew || showSettings || showAgentData || pendingDelete !== null || vscodeMissing}
+          onClose={() => setFlightDeckModalId(null)}
+          onOpenInWorkspace={() => {
+            openSession(flightDeckModalSession.id);
+            setFlightDeckModalId(null);
+            setView('workspace');
+          }}
+          onRunPrompt={runFlightDeckPrompt}
+          onAddQuickNote={(id, text) => void addSessionQuickNote(id, text)}
+          onRemoveQuickNote={(id, noteId) => void removeSessionQuickNote(id, noteId)}
+          onScrollToBottom={scrollFlightDeckTerminalToBottom}
+          onTerminalApi={handleTerminalApi}
+        />
+      )}
 
       {showNew && (
         <NewSessionModal
@@ -574,7 +725,11 @@ export function App() {
             const list = await refresh();
             const created = list.find((s) => s.id === session.id);
             if (!created) return;
-            openSession(created.id);
+            if (view === 'flight-deck') {
+              openFlightDeckSession(created.id);
+            } else {
+              openSession(created.id);
+            }
             if (created.wizardBriefMarkdown) {
               queueWizardBriefSubmit(created.id, created.wizardBriefMarkdown);
             }
@@ -589,6 +744,7 @@ export function App() {
           onDeleted={async (id) => {
             setPendingDelete(null);
             closeSessionTerminal(id);
+            if (flightDeckModalId === id) setFlightDeckModalId(null);
             if (activeId === id) setActiveId(null);
             await refresh();
           }}
@@ -598,11 +754,16 @@ export function App() {
       {showSettings && (
         <SettingsModal
           current={settings}
-          onClose={() => setShowSettings(false)}
+          initialTab={settingsInitialTab}
+          onClose={() => {
+            setShowSettings(false);
+            setSettingsInitialTab(undefined);
+          }}
           onSettingsChange={setSettings}
           onSaved={(next) => {
             setSettings(next);
             setShowSettings(false);
+            setSettingsInitialTab(undefined);
           }}
         />
       )}

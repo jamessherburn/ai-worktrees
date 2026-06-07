@@ -10,6 +10,8 @@ type Props = {
   themeName: 'dark' | 'light';
   blurred: boolean;
   onHide: () => void;
+  /** When true, omits dock chrome for embedding in the flight deck modal grid. */
+  embedded?: boolean;
 };
 
 export function BuiltInTerminalPanel({
@@ -18,6 +20,7 @@ export function BuiltInTerminalPanel({
   themeName,
   blurred,
   onHide,
+  embedded,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
@@ -125,6 +128,18 @@ export function BuiltInTerminalPanel({
       });
     }
   }, [blurred]);
+
+  if (embedded) {
+    return (
+      <div className="built-in-terminal-panel built-in-terminal-panel--embedded">
+        <div className="built-in-terminal-body built-in-terminal-body--embedded">
+          <div className="built-in-terminal-shell" aria-hidden={blurred}>
+            <div className="built-in-terminal-host" ref={hostRef} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section className="built-in-terminal-panel bottom-dock-panel">
