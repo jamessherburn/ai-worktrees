@@ -8,7 +8,7 @@ import {
   sessionLabelMap,
   statusDotClass,
 } from '@shared/session-labels';
-import { GitHubMonitorWidget } from './GitHubMonitorWidget';
+import { GitHubStatsModal } from './GitHubStatsModal';
 import { SessionLabelChips } from './SessionLabelChips';
 import { SessionLabelMenu } from './SessionLabelMenu';
 
@@ -50,6 +50,7 @@ export function FlightDeck({
 }: Props) {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [showStats, setShowStats] = useState(false);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -163,6 +164,15 @@ export function FlightDeck({
             <InstrumentGauge label="Stopped" value={counts.stopped} tone="stopped" />
           </div>
         </div>
+        <div className="flight-deck-header-actions">
+          <button
+            type="button"
+            className="btn btn-ghost btn-small"
+            onClick={() => setShowStats(true)}
+          >
+            GitHub Stats
+          </button>
+        </div>
       </header>
 
       <div className="flight-deck-filters">
@@ -240,9 +250,14 @@ export function FlightDeck({
           ))
         )}
       </div>
-
-      <GitHubMonitorWidget repoPathsKey={githubRepoPathsKey} />
       </div>
+
+      {showStats && (
+        <GitHubStatsModal
+          repoPathsKey={githubRepoPathsKey}
+          onClose={() => setShowStats(false)}
+        />
+      )}
 
       {menu && (
         <SessionLabelMenu

@@ -11,8 +11,7 @@ import type {
   GitHubMonitorSkippedRepo,
   GitHubMonitorStatus,
 } from '@shared/github-monitor';
-import { listRepos } from './repos.js';
-import { getSettings } from './settings.js';
+import type { GitHubMonitorBucket } from '@shared/github-monitor';
 import {
   bucketIndexForDate,
   bucketLabelsForRange,
@@ -26,6 +25,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+const REPO_FETCH_CONCURRENCY = 4;
+const REPO_FETCH_TIMEOUT_MS = 60_000;
+
 function loginShell(): string {
   return process.env.SHELL || '/bin/zsh';
 }
@@ -35,7 +37,7 @@ async function runInLoginShell(
   opts: { timeout: number; maxBuffer?: number },
 ): Promise<string> {
   const shell = loginShell();
-  const { stdout } = await execFileAsync(shell, ['-lic', command], {
+  const { stdout } = await execFileAsync(shell, ['-lc', command], {
     timeout: opts.timeout,
     maxBuffer: opts.maxBuffer ?? 20 * 1024 * 1024,
     env: { ...process.env },
@@ -164,14 +166,55 @@ type RepoQueryData = {
   } | null;
 };
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function mapConcurrent<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+    }
+  }
+  const workers = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
+function mergeBuckets(target: GitHubMonitorBucket[], source: GitHubMonitorBucket[]): void {
+  for (let i = 0; i < target.length; i++) {
+    target[i].mergedPrs += source[i]?.mergedPrs ?? 0;
+    target[i].commits += source[i]?.commits ?? 0;
+    target[i].prApprovals += source[i]?.prApprovals ?? 0;
+    target[i].reviewComments += source[i]?.reviewComments ?? 0;
+  }
+}
+
 async function fetchRepoActivity(
   slug: string,
   range: GitHubMonitorRequest['timeRange'],
   labels: string[],
-  buckets: ReturnType<typeof emptyBuckets>,
-): Promise<void> {
+): Promise<GitHubMonitorBucket[]> {
+  const buckets = emptyBuckets(range);
   const [owner, name] = slug.split('/');
-  if (!owner || !name) return;
+  if (!owner || !name) return buckets;
 
   const since = rangeStartDate(range).toISOString();
   let prCursor: string | null = null;
@@ -191,7 +234,7 @@ async function fetchRepoActivity(
     });
 
     const repo: NonNullable<RepoQueryData['repository']> | null = pageData.repository;
-    if (!repo) return;
+    if (!repo) return buckets;
 
     for (const pr of repo.pullRequests.nodes) {
       if (!pr.mergedAt || !isWithinRange(pr.mergedAt, range)) continue;
@@ -245,6 +288,8 @@ async function fetchRepoActivity(
 
     if (!prCursor && !commitCursor) keepFetching = false;
   }
+
+  return buckets;
 }
 
 export async function getGitHubMonitorStatus(): Promise<GitHubMonitorStatus> {
@@ -277,21 +322,16 @@ export async function fetchGitHubMonitorStats(
     return { ok: false, reason: status.reason, message: status.message };
   }
 
-  const allPaths = new Set(request.repoPaths.filter(Boolean));
-  try {
-    const settings = await getSettings();
-    const codeDirRepos = await listRepos(settings.codeDir);
-    for (const repo of codeDirRepos) allPaths.add(repo.path);
-  } catch {
-    // code dir scan is best-effort
-  }
+  const allPaths = [...new Set(request.repoPaths.filter(Boolean))];
 
   const slugByPath = new Map<string, string>();
   const skipped: GitHubMonitorSkippedRepo[] = [];
   const skippedPaths = new Set<string>();
 
-  for (const path of allPaths) {
-    const resolved = await resolveSlugFromPath(path);
+  const resolveResults = await Promise.all(
+    allPaths.map(async (path) => ({ path, resolved: await resolveSlugFromPath(path) })),
+  );
+  for (const { path, resolved } of resolveResults) {
     if (resolved.ok) {
       slugByPath.set(path, resolved.slug);
     } else if (!skippedPaths.has(path)) {
@@ -338,9 +378,14 @@ export async function fetchGitHubMonitorStats(
   const buckets = emptyBuckets(request.timeRange);
 
   const fetchErrors: string[] = [];
-  for (const repo of targetRepos) {
+  await mapConcurrent(targetRepos, REPO_FETCH_CONCURRENCY, async (repo) => {
     try {
-      await fetchRepoActivity(repo.slug, request.timeRange, labels, buckets);
+      const repoBuckets = await withTimeout(
+        fetchRepoActivity(repo.slug, request.timeRange, labels),
+        REPO_FETCH_TIMEOUT_MS,
+        `Timed out after ${REPO_FETCH_TIMEOUT_MS / 1000}s`,
+      );
+      mergeBuckets(buckets, repoBuckets);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       fetchErrors.push(`${repo.slug}: ${message}`);
@@ -350,7 +395,7 @@ export async function fetchGitHubMonitorStats(
         reason: 'fetch-failed',
       });
     }
-  }
+  });
 
   if (targetRepos.length > 0 && fetchErrors.length === targetRepos.length) {
     return {

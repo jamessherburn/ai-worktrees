@@ -2063,6 +2063,16 @@ body.resizing-sidebar .sidebar-resize {
   min-height: 0;
 }
 
+.modal.modal-stats {
+  width: 960px;
+}
+
+.modal-stats-body {
+  overflow: auto;
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+
 .session-prompts-settings-hint {
   font-size: 11px;
   margin: 0 0 10px;
@@ -3102,6 +3112,7 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .sidebar-view-hint {
@@ -4232,6 +4243,14 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   background: var(--bg-elev);
 }
 
+.gh-monitor--embedded {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
 .gh-monitor-header {
   display: flex;
   align-items: flex-start;
@@ -4257,6 +4276,15 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   align-items: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.gh-monitor--embedded .gh-monitor-header {
+  margin-bottom: 12px;
+}
+
+.gh-monitor--embedded .gh-monitor-controls {
+  width: 100%;
+  justify-content: flex-end;
 }
 
 .gh-monitor-control {
