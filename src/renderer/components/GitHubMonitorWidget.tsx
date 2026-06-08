@@ -8,6 +8,8 @@ import type {
 type Props = {
   /** Stable serialized repo paths (newline-separated); avoids refetch on every session poll. */
   repoPathsKey: string;
+  /** When true, omits the section title for embedding in GitHubStatsModal. */
+  embedded?: boolean;
 };
 
 const TIME_RANGES: { id: GitHubMonitorTimeRange; label: string }[] = [
@@ -39,7 +41,7 @@ function pathsFromKey(key: string): string[] {
   return key.split('\n').filter(Boolean);
 }
 
-export function GitHubMonitorWidget({ repoPathsKey }: Props) {
+export function GitHubMonitorWidget({ repoPathsKey, embedded = false }: Props) {
   const [timeRange, setTimeRange] = useState<GitHubMonitorTimeRange>('30d');
   const [repoFilter, setRepoFilter] = useState<string>('all');
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
@@ -50,56 +52,62 @@ export function GitHubMonitorWidget({ repoPathsKey }: Props) {
     const uniquePaths = pathsFromKey(repoPathsKey);
 
     setState({ kind: 'loading' });
-    const status = await window.api.githubMonitor.status();
-    if (fetchId !== fetchIdRef.current) return;
+    try {
+      const status = await window.api.githubMonitor.status();
+      if (fetchId !== fetchIdRef.current) return;
 
-    if (status.ready === false) {
-      setState({
-        kind: 'unavailable',
-        message: status.message,
-        reason: status.reason,
-      });
-      return;
-    }
-
-    if (uniquePaths.length === 0) {
-      setState({
-        kind: 'unavailable',
-        message:
-          'No local git repositories to monitor. Create a worktree session with a GitHub remote (origin).',
-        reason: 'no-repos',
-      });
-      return;
-    }
-
-    const result = await window.api.githubMonitor.fetch({
-      timeRange,
-      repoPaths: uniquePaths,
-      repo: repoFilter === 'all' ? undefined : repoFilter,
-    });
-    if (fetchId !== fetchIdRef.current) return;
-
-    if (!result.ok) {
-      if (result.reason === 'gh-not-installed' || result.reason === 'gh-not-authenticated') {
+      if (status.ready === false) {
         setState({
           kind: 'unavailable',
-          message: result.message,
-          reason: result.reason,
+          message: status.message,
+          reason: status.reason,
         });
         return;
       }
-      setState({ kind: 'error', message: result.message });
-      return;
-    }
 
-    setState({
-      kind: 'ready',
-      repos: result.repos.map((r) => ({ slug: r.slug, name: r.name })),
-      skipped: result.skipped,
-      buckets: result.buckets,
-      totals: result.totals,
-      fetchedAt: result.fetchedAt,
-    });
+      if (uniquePaths.length === 0) {
+        setState({
+          kind: 'unavailable',
+          message:
+            'No local git repositories to monitor. Create a worktree session with a GitHub remote (origin).',
+          reason: 'no-repos',
+        });
+        return;
+      }
+
+      const result = await window.api.githubMonitor.fetch({
+        timeRange,
+        repoPaths: uniquePaths,
+        repo: repoFilter === 'all' ? undefined : repoFilter,
+      });
+      if (fetchId !== fetchIdRef.current) return;
+
+      if (!result.ok) {
+        if (result.reason === 'gh-not-installed' || result.reason === 'gh-not-authenticated') {
+          setState({
+            kind: 'unavailable',
+            message: result.message,
+            reason: result.reason,
+          });
+          return;
+        }
+        setState({ kind: 'error', message: result.message });
+        return;
+      }
+
+      setState({
+        kind: 'ready',
+        repos: result.repos.map((r) => ({ slug: r.slug, name: r.name })),
+        skipped: result.skipped,
+        buckets: result.buckets,
+        totals: result.totals,
+        fetchedAt: result.fetchedAt,
+      });
+    } catch (err) {
+      if (fetchId !== fetchIdRef.current) return;
+      const message = err instanceof Error ? err.message : 'Failed to load GitHub activity.';
+      setState({ kind: 'error', message });
+    }
   }, [timeRange, repoFilter, repoPathsKey]);
 
   useEffect(() => {
@@ -114,14 +122,19 @@ export function GitHubMonitorWidget({ repoPathsKey }: Props) {
   }, [state, repoFilter]);
 
   return (
-    <section className="gh-monitor" aria-label="GitHub activity">
+    <section
+      className={`gh-monitor${embedded ? ' gh-monitor--embedded' : ''}`}
+      aria-label="GitHub activity"
+    >
       <div className="gh-monitor-header">
-        <div className="gh-monitor-title-block">
-          <h2 className="gh-monitor-title">GitHub Activity</h2>
-          <p className="gh-monitor-subtitle muted">
-            Aggregated across your code directory and session repos with a GitHub origin
-          </p>
-        </div>
+        {!embedded && (
+          <div className="gh-monitor-title-block">
+            <h2 className="gh-monitor-title">GitHub Activity</h2>
+            <p className="gh-monitor-subtitle muted">
+              Aggregated across your session repos with a GitHub origin remote
+            </p>
+          </div>
+        )}
         <div className="gh-monitor-controls">
           <label className="gh-monitor-control">
             <span className="gh-monitor-control-label">Repository</span>
@@ -181,7 +194,8 @@ export function GitHubMonitorWidget({ repoPathsKey }: Props) {
           {state.reason === 'gh-not-authenticated' && (
             <p className="gh-monitor-status-hint muted">
               Run <span className="kbd">gh auth login</span> in a terminal. Your token needs{' '}
-              <span className="kbd">repo</span> read scope for private repositories.
+              <span className="kbd">repo</span> read scope for private repositories. For org repos with
+              SSO, also run <span className="kbd">gh auth refresh -s repo</span>.
             </p>
           )}
           {state.reason === 'gh-not-installed' && (
