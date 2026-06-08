@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { GitFileChange, GitFileChangeKind, GitWorktreeStatus } from '@shared/types';
 
@@ -241,6 +242,39 @@ export async function discardFileChanges(
   if (oldPath) args.push(oldPath);
   args.push(path);
   await git(worktreePath, args);
+}
+
+export async function currentBranch(cwd: string): Promise<string> {
+  return git(cwd, ['branch', '--show-current']);
+}
+
+export async function resolveRepoPath(cwd: string): Promise<string> {
+  try {
+    const commonDir = await git(cwd, ['rev-parse', '--git-common-dir']);
+    const absCommon = commonDir.startsWith('/') ? commonDir : join(cwd, commonDir);
+    if (absCommon.endsWith('/.git') || absCommon.endsWith('.git')) {
+      return dirname(absCommon);
+    }
+    const worktreesIdx = absCommon.indexOf('/.git/worktrees/');
+    if (worktreesIdx !== -1) {
+      return absCommon.slice(0, worktreesIdx);
+    }
+    return dirname(absCommon);
+  } catch {
+    return cwd;
+  }
+}
+
+export async function worktreeMetadata(
+  cwd: string,
+): Promise<{ branchName: string; repoPath: string; repoName: string }> {
+  try {
+    const branchName = (await currentBranch(cwd)) || basename(cwd);
+    const repoPath = await resolveRepoPath(cwd);
+    return { branchName, repoPath, repoName: basename(repoPath) };
+  } catch {
+    return { branchName: basename(cwd), repoPath: cwd, repoName: basename(cwd) };
+  }
 }
 
 export async function getFileDiff(

@@ -23,16 +23,7 @@
   --warning: #cca700;
   --terminal-bg: #0f0f0f;
   --shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --wizard-rainbow-gradient: linear-gradient(
-    135deg,
-    #ef4444,
-    #f97316,
-    #eab308,
-    #22c55e,
-    #3b82f6,
-    #a855f7,
-    #ec4899
-  );
+  --wizard-border-color: #a855f7;
 
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
   font-size: 13px;
@@ -135,7 +126,8 @@ body.resizing-bottom-dock {
   cursor: row-resize !important;
   user-select: none !important;
 }
-body.resizing-settings-modal {
+body.resizing-settings-modal,
+body.resizing-flight-deck-workspace {
   cursor: nwse-resize !important;
   user-select: none !important;
 }
@@ -151,6 +143,7 @@ body.resizing-bottom-dock-split *,
 body.resizing-tasks-panel *,
 body.resizing-bottom-dock *,
 body.resizing-settings-modal *,
+body.resizing-flight-deck-workspace *,
 body.flight-deck-snapping * {
   user-select: none !important;
 }
@@ -203,7 +196,7 @@ body.resizing-sidebar .sidebar-resize {
 }
 
 .sidebar--compact .sidebar-header-main {
-  padding: 0 6px 8px;
+  padding: 0 8px 8px;
   align-items: stretch;
 }
 
@@ -211,7 +204,18 @@ body.resizing-sidebar .sidebar-resize {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 8px 6px;
+  padding: 8px 8px;
+}
+
+/* Flight deck compact sidebar — keep controls clear of macOS traffic lights */
+.app--sidebar-compact .sidebar-header-main {
+  padding-left: 12px;
+  padding-right: 10px;
+}
+
+.app--sidebar-compact .sidebar-actions {
+  padding-left: 12px;
+  padding-right: 10px;
 }
 
 .sidebar--compact .sidebar-actions-icons {
@@ -528,11 +532,13 @@ body.resizing-sidebar .sidebar-resize {
   white-space: nowrap;
 }
 
-.session-agent-tag-wrap {
+.session-agent-tag-wrap,
+.session-agent-tag-group {
   flex-shrink: 0;
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   max-width: 100%;
   min-width: 0;
   overflow: visible;
@@ -552,7 +558,7 @@ body.resizing-sidebar .sidebar-resize {
   inset: 0;
   border-radius: inherit;
   padding: 2px;
-  background: var(--wizard-rainbow-gradient);
+  background: var(--wizard-border-color);
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -582,6 +588,27 @@ body.resizing-sidebar .sidebar-resize {
   color: #7c3aed;
   border-color: #7c3aed;
   background: color-mix(in srgb, #7c3aed 10%, transparent);
+}
+
+.session-external-label {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid #f97316;
+  background: color-mix(in srgb, #f97316 14%, transparent);
+  color: #fdba74;
+}
+[data-theme='light'] .session-external-label {
+  color: #c2410c;
+  border-color: #ea580c;
+  background: color-mix(in srgb, #ea580c 10%, transparent);
 }
 
 .session-agent-tag {
@@ -1005,6 +1032,25 @@ body.resizing-sidebar .sidebar-resize {
   background: color-mix(in srgb, #7c3aed 10%, transparent);
 }
 
+.pane-external-label {
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #f97316;
+  background: color-mix(in srgb, #f97316 14%, transparent);
+  color: #fdba74;
+}
+[data-theme='light'] .pane-external-label {
+  color: #c2410c;
+  border-color: #ea580c;
+  background: color-mix(in srgb, #ea580c 10%, transparent);
+}
+
 .pane-subtitle {
   font-size: 11px;
   color: var(--text-muted);
@@ -1104,6 +1150,10 @@ body.resizing-sidebar .sidebar-resize {
   inset: 0;
   padding: 12px 16px 10px 16px;
   background: var(--terminal-bg);
+}
+
+.terminal-shell--embedded {
+  padding: 0;
 }
 
 /* ------- Empty state ------- */
@@ -2309,6 +2359,10 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   background: var(--terminal-bg);
 }
 
+.built-in-terminal-shell--embedded {
+  padding: 0;
+}
+
 /* ------- Tasks panel ------- */
 .tasks-panel {
   background: var(--bg-elev);
@@ -3435,10 +3489,8 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(1520px, calc(100vw - 24px));
-  height: min(940px, calc(100vh - 24px));
-  max-width: 100%;
-  max-height: 100%;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: var(--bg);
@@ -3452,6 +3504,34 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   box-shadow:
     0 24px 56px color-mix(in srgb, #000 14%, transparent),
     0 8px 20px color-mix(in srgb, #000 8%, transparent);
+}
+
+.flight-deck-workspace-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+  border-bottom-right-radius: 12px;
+}
+
+.flight-deck-workspace-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.65;
+}
+
+.flight-deck-workspace-resize-handle:hover::after {
+  opacity: 1;
+  border-color: var(--accent);
 }
 
 .flight-deck-workspace-top {
@@ -3668,8 +3748,18 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   inset: 0;
 }
 
+.flight-deck-grid-window-body .terminal-host,
+.flight-deck-grid-window-body .built-in-terminal-host {
+  padding: 0;
+}
+
 .flight-deck-grid-window-body .xterm {
   height: 100%;
+  padding: 0;
+}
+
+.flight-deck-grid-window-body .xterm .xterm-screen {
+  padding: 0;
 }
 
 .flight-deck-snap-menu {
@@ -3782,13 +3872,16 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 .session-quick-notes-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   background: color-mix(in srgb, var(--bg) 40%, transparent);
   color: var(--text);
   font: inherit;
   font-size: 12px;
+  line-height: 32px;
 }
 
 .session-quick-notes-input::placeholder {

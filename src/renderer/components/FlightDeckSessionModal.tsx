@@ -34,6 +34,48 @@ const PANEL_META: Record<PanelId, { title: string; label: string }> = {
   git: { title: 'Git', label: 'Git diff' },
 };
 
+const WORKSPACE_SIZE_KEY = 'flight-deck-workspace-size';
+const WORKSPACE_DEFAULT_WIDTH = 1520;
+const WORKSPACE_DEFAULT_HEIGHT = 940;
+const WORKSPACE_MIN_WIDTH = 720;
+const WORKSPACE_MIN_HEIGHT = 480;
+const WORKSPACE_VIEWPORT_MARGIN = 24;
+
+type WorkspaceSize = { width: number; height: number };
+
+function maxWorkspaceSize(): WorkspaceSize {
+  if (typeof window === 'undefined') {
+    return { width: WORKSPACE_DEFAULT_WIDTH, height: WORKSPACE_DEFAULT_HEIGHT };
+  }
+  return {
+    width: window.innerWidth - WORKSPACE_VIEWPORT_MARGIN,
+    height: window.innerHeight - WORKSPACE_VIEWPORT_MARGIN,
+  };
+}
+
+function clampWorkspaceSize(width: number, height: number): WorkspaceSize {
+  const max = maxWorkspaceSize();
+  return {
+    width: Math.min(max.width, Math.max(WORKSPACE_MIN_WIDTH, width)),
+    height: Math.min(max.height, Math.max(WORKSPACE_MIN_HEIGHT, height)),
+  };
+}
+
+function loadWorkspaceSize(): WorkspaceSize {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_SIZE_KEY);
+    if (!raw) return clampWorkspaceSize(WORKSPACE_DEFAULT_WIDTH, WORKSPACE_DEFAULT_HEIGHT);
+    const parsed = JSON.parse(raw) as { width?: number; height?: number };
+    return clampWorkspaceSize(Number(parsed.width), Number(parsed.height));
+  } catch {
+    return clampWorkspaceSize(WORKSPACE_DEFAULT_WIDTH, WORKSPACE_DEFAULT_HEIGHT);
+  }
+}
+
+function persistWorkspaceSize(size: WorkspaceSize) {
+  localStorage.setItem(WORKSPACE_SIZE_KEY, JSON.stringify(size));
+}
+
 type Props = {
   session: SessionWithStatus;
   sessionLabels: SessionLabel[];
@@ -71,6 +113,8 @@ export function FlightDeckSessionModal({
   });
   const [dragging, setDragging] = useState<PanelId | null>(null);
   const [snapPreview, setSnapPreview] = useState<SnapZoneId | null>(null);
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const [workspaceSize, setWorkspaceSize] = useState<WorkspaceSize>(() => loadWorkspaceSize());
 
   const activePanelIds = useMemo(
     () => PANEL_IDS.filter((p) => visiblePanels.has(p)),
@@ -84,12 +128,14 @@ export function FlightDeckSessionModal({
       persistPanelLayout(session.id, next);
       return next;
     });
+    setLayoutRevision((n) => n + 1);
   }, [session.id]);
 
   const applyLayout = useCallback(
     (next: PanelLayout) => {
       setLayout(next);
       persistPanelLayout(session.id, next);
+      setLayoutRevision((n) => n + 1);
     },
     [session.id],
   );
@@ -111,6 +157,7 @@ export function FlightDeckSessionModal({
           persistPanelLayout(session.id, next);
           return next;
         });
+        setLayoutRevision((n) => n + 1);
         return nextVisible;
       });
     },
@@ -177,13 +224,53 @@ export function FlightDeckSessionModal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+    const onWindowResize = () => {
+      setWorkspaceSize((prev) => clampWorkspaceSize(prev.width, prev.height));
+    };
     document.body.classList.add('flight-deck-workspace-open');
     window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onWindowResize);
+    const fitTimer = window.setTimeout(() => setLayoutRevision((n) => n + 1), 200);
     return () => {
+      window.clearTimeout(fitTimer);
       document.body.classList.remove('flight-deck-workspace-open');
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onWindowResize);
     };
   }, [onClose]);
+
+  const onResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const start = workspaceSize;
+      document.body.classList.add('resizing-flight-deck-workspace');
+
+      const onMove = (ev: MouseEvent) => {
+        const dw = ev.clientX - startX;
+        const dh = ev.clientY - startY;
+        setWorkspaceSize(clampWorkspaceSize(start.width + dw, start.height + dh));
+      };
+
+      const onUp = (ev: MouseEvent) => {
+        document.body.classList.remove('resizing-flight-deck-workspace');
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        const dw = ev.clientX - startX;
+        const dh = ev.clientY - startY;
+        const next = clampWorkspaceSize(start.width + dw, start.height + dh);
+        setWorkspaceSize(next);
+        persistWorkspaceSize(next);
+        setLayoutRevision((n) => n + 1);
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [workspaceSize],
+  );
 
   const kind = activityKindFor(session);
   const labels = labelsForSession(session, new Map(sessionLabels.map((l) => [l.id, l])));
@@ -196,6 +283,7 @@ export function FlightDeckSessionModal({
         role="dialog"
         aria-modal="true"
         aria-label={`${session.name} workspace`}
+        style={{ width: workspaceSize.width, height: workspaceSize.height }}
         onMouseDown={(e) => e.stopPropagation()}
       >
       <header className="flight-deck-workspace-top">
@@ -209,8 +297,15 @@ export function FlightDeckSessionModal({
               {session.global ? <span className="pane-global-label">Global</span> : null}
             </div>
             <div className="flight-deck-modal-subtitle">
-              <span className={`session-agent-tag agent-${session.agentId}`}>
-                {getAgent(session.agentId).name}
+              <span className="session-agent-tag-group">
+                <span className={`session-agent-tag agent-${session.agentId}`}>
+                  {getAgent(session.agentId).name}
+                </span>
+                {session.external ? (
+                  <span className="session-external-label" title="External session">
+                    External Session
+                  </span>
+                ) : null}
               </span>
               <span className="flight-deck-modal-activity">{activityLabelFor(session)}</span>
               {!session.global && (
@@ -275,6 +370,8 @@ export function FlightDeckSessionModal({
                   visible
                   blurred={blurred ?? false}
                   themeName={themeName}
+                  embedded
+                  layoutRevision={layoutRevision}
                   onTerminalApi={onTerminalApi}
                 />
               )}
@@ -285,6 +382,7 @@ export function FlightDeckSessionModal({
                   themeName={themeName}
                   blurred={blurred ?? false}
                   embedded
+                  layoutRevision={layoutRevision}
                   onHide={() => togglePanel('shell')}
                 />
               )}
@@ -311,6 +409,12 @@ export function FlightDeckSessionModal({
           onRemove={onRemoveQuickNote}
         />
       </footer>
+      <div
+        className="flight-deck-workspace-resize-handle"
+        onMouseDown={onResizeMouseDown}
+        title="Drag to resize"
+        aria-hidden
+      />
       </div>
     </div>
   );

@@ -18,11 +18,25 @@ type Props = {
   visible: boolean;
   blurred: boolean;
   themeName: 'dark' | 'light';
+  /** When true, omits outer padding and refits when the host layout changes (flight deck grid). */
+  embedded?: boolean;
+  /** Bumped when an embedded terminal's container layout changes. */
+  layoutRevision?: number;
   onExit?: (sessionId: string) => void;
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
 };
 
-export function TerminalView({ sessionId, agentId, visible, blurred, themeName, onExit, onTerminalApi }: Props) {
+export function TerminalView({
+  sessionId,
+  agentId,
+  visible,
+  blurred,
+  themeName,
+  embedded = false,
+  layoutRevision = 0,
+  onExit,
+  onTerminalApi,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -130,6 +144,12 @@ export function TerminalView({ sessionId, agentId, visible, blurred, themeName, 
 
       resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(host);
+      if (embedded) {
+        const parent = host.parentElement;
+        if (parent) resizeObserver.observe(parent);
+        const grandparent = parent?.parentElement;
+        if (grandparent) resizeObserver.observe(grandparent);
+      }
 
       if (visible && !blurred) term.focus();
     };
@@ -169,8 +189,22 @@ export function TerminalView({ sessionId, agentId, visible, blurred, themeName, 
     }
   }, [visible, blurred]);
 
+  useEffect(() => {
+    if (!embedded) return;
+    const fit = fitRef.current;
+    if (!fit) return;
+    const timer = window.setTimeout(() => {
+      try {
+        fit.fit();
+      } catch {
+        // ignore: layout not stable
+      }
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [embedded, layoutRevision]);
+
   return (
-    <div className="terminal-shell" aria-hidden={blurred}>
+    <div className={`terminal-shell${embedded ? ' terminal-shell--embedded' : ''}`} aria-hidden={blurred}>
       <div className="terminal-host" ref={hostRef} />
     </div>
   );

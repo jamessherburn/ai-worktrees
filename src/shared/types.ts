@@ -39,6 +39,8 @@ export type Session = {
   wizardBriefMarkdown?: string;
   /** Runs the agent at the code directory from settings; no git worktree is created. */
   global?: boolean;
+  /** Agent process running outside this app; not persisted in sessions.json. */
+  external?: boolean;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';
