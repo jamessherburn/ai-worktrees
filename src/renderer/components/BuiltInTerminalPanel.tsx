@@ -3,6 +3,7 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { getTerminalTheme } from '../terminal-theme';
+import { syncTerminalInteractive } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
 
 type Props = {
@@ -29,6 +30,28 @@ export function BuiltInTerminalPanel({
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const ptyReadyRef = useRef(false);
+  const activationCleanupRef = useRef<(() => void) | null>(null);
+  const blurredRef = useRef(blurred);
+  blurredRef.current = blurred;
+
+  const clearActivation = () => {
+    activationCleanupRef.current?.();
+    activationCleanupRef.current = null;
+  };
+
+  const applyTerminalActivation = (focusDelayMs = 50) => {
+    const term = termRef.current;
+    if (!term || !ptyReadyRef.current) return;
+    clearActivation();
+    activationCleanupRef.current = syncTerminalInteractive(
+      term,
+      fitRef.current,
+      !blurredRef.current,
+      (cols, rows) => window.api.shellPty.resize(sessionId, cols, rows),
+      focusDelayMs,
+    );
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -53,10 +76,12 @@ export function BuiltInTerminalPanel({
     fitRef.current = fitAddon;
 
     let cancelled = false;
+    let pendingBacklogReplay = false;
     let unsubData: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
     let resizeObserver: ResizeObserver | undefined;
     let fitTimer: number | undefined;
+    ptyReadyRef.current = false;
 
     const fitSafely = () => {
       if (host.clientWidth === 0 || host.clientHeight === 0) return;
@@ -73,7 +98,12 @@ export function BuiltInTerminalPanel({
     };
 
     unsubData = window.api.shellPty.onData(({ sessionId: id, data }) => {
-      if (id === sessionId) term.write(data);
+      if (id !== sessionId) return;
+      if (pendingBacklogReplay) {
+        term.reset();
+        pendingBacklogReplay = false;
+      }
+      term.write(data);
     });
 
     unsubExit = window.api.shellPty.onExit(({ sessionId: id, exitCode }) => {
@@ -90,6 +120,8 @@ export function BuiltInTerminalPanel({
         return;
       }
 
+      pendingBacklogReplay = result.reattached;
+
       term.onData((data) => window.api.shellPty.write(sessionId, data));
       term.onResize(({ cols, rows }) => window.api.shellPty.resize(sessionId, cols, rows));
 
@@ -102,13 +134,16 @@ export function BuiltInTerminalPanel({
         if (grandparent) resizeObserver.observe(grandparent);
       }
 
-      if (!blurred) term.focus();
+      ptyReadyRef.current = true;
+      applyTerminalActivation(result.reattached ? 100 : 50);
     };
 
     void start();
 
     return () => {
       cancelled = true;
+      ptyReadyRef.current = false;
+      clearActivation();
       if (fitTimer !== undefined) window.clearTimeout(fitTimer);
       unsubData?.();
       unsubExit?.();
@@ -127,16 +162,10 @@ export function BuiltInTerminalPanel({
   }, [themeName]);
 
   useEffect(() => {
-    const term = termRef.current;
-    if (!term) return;
-    if (blurred) {
-      term.blur();
-    } else {
-      requestAnimationFrame(() => {
-        fitRef.current?.fit();
-        term.focus();
-      });
-    }
+    if (!ptyReadyRef.current) return;
+    applyTerminalActivation(50);
+    return clearActivation;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activation tied to session mount refs
   }, [blurred]);
 
   useEffect(() => {
