@@ -94,8 +94,41 @@ function isUnregisteredWorktreeError(err: unknown): boolean {
   return /is not a working tree/i.test(text);
 }
 
-async function removeOrphanWorktreeDirectory(worktreePath: string): Promise<void> {
-  await fs.rm(worktreePath, { recursive: true, force: true });
+function isDirtyWorktreeRefusal(err: unknown): boolean {
+  if (!(err instanceof GitError)) return false;
+  const text = `${err.message}\n${err.stderr}`;
+  return /contains modified or untracked files/i.test(text) || /is locked/i.test(text);
+}
+
+function isDirectoryRemovalError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'ENOTEMPTY' || code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+}
+
+function shouldForceRemoveWorktreeDirectory(err: unknown, force: boolean): boolean {
+  if (force || isUnregisteredWorktreeError(err)) return true;
+  if (isDirectoryRemovalError(err)) return true;
+  if (err instanceof GitError) {
+    const text = `${err.message}\n${err.stderr}`;
+    return /not empty|ENOTEMPTY|EBUSY|Permission denied|Device or resource busy/i.test(text);
+  }
+  return false;
+}
+
+async function pruneWorktrees(repoPath: string): Promise<void> {
+  try {
+    await git(repoPath, ['worktree', 'prune']);
+  } catch {
+    // ignore: nothing to prune
+  }
+}
+
+async function forceRemoveWorktreeDirectory(worktreePath: string): Promise<void> {
+  try {
+    await fs.rm(worktreePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch {
+    await execFileAsync('/bin/rm', ['-rf', worktreePath]);
+  }
 }
 
 export async function removeWorktree(repoPath: string, worktreePath: string, force: boolean): Promise<void> {
@@ -104,15 +137,14 @@ export async function removeWorktree(repoPath: string, worktreePath: string, for
   args.push(worktreePath);
   try {
     await git(repoPath, args);
+    return;
   } catch (err) {
-    if (!isUnregisteredWorktreeError(err)) throw err;
-    await removeOrphanWorktreeDirectory(worktreePath);
-    try {
-      await git(repoPath, ['worktree', 'prune']);
-    } catch {
-      // ignore: nothing to prune
-    }
+    if (isDirtyWorktreeRefusal(err) && !force) throw err;
+    if (!shouldForceRemoveWorktreeDirectory(err, force)) throw err;
   }
+
+  await forceRemoveWorktreeDirectory(worktreePath);
+  await pruneWorktrees(repoPath);
 }
 
 export async function deleteBranch(repoPath: string, branch: string): Promise<void> {

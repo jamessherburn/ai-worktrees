@@ -102,6 +102,11 @@ export async function startPty(opts: {
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
   if (ptys.has(opts.sessionId)) {
     const existing = ptys.get(opts.sessionId)!;
+    try {
+      existing.proc.resize(opts.cols, opts.rows);
+    } catch {
+      // ignore: pty may have just exited
+    }
     const snapshot = existing.backlog.join('');
     queueMicrotask(() => {
       if (snapshot) listener?.send(IPC.PtyData, { sessionId: opts.sessionId, data: snapshot });
