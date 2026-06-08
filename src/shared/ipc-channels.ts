@@ -49,6 +49,8 @@ export const IPC = {
   GhSetupProgress: 'gh-setup:progress',
   GitHubMonitorStatus: 'github-monitor:status',
   GitHubMonitorFetch: 'github-monitor:fetch',
+  ShortcutsSync: 'shortcuts:sync',
+  ShortcutAction: 'shortcuts:action',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

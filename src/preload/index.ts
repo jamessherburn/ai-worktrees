@@ -25,6 +25,7 @@ import type {
   Settings,
 } from '@shared/types';
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
+import type { KeyboardShortcutAction, KeyboardShortcutsConfig } from '@shared/keyboard-shortcuts';
 import type { AgentAvailability, AgentId } from '@shared/agents';
 
 type PtyDataPayload = { sessionId: string; data: string };
@@ -61,6 +62,15 @@ const api = {
   deleteSession: (input: DeleteSessionInput) => ipcRenderer.invoke(IPC.DeleteSession, input),
   listRepos: (): Promise<RepoInfo[]> => ipcRenderer.invoke(IPC.ListRepos),
   getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.GetSettings),
+  syncKeyboardShortcuts: (shortcuts: KeyboardShortcutsConfig) =>
+    ipcRenderer.send(IPC.ShortcutsSync, shortcuts),
+  onShortcutAction: (cb: (action: KeyboardShortcutAction) => void) => {
+    const listener = (_: unknown, action: KeyboardShortcutAction) => cb(action);
+    ipcRenderer.on(IPC.ShortcutAction, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC.ShortcutAction, listener);
+    };
+  },
   updateSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke(IPC.UpdateSettings, patch),
   exportSettings: (): Promise<SettingsExportResult> => ipcRenderer.invoke(IPC.ExportSettings),

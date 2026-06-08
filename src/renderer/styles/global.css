@@ -1177,6 +1177,12 @@ body.resizing-sidebar .sidebar-resize {
   padding: 0;
 }
 
+/* Cursor agent draws its own prompt; hide xterm's stray block cursor. */
+.terminal-shell--cursor-agent .xterm-cursor-layer,
+.terminal-shell--cursor-agent .xterm-cursor {
+  opacity: 0 !important;
+}
+
 /* ------- Empty state ------- */
 .empty-state {
   position: absolute;
@@ -2142,6 +2148,61 @@ body.resizing-sidebar .sidebar-resize {
   overflow: auto;
   padding-top: 8px;
   padding-bottom: 12px;
+}
+
+.keyboard-shortcuts-settings-hint {
+  font-size: 11px;
+  margin: 0 0 12px;
+  line-height: 1.45;
+}
+
+.keyboard-shortcuts-settings-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.keyboard-shortcuts-settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.keyboard-shortcuts-settings-label {
+  font-size: 13px;
+}
+
+.keyboard-shortcuts-settings-binding {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+  min-width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.keyboard-shortcuts-settings-binding:hover {
+  border-color: var(--accent);
+}
+
+.keyboard-shortcuts-settings-binding.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.keyboard-shortcuts-settings-reset {
+  margin-top: 4px;
 }
 
 .session-prompts-settings-hint {
@@ -3504,6 +3565,11 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
   background: color-mix(in srgb, var(--bg) 6%, rgba(0, 0, 0, 0.12));
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+}
+
+.flight-deck-workspace-backdrop--expanded {
+  align-items: flex-start;
+  padding-top: 56px;
 }
 
 .flight-deck-workspace {

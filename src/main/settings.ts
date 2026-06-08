@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Settings } from '@shared/types';
+import { normalizeKeyboardShortcuts } from '@shared/keyboard-shortcuts';
 import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
@@ -28,6 +29,7 @@ function normalizeSettings(s: StoredSettings): Settings {
     tasks: normalizeTasksConfig(s.tasks),
     sessionPrompts: resolveSessionPrompts(s.sessionPrompts, s.recapPrompt),
     sessionLabels: normalizeSessionLabels(s.sessionLabels),
+    keyboardShortcuts: normalizeKeyboardShortcuts(s.keyboardShortcuts),
   };
 }
 

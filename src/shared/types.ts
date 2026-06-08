@@ -1,4 +1,5 @@
 import type { AgentId } from './agents';
+import type { KeyboardShortcutsConfig } from './keyboard-shortcuts';
 import type { WizardConfig } from './wizard';
 
 export type SessionLabel = {
@@ -89,6 +90,8 @@ export type Settings = {
   sessionPrompts?: SessionPromptPreset[];
   /** User-defined labels for categorizing sessions. */
   sessionLabels?: SessionLabel[];
+  /** Customizable keyboard shortcuts. */
+  keyboardShortcuts?: KeyboardShortcutsConfig;
 };
 
 export type RepoInfo = {
