@@ -59,6 +59,7 @@ import {
   removeSessionQuickNote,
   setSessionWaitingOnReview,
 } from './sessions.js';
+import { setKeyboardShortcuts } from './keyboard-shortcuts-handler.js';
 import { getSettings, replaceSettings, updateSettings } from './settings.js';
 import {
   getActivityState,
@@ -167,7 +168,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
     const next = await updateSettings(patch);
     if (patch.theme) nativeTheme.themeSource = nativeThemeSource(patch.theme);
+    if (patch.keyboardShortcuts) setKeyboardShortcuts(next.keyboardShortcuts ?? {});
     return next;
+  });
+
+  ipcMain.on(IPC.ShortcutsSync, (_e, shortcuts: Settings['keyboardShortcuts']) => {
+    setKeyboardShortcuts(shortcuts ?? {});
   });
 
   ipcMain.handle(IPC.ExportSettings, async (): Promise<SettingsExportResult> => {
@@ -203,6 +209,7 @@ export function registerIpc(): void {
       if (!parsed.ok) return { ok: false, error: parsed.error };
       const next = await replaceSettings(parsed.value);
       nativeTheme.themeSource = nativeThemeSource(next.theme);
+      setKeyboardShortcuts(next.keyboardShortcuts ?? {});
       return { ok: true, settings: next };
     } catch (err) {
       return { ok: false, error: (err as Error).message };

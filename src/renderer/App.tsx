@@ -5,6 +5,13 @@ import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
+import {
+  keyboardShortcutMatches,
+  normalizeKeyboardShortcuts,
+  shouldAllowShortcut,
+  type KeyboardShortcutAction,
+} from '@shared/keyboard-shortcuts';
+import { sessionsInSidebarOrder } from '@shared/session-sidebar-order';
 import type { AppView } from './components/app-view';
 import { FlightDeck } from './components/FlightDeck';
 import { FlightDeckSessionModal } from './components/FlightDeckSessionModal';
@@ -12,7 +19,7 @@ import { Sidebar } from './components/Sidebar';
 import { TerminalView, type TerminalApi } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type ModalShortcutHandlers } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
 import { GitPanel } from './components/GitPanel';
 import { SessionPromptDock } from './components/SessionPromptDock';
@@ -50,7 +57,7 @@ const DEFAULT_SETTINGS: Settings = {
   sessionLabels: DEFAULT_SESSION_LABELS,
 };
 
-type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks';
+type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks' | 'shortcuts';
 
 
 function clampSidebarWidth(value: number): number {
@@ -305,6 +312,14 @@ export function App() {
 
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
   const pendingWizardBriefRef = useRef(new Map<string, string>());
+  const settingsModalShortcutsRef = useRef<ModalShortcutHandlers | null>(null);
+  const flightDeckModalShortcutsRef = useRef<ModalShortcutHandlers | null>(null);
+  const runShortcutActionRef = useRef<(action: KeyboardShortcutAction) => void>(() => {});
+
+  const keyboardShortcuts = useMemo(
+    () => normalizeKeyboardShortcuts(settings.keyboardShortcuts),
+    [settings.keyboardShortcuts],
+  );
 
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
     if (api) {
@@ -337,6 +352,28 @@ export function App() {
     if (!s?.wizardBriefMarkdown) return;
     terminalApisRef.current.get(s.id)?.paste(s.wizardBriefMarkdown);
   }, [activeSession]);
+
+  const focusActiveAgentInput = useCallback(() => {
+    const sessionId = flightDeckModalId ?? activeId;
+    if (!sessionId) return;
+    const api = terminalApisRef.current.get(sessionId);
+    if (api) {
+      api.focus();
+      return;
+    }
+    let attempts = 0;
+    const retry = () => {
+      attempts += 1;
+      terminalApisRef.current.get(sessionId)?.focus();
+      if (attempts < 20) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, [activeId, flightDeckModalId]);
+
+  const openSession = useCallback((id: string) => {
+    setActiveId(id);
+    setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
 
   const scrollActiveTerminalToBottom = useCallback(() => {
     if (!activeId) return;
@@ -381,11 +418,6 @@ export function App() {
     },
     [activeId, submitPromptToSession],
   );
-
-  const openSession = useCallback((id: string) => {
-    setActiveId(id);
-    setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
 
   const setSessionLabels = useCallback(
     async (sessionId: string, labelIds: string[]) => {
@@ -460,10 +492,92 @@ export function App() {
     setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }, []);
 
+  const goToNextOpenSession = useCallback(() => {
+    const ordered = sessionsInSidebarOrder(sessions);
+    if (ordered.length === 0) return;
+
+    const currentId = view === 'flight-deck' ? flightDeckModalId : activeId;
+    const currentIndex = currentId ? ordered.findIndex((s) => s.id === currentId) : -1;
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % ordered.length;
+    const nextId = ordered[nextIndex].id;
+
+    if (view === 'flight-deck') openFlightDeckSession(nextId);
+    else openSession(nextId);
+  }, [view, sessions, activeId, flightDeckModalId, openSession, openFlightDeckSession]);
+
   const openManageLabels = useCallback(() => {
     setSettingsInitialTab('labels');
     setShowSettings(true);
   }, []);
+
+  useEffect(() => {
+    runShortcutActionRef.current = (action) => {
+      switch (action) {
+        case 'newSession':
+          setShowNew(true);
+          break;
+        case 'nextSession':
+          goToNextOpenSession();
+          break;
+        case 'scrollToBottom':
+          if (flightDeckModalId) scrollFlightDeckTerminalToBottom();
+          else scrollActiveTerminalToBottom();
+          break;
+        case 'focusAgentInput':
+          focusActiveAgentInput();
+          break;
+        case 'modalExpand':
+          if (showSettings) settingsModalShortcutsRef.current?.expand();
+          else if (flightDeckModalId) flightDeckModalShortcutsRef.current?.expand();
+          break;
+        case 'modalMinimize':
+          if (showSettings) settingsModalShortcutsRef.current?.minimize();
+          else if (flightDeckModalId) flightDeckModalShortcutsRef.current?.minimize();
+          break;
+      }
+    };
+  }, [
+    goToNextOpenSession,
+    scrollActiveTerminalToBottom,
+    scrollFlightDeckTerminalToBottom,
+    focusActiveAgentInput,
+    showSettings,
+    flightDeckModalId,
+  ]);
+
+  useEffect(() => {
+    window.api.syncKeyboardShortcuts(keyboardShortcuts);
+  }, [keyboardShortcuts]);
+
+  useEffect(() => {
+    const unsub = window.api.onShortcutAction((action) => {
+      runShortcutActionRef.current(action);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tryAction = (action: keyof typeof keyboardShortcuts, run: () => void) => {
+        if (!keyboardShortcutMatches(e, keyboardShortcuts[action])) return false;
+        if (!shouldAllowShortcut(e, action)) return false;
+        e.preventDefault();
+        e.stopPropagation();
+        run();
+        return true;
+      };
+
+      if (tryAction('newSession', () => runShortcutActionRef.current('newSession'))) return;
+      if (tryAction('nextSession', () => runShortcutActionRef.current('nextSession'))) return;
+      if (tryAction('scrollToBottom', () => runShortcutActionRef.current('scrollToBottom'))) return;
+      if (tryAction('focusAgentInput', () => runShortcutActionRef.current('focusAgentInput'))) return;
+      if (tryAction('modalExpand', () => runShortcutActionRef.current('modalExpand'))) return;
+      if (tryAction('modalMinimize', () => runShortcutActionRef.current('modalMinimize'))) return;
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [keyboardShortcuts]);
 
   const flightDeckModalSession = useMemo(
     () => (flightDeckModalId ? sessions.find((s) => s.id === flightDeckModalId) ?? null : null),
@@ -715,6 +829,9 @@ export function App() {
           onRemoveQuickNote={(id, noteId) => void removeSessionQuickNote(id, noteId)}
           onScrollToBottom={scrollFlightDeckTerminalToBottom}
           onTerminalApi={handleTerminalApi}
+          onRegisterModalShortcuts={(handlers) => {
+            flightDeckModalShortcutsRef.current = handlers;
+          }}
         />
       )}
 
@@ -761,6 +878,9 @@ export function App() {
             setSettingsInitialTab(undefined);
           }}
           onSettingsChange={setSettings}
+          onRegisterModalShortcuts={(handlers) => {
+            settingsModalShortcutsRef.current = handlers;
+          }}
           onSaved={(next) => {
             setSettings(next);
             setShowSettings(false);

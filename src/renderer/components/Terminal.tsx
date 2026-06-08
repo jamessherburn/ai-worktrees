@@ -12,6 +12,7 @@ export type TerminalApi = {
   paste: (text: string) => void;
   submitPrompt: (text: string) => void;
   scrollToBottom: () => void;
+  focus: () => void;
 };
 
 type Props = {
@@ -75,12 +76,16 @@ export function TerminalView({
     const host = hostRef.current;
     if (!host) return;
 
+    const hideNativeCursor = agentId === 'cursor';
     const term = new Xterm({
       fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace',
       fontSize: 13,
       lineHeight: 1.25,
-      cursorBlink: true,
-      theme: getTerminalTheme(themeName),
+      cursorBlink: !hideNativeCursor,
+      cursorInactiveStyle: hideNativeCursor ? 'none' : 'outline',
+      theme: hideNativeCursor
+        ? { ...getTerminalTheme(themeName), cursor: 'rgba(0,0,0,0)', cursorAccent: 'rgba(0,0,0,0)' }
+        : getTerminalTheme(themeName),
       allowProposedApi: true,
       scrollback: 5000,
     });
@@ -120,6 +125,9 @@ export function TerminalView({
           term.scrollToBottom();
           term.focus();
         });
+      },
+      focus: () => {
+        term.focus();
       },
     };
 
@@ -260,7 +268,10 @@ export function TerminalView({
   }, [embedded, layoutRevision]);
 
   return (
-    <div className={`terminal-shell${embedded ? ' terminal-shell--embedded' : ''}`} aria-hidden={blurred}>
+    <div
+      className={`terminal-shell${embedded ? ' terminal-shell--embedded' : ''}${agentId === 'cursor' ? ' terminal-shell--cursor-agent' : ''}`}
+      aria-hidden={blurred}
+    >
       <div className="terminal-host" ref={hostRef} />
     </div>
   );

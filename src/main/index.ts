@@ -6,6 +6,10 @@ import { registerIpc } from './ipc.js';
 import { migrateLegacyUserData } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
 import { gracefulShellShutdown, registerShellPtyWebContents } from './shell-pty-manager.js';
+import {
+  registerKeyboardShortcutHandler,
+  setKeyboardShortcuts,
+} from './keyboard-shortcuts-handler.js';
 import { getSettings } from './settings.js';
 
 const isDev = !app.isPackaged;
@@ -36,12 +40,14 @@ function createMainWindow(theme: ThemePreference): BrowserWindow {
 
   registerWebContents(win.webContents);
   registerShellPtyWebContents(win.webContents);
+  registerKeyboardShortcutHandler(win.webContents);
   return win;
 }
 
 app.whenReady().then(async () => {
   await migrateLegacyUserData();
   const settings = await getSettings();
+  setKeyboardShortcuts(settings.keyboardShortcuts ?? {});
   nativeTheme.themeSource = nativeThemeSource(settings.theme);
   registerIpc();
   createMainWindow(settings.theme);

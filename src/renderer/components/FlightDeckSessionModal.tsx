@@ -28,6 +28,7 @@ import { SessionQuickNotes } from './SessionQuickNotes';
 import { SessionPromptDock } from './SessionPromptDock';
 import { TerminalView, type TerminalApi } from './Terminal';
 import { SessionLabelChips } from './SessionLabelChips';
+import type { ModalShortcutHandlers } from './SettingsModal';
 
 const PANEL_META: Record<PanelId, { title: string; label: string }> = {
   agent: { title: 'Agent', label: 'Agent session' },
@@ -40,26 +41,38 @@ const WORKSPACE_DEFAULT_WIDTH = 1520;
 const WORKSPACE_DEFAULT_HEIGHT = 940;
 const WORKSPACE_MIN_WIDTH = 720;
 const WORKSPACE_MIN_HEIGHT = 480;
-const WORKSPACE_VIEWPORT_MARGIN = 24;
+/** Horizontal inset on each side when expanded. */
+const WORKSPACE_VIEWPORT_MARGIN = 12;
+/** Clearance below macOS traffic lights (hiddenInset title bar). */
+const WORKSPACE_EXPANDED_TOP_INSET = 56;
 
 type WorkspaceSize = { width: number; height: number };
 
-function maxWorkspaceSize(): WorkspaceSize {
+function viewportBounds(): WorkspaceSize {
   if (typeof window === 'undefined') {
     return { width: WORKSPACE_DEFAULT_WIDTH, height: WORKSPACE_DEFAULT_HEIGHT };
   }
   return {
-    width: window.innerWidth - WORKSPACE_VIEWPORT_MARGIN,
-    height: window.innerHeight - WORKSPACE_VIEWPORT_MARGIN,
+    width: window.innerWidth - WORKSPACE_VIEWPORT_MARGIN * 2,
+    height: window.innerHeight - WORKSPACE_EXPANDED_TOP_INSET - WORKSPACE_VIEWPORT_MARGIN,
   };
 }
 
 function clampWorkspaceSize(width: number, height: number): WorkspaceSize {
-  const max = maxWorkspaceSize();
+  const bounds = viewportBounds();
   return {
-    width: Math.min(max.width, Math.max(WORKSPACE_MIN_WIDTH, width)),
-    height: Math.min(max.height, Math.max(WORKSPACE_MIN_HEIGHT, height)),
+    width: Math.min(bounds.width, Math.max(WORKSPACE_MIN_WIDTH, width)),
+    height: Math.min(bounds.height, Math.max(WORKSPACE_MIN_HEIGHT, height)),
   };
+}
+
+function defaultWorkspaceSize(): WorkspaceSize {
+  return clampWorkspaceSize(WORKSPACE_DEFAULT_WIDTH, WORKSPACE_DEFAULT_HEIGHT);
+}
+
+function expandedWorkspaceSize(): WorkspaceSize {
+  const bounds = viewportBounds();
+  return clampWorkspaceSize(bounds.width, bounds.height);
 }
 
 function loadWorkspaceSize(): WorkspaceSize {
@@ -90,6 +103,7 @@ type Props = {
   onRemoveQuickNote: (sessionId: string, noteId: string) => void;
   onScrollToBottom: () => void;
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
+  onRegisterModalShortcuts?: (handlers: ModalShortcutHandlers | null) => void;
 };
 
 export function FlightDeckSessionModal({
@@ -105,6 +119,7 @@ export function FlightDeckSessionModal({
   onRemoveQuickNote,
   onScrollToBottom,
   onTerminalApi,
+  onRegisterModalShortcuts,
 }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [visiblePanels, setVisiblePanels] = useState<Set<PanelId>>(() => loadVisiblePanels());
@@ -116,6 +131,9 @@ export function FlightDeckSessionModal({
   const [snapPreview, setSnapPreview] = useState<SnapZoneId | null>(null);
   const [layoutRevision, setLayoutRevision] = useState(0);
   const [workspaceSize, setWorkspaceSize] = useState<WorkspaceSize>(() => loadWorkspaceSize());
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const workspaceExpandedRef = useRef(workspaceExpanded);
+  workspaceExpandedRef.current = workspaceExpanded;
 
   const activePanelIds = useMemo(
     () => PANEL_IDS.filter((p) => visiblePanels.has(p)),
@@ -221,12 +239,38 @@ export function FlightDeckSessionModal({
     [endDrag, onDragMove],
   );
 
+  const expandWorkspace = useCallback(() => {
+    if (workspaceExpanded) return;
+    setWorkspaceSize(expandedWorkspaceSize());
+    setWorkspaceExpanded(true);
+    setLayoutRevision((n) => n + 1);
+  }, [workspaceExpanded]);
+
+  const minimizeWorkspace = useCallback(() => {
+    if (!workspaceExpanded) return;
+    const next = defaultWorkspaceSize();
+    setWorkspaceSize(next);
+    persistWorkspaceSize(next);
+    setWorkspaceExpanded(false);
+    setLayoutRevision((n) => n + 1);
+  }, [workspaceExpanded]);
+
+  useEffect(() => {
+    if (!onRegisterModalShortcuts) return;
+    onRegisterModalShortcuts({ expand: expandWorkspace, minimize: minimizeWorkspace });
+    return () => onRegisterModalShortcuts(null);
+  }, [onRegisterModalShortcuts, expandWorkspace, minimizeWorkspace]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     const onWindowResize = () => {
-      setWorkspaceSize((prev) => clampWorkspaceSize(prev.width, prev.height));
+      setWorkspaceSize((prev) =>
+        workspaceExpandedRef.current
+          ? expandedWorkspaceSize()
+          : clampWorkspaceSize(prev.width, prev.height),
+      );
     };
     document.body.classList.add('flight-deck-workspace-open');
     window.addEventListener('keydown', onKey);
@@ -264,6 +308,7 @@ export function FlightDeckSessionModal({
         const next = clampWorkspaceSize(start.width + dw, start.height + dh);
         setWorkspaceSize(next);
         persistWorkspaceSize(next);
+        setWorkspaceExpanded(false);
         setLayoutRevision((n) => n + 1);
       };
 
@@ -278,7 +323,10 @@ export function FlightDeckSessionModal({
   const quickNotes = useMemo(() => quickNotesForSession(session), [session]);
 
   return (
-    <div className="flight-deck-workspace-backdrop" onMouseDown={onClose}>
+    <div
+      className={`flight-deck-workspace-backdrop${workspaceExpanded ? ' flight-deck-workspace-backdrop--expanded' : ''}`}
+      onMouseDown={onClose}
+    >
       <div
         className="flight-deck-workspace"
         role="dialog"
