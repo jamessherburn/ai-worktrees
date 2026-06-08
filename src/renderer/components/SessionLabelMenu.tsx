@@ -10,6 +10,7 @@ type Props = {
   onToggleMuted?: (session: SessionWithStatus, muted: boolean) => void;
   onRevealInFinder?: (session: SessionWithStatus) => void;
   onOpenInVSCode?: (session: SessionWithStatus) => void;
+  onDelete?: (session: SessionWithStatus) => void;
   onManageLabels?: () => void;
 };
 
@@ -22,6 +23,7 @@ export function SessionLabelMenu({
   onToggleMuted,
   onRevealInFinder,
   onOpenInVSCode,
+  onDelete,
   onManageLabels,
 }: Props) {
   const applied = new Set(session.labelIds ?? []);
@@ -87,6 +89,17 @@ export function SessionLabelMenu({
           <div className="context-menu-divider" />
           <button className="context-menu-item" onClick={onManageLabels}>
             Manage Labels…
+          </button>
+        </>
+      )}
+      {onDelete && (
+        <>
+          <div className="context-menu-divider" />
+          <button
+            className="context-menu-item context-menu-item--danger"
+            onClick={() => onDelete(session)}
+          >
+            Delete Session…
           </button>
         </>
       )}

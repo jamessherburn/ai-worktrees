@@ -19,7 +19,7 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [useWizardMode, setUseWizardMode] = useState(true);
+  const [useWizardMode, setUseWizardMode] = useState(false);
   const [isGlobalSession, setIsGlobalSession] = useState(false);
   const [codeDir, setCodeDir] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('form');

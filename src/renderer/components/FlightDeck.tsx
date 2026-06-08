@@ -22,6 +22,7 @@ type Props = {
   onToggleMuted: (session: SessionWithStatus, muted: boolean) => void;
   onRevealInFinder: (session: SessionWithStatus) => void;
   onOpenInVSCode: (session: SessionWithStatus) => void;
+  onDelete: (session: SessionWithStatus) => void;
   onManageLabels: () => void;
 };
 
@@ -46,6 +47,7 @@ export function FlightDeck({
   onToggleMuted,
   onRevealInFinder,
   onOpenInVSCode,
+  onDelete,
   onManageLabels,
 }: Props) {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
@@ -281,6 +283,10 @@ export function FlightDeck({
             onOpenInVSCode(s);
             setMenu(null);
           }}
+          onDelete={(s) => {
+            onDelete(s);
+            setMenu(null);
+          }}
           onManageLabels={() => {
             setMenu(null);
             onManageLabels();
@@ -344,8 +350,15 @@ function FlightInstrument({
           </button>
         </div>
         <div className="flight-instrument-meta">
-          <span className={`session-agent-tag agent-${session.agentId}`}>
-            {getAgent(session.agentId).name}
+          <span className="session-agent-tag-group">
+            <span className={`session-agent-tag agent-${session.agentId}`}>
+              {getAgent(session.agentId).name}
+            </span>
+            {session.external ? (
+              <span className="session-external-label" title="External session">
+                External Session
+              </span>
+            ) : null}
           </span>
           <span className="flight-instrument-activity">{activityLabelFor(session)}</span>
         </div>

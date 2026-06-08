@@ -214,12 +214,17 @@ export function Sidebar({
                           </span>
                           <div className="session-branch">
                             <span
-                              className="session-agent-tag-wrap"
+                              className="session-agent-tag-group"
                               title={`Agent: ${getAgent(s.agentId).name}`}
                             >
                               <span className={`session-agent-tag agent-${s.agentId}`}>
                                 {getAgent(s.agentId).name}
                               </span>
+                              {s.external ? (
+                                <span className="session-external-label" title="External session">
+                                  External Session
+                                </span>
+                              ) : null}
                             </span>
                             {!s.global && <span className="session-branch-name">{s.branchName}</span>}
                           </div>

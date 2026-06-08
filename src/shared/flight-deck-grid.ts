@@ -144,6 +144,9 @@ export function resolveLayout(
   visible: PanelId[],
   prefer?: PanelLayout,
 ): PanelLayout {
+  if (visible.length === 1) {
+    return { [visible[0]]: SNAP_ZONES.full };
+  }
   const stored = readStoredLayout(sessionId);
   const defaults = defaultLayoutFor(visible);
   const candidate: PanelLayout = {};

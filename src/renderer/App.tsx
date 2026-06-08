@@ -27,7 +27,7 @@ const SIDEBAR_WIDTH_KEY = 'sidebar-width';
 const SIDEBAR_DEFAULT_WIDTH = 400;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
-const SIDEBAR_COMPACT_WIDTH = 72;
+const SIDEBAR_COMPACT_WIDTH = 84;
 const SIDEBAR_UPGRADE_THRESHOLD = 340;
 const MAIN_PANE_MIN_WIDTH = 80;
 const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
@@ -614,6 +614,7 @@ export function App() {
           onToggleMuted={(s, muted) => void setSessionMuted(s.id, muted)}
           onRevealInFinder={(s) => void openSessionInFinder(s)}
           onOpenInVSCode={(s) => void openSessionInVSCode(s)}
+          onDelete={(s) => setPendingDelete(s)}
           onManageLabels={openManageLabels}
         />
       ) : (
@@ -949,6 +950,11 @@ function PaneHeader({
           {session.wizardBriefMarkdown ? (
             <span className="pane-wizard-label" title="Wizard session">
               Wizard Session
+            </span>
+          ) : null}
+          {session.external ? (
+            <span className="pane-external-label" title="External session">
+              External Session
             </span>
           ) : null}
         </div>

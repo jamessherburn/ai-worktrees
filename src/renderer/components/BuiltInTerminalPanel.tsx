@@ -12,6 +12,8 @@ type Props = {
   onHide: () => void;
   /** When true, omits dock chrome for embedding in the flight deck modal grid. */
   embedded?: boolean;
+  /** Bumped when an embedded terminal's container layout changes. */
+  layoutRevision?: number;
 };
 
 export function BuiltInTerminalPanel({
@@ -21,6 +23,7 @@ export function BuiltInTerminalPanel({
   blurred,
   onHide,
   embedded,
+  layoutRevision = 0,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
@@ -91,6 +94,12 @@ export function BuiltInTerminalPanel({
 
       resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(host);
+      if (embedded) {
+        const parent = host.parentElement;
+        if (parent) resizeObserver.observe(parent);
+        const grandparent = parent?.parentElement;
+        if (grandparent) resizeObserver.observe(grandparent);
+      }
 
       if (!blurred) term.focus();
     };
@@ -129,11 +138,25 @@ export function BuiltInTerminalPanel({
     }
   }, [blurred]);
 
+  useEffect(() => {
+    if (!embedded) return;
+    const fit = fitRef.current;
+    if (!fit) return;
+    const timer = window.setTimeout(() => {
+      try {
+        fit.fit();
+      } catch {
+        // ignore: layout not stable
+      }
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [embedded, layoutRevision]);
+
   if (embedded) {
     return (
       <div className="built-in-terminal-panel built-in-terminal-panel--embedded">
         <div className="built-in-terminal-body built-in-terminal-body--embedded">
-          <div className="built-in-terminal-shell" aria-hidden={blurred}>
+          <div className="built-in-terminal-shell built-in-terminal-shell--embedded" aria-hidden={blurred}>
             <div className="built-in-terminal-host" ref={hostRef} />
           </div>
         </div>

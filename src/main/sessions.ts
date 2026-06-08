@@ -19,6 +19,7 @@ import {
   removeWorktree,
   resolveDefaultBranch,
 } from './git.js';
+import { getDiscoveredExternalSession } from './external-sessions.js';
 import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
@@ -271,5 +272,7 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
 
 export async function getSessionById(id: string): Promise<Session | undefined> {
   const sessions = await listSessions();
-  return sessions.find((s) => s.id === id);
+  const found = sessions.find((s) => s.id === id);
+  if (found) return found;
+  return getDiscoveredExternalSession(id);
 }

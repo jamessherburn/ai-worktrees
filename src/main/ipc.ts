@@ -42,6 +42,12 @@ import {
 } from './agent-data.js';
 import { promises as fs } from 'node:fs';
 import {
+  discoverExternalSessions,
+  getDiscoveredExternalSession,
+  isExternalSessionId,
+  killExternalAgentProcesses,
+} from './external-sessions.js';
+import {
   createSession,
   deleteSession,
   getSessionById,
@@ -90,15 +96,19 @@ async function pathExists(p: string): Promise<boolean> {
 
 
 async function decorate(sessions: Session[]): Promise<SessionWithStatus[]> {
+  const external = await discoverExternalSessions(sessions);
+  const all = [...sessions, ...external];
   const running = new Set(runningSessionIds());
   const result: SessionWithStatus[] = [];
-  for (const s of sessions) {
+  for (const s of all) {
     let status: SessionWithStatus['status'];
-    if (running.has(s.id)) status = 'running';
+    if (s.external || running.has(s.id)) status = 'running';
     else if (!(await pathExists(s.worktreePath))) status = 'orphaned';
     else status = 'stopped';
     const decorated: SessionWithStatus = { ...s, status };
-    if (status === 'running') decorated.activity = getActivityState(s.id);
+    if (status === 'running') {
+      decorated.activity = s.external ? 'working' : getActivityState(s.id);
+    }
     result.push(decorated);
   }
   return result;
@@ -134,6 +144,13 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.DeleteSession, async (_e, input: DeleteSessionInput) => {
     killPty(input.id);
     killShellPty(input.id);
+    if (isExternalSessionId(input.id)) {
+      const session = getDiscoveredExternalSession(input.id);
+      if (session?.external) {
+        await killExternalAgentProcesses(session.worktreePath, session.agentId);
+      }
+      return { ok: true };
+    }
     return deleteSession(input);
   });
 
@@ -299,6 +316,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsSetWaitingOnReview,
     async (_e, args: { sessionId: string; value: boolean }) => {
+      if (isExternalSessionId(args.sessionId)) return;
       await setSessionWaitingOnReview(args.sessionId, args.value);
     },
   );
@@ -306,6 +324,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsSetLabels,
     async (_e, args: { sessionId: string; labelIds: string[] }) => {
+      if (isExternalSessionId(args.sessionId)) return;
       await setSessionLabels(args.sessionId, args.labelIds);
     },
   );
@@ -313,6 +332,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsSetMuted,
     async (_e, args: { sessionId: string; value: boolean }) => {
+      if (isExternalSessionId(args.sessionId)) return;
       await setSessionMuted(args.sessionId, args.value);
     },
   );
@@ -320,6 +340,9 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsAddQuickNote,
     async (_e, args: { sessionId: string; text: string }) => {
+      if (isExternalSessionId(args.sessionId)) {
+        throw new Error('Quick notes are not available for external sessions.');
+      }
       return addSessionQuickNote(args.sessionId, args.text);
     },
   );
@@ -327,6 +350,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsRemoveQuickNote,
     async (_e, args: { sessionId: string; noteId: string }) => {
+      if (isExternalSessionId(args.sessionId)) return;
       await removeSessionQuickNote(args.sessionId, args.noteId);
     },
   );
