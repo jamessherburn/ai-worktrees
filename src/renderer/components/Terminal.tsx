@@ -3,7 +3,7 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { getTerminalTheme } from '../terminal-theme';
-import { syncTerminalInteractive } from '../terminal-activation';
+import { syncTerminalInteractive, waitForTerminalLayout } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
 import type { AgentId } from '@shared/agents';
 import { normalizePromptText, SESSION_PROMPT_SUBMIT_DELAY_MS } from '@shared/session-prompt-submit';
@@ -56,7 +56,7 @@ export function TerminalView({
     activationCleanupRef.current = null;
   };
 
-  const applyTerminalActivation = (focusDelayMs = 50) => {
+  const applyTerminalActivation = (focusDelayMs = 50, afterSync?: () => void) => {
     const term = termRef.current;
     if (!term || !ptyReadyRef.current) return;
     clearActivation();
@@ -67,6 +67,7 @@ export function TerminalView({
       active,
       (cols, rows) => window.api.pty.resize(sessionId, cols, rows),
       focusDelayMs,
+      afterSync,
     );
   };
 
@@ -149,11 +150,29 @@ export function TerminalView({
 
     unsubData = window.api.pty.onData(({ sessionId: id, data }) => {
       if (id !== sessionId) return;
-      if (pendingBacklogReplay) {
-        term.reset();
-        pendingBacklogReplay = false;
-      }
+      const replayingBacklog = pendingBacklogReplay;
+      if (pendingBacklogReplay) pendingBacklogReplay = false;
       term.write(data);
+      if (replayingBacklog) {
+        requestAnimationFrame(() => {
+          fitSafely();
+          const cols = term.cols;
+          const rows = term.rows;
+          if (cols <= 0 || rows <= 0) return;
+          const syncSize = () => window.api.pty.resize(sessionId, cols, rows);
+          // Full-screen agent TUIs can keep a stale layout after backlog replay; nudge SIGWINCH.
+          if (rows > 1 && (agentId === 'cursor' || agentId === 'claude')) {
+            window.api.pty.resize(sessionId, cols, rows - 1);
+            requestAnimationFrame(() => {
+              syncSize();
+              terminalApi.scrollToBottom();
+            });
+          } else {
+            syncSize();
+            terminalApi.scrollToBottom();
+          }
+        });
+      }
     });
 
     unsubExit = window.api.pty.onExit(({ sessionId: id, exitCode }) => {
@@ -163,6 +182,7 @@ export function TerminalView({
     });
 
     const start = async () => {
+      await waitForTerminalLayout(host);
       fitSafely();
       const result = await window.api.pty.start(sessionId, term.cols, term.rows);
       if (cancelled) return;
@@ -188,7 +208,10 @@ export function TerminalView({
       }
 
       ptyReadyRef.current = true;
-      applyTerminalActivation(result.reattached ? 100 : 50);
+      applyTerminalActivation(
+        result.reattached ? 100 : 50,
+        result.reattached ? () => terminalApi.scrollToBottom() : undefined,
+      );
     };
 
     void start();

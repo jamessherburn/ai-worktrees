@@ -3,7 +3,7 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { getTerminalTheme } from '../terminal-theme';
-import { syncTerminalInteractive } from '../terminal-activation';
+import { syncTerminalInteractive, waitForTerminalLayout } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
 
 type Props = {
@@ -40,7 +40,7 @@ export function BuiltInTerminalPanel({
     activationCleanupRef.current = null;
   };
 
-  const applyTerminalActivation = (focusDelayMs = 50) => {
+  const applyTerminalActivation = (focusDelayMs = 50, afterSync?: () => void) => {
     const term = termRef.current;
     if (!term || !ptyReadyRef.current) return;
     clearActivation();
@@ -50,6 +50,7 @@ export function BuiltInTerminalPanel({
       !blurredRef.current,
       (cols, rows) => window.api.shellPty.resize(sessionId, cols, rows),
       focusDelayMs,
+      afterSync,
     );
   };
 
@@ -99,11 +100,18 @@ export function BuiltInTerminalPanel({
 
     unsubData = window.api.shellPty.onData(({ sessionId: id, data }) => {
       if (id !== sessionId) return;
-      if (pendingBacklogReplay) {
-        term.reset();
-        pendingBacklogReplay = false;
-      }
+      const replayingBacklog = pendingBacklogReplay;
+      if (pendingBacklogReplay) pendingBacklogReplay = false;
       term.write(data);
+      if (replayingBacklog) {
+        requestAnimationFrame(() => {
+          fitSafely();
+          if (term.cols > 0 && term.rows > 0) {
+            window.api.shellPty.resize(sessionId, term.cols, term.rows);
+          }
+          term.scrollToBottom();
+        });
+      }
     });
 
     unsubExit = window.api.shellPty.onExit(({ sessionId: id, exitCode }) => {
@@ -112,6 +120,7 @@ export function BuiltInTerminalPanel({
     });
 
     const start = async () => {
+      await waitForTerminalLayout(host);
       fitSafely();
       const result = await window.api.shellPty.start(sessionId, term.cols, term.rows);
       if (cancelled) return;
@@ -135,7 +144,7 @@ export function BuiltInTerminalPanel({
       }
 
       ptyReadyRef.current = true;
-      applyTerminalActivation(result.reattached ? 100 : 50);
+      applyTerminalActivation(result.reattached ? 100 : 50, result.reattached ? () => term.scrollToBottom() : undefined);
     };
 
     void start();
