@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
+import { getTerminalTheme } from '../terminal-theme';
 import { syncTerminalInteractive } from '../terminal-activation';
+import type { ResolvedTheme } from '../theme';
 import type { AgentId } from '@shared/agents';
 import { normalizePromptText, SESSION_PROMPT_SUBMIT_DELAY_MS } from '@shared/session-prompt-submit';
 
@@ -18,7 +19,7 @@ type Props = {
   agentId: AgentId;
   visible: boolean;
   blurred: boolean;
-  themeName: 'dark' | 'light';
+  themeName: ResolvedTheme;
   /** When true, omits outer padding and refits when the host layout changes (flight deck grid). */
   embedded?: boolean;
   /** Bumped when an embedded terminal's container layout changes. */
@@ -78,7 +79,7 @@ export function TerminalView({
       fontSize: 13,
       lineHeight: 1.25,
       cursorBlink: true,
-      theme: themeName === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME,
+      theme: getTerminalTheme(themeName),
       allowProposedApi: true,
       scrollback: 5000,
     });
@@ -211,7 +212,7 @@ export function TerminalView({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeName === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME;
+    term.options.theme = getTerminalTheme(themeName);
   }, [themeName]);
 
   useEffect(() => {

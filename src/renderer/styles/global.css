@@ -53,6 +53,27 @@
   color-scheme: light;
 }
 
+[data-theme='monokai'] {
+  --bg: #272822;
+  --bg-elev: #2d2d2a;
+  --bg-elev-2: #3e3d32;
+  --border: #3e3d32;
+  --border-strong: #49483e;
+  --text: #f8f8f2;
+  --text-dim: #c9c9c0;
+  --text-muted: #75715e;
+  --accent: #66d9ef;
+  --accent-strong: #5bc4de;
+  --accent-on: #272822;
+  --danger: #f92672;
+  --success: #a6e22e;
+  --warning: #e6db74;
+  --terminal-bg: #272822;
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --wizard-border-color: #ae81ff;
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -4622,46 +4643,58 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 /* ── Dark mode polish ─────────────────────────────────────────────────────── */
 
 [data-theme='dark'] input:focus,
-[data-theme='dark'] select:focus {
+[data-theme='dark'] select:focus,
+[data-theme='monokai'] input:focus,
+[data-theme='monokai'] select:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-[data-theme='dark'] ::-webkit-scrollbar-thumb {
+[data-theme='dark'] ::-webkit-scrollbar-thumb,
+[data-theme='monokai'] ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--border-strong) 75%, var(--text-muted));
 }
 
-[data-theme='dark'] .settings-modal-tab.active {
+[data-theme='dark'] .settings-modal-tab.active,
+[data-theme='monokai'] .settings-modal-tab.active {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent),
     0 1px 3px color-mix(in srgb, #000 35%, transparent);
 }
 
-[data-theme='dark'] .flight-deck-workspace-canvas {
+[data-theme='dark'] .flight-deck-workspace-canvas,
+[data-theme='monokai'] .flight-deck-workspace-canvas {
   background: color-mix(in srgb, var(--bg) 88%, #000);
 }
 
-[data-theme='dark'] .flight-deck-modal-panel-toggles {
+[data-theme='dark'] .flight-deck-modal-panel-toggles,
+[data-theme='monokai'] .flight-deck-modal-panel-toggles {
   background: var(--bg-elev-2);
   border-color: var(--border);
 }
 
-[data-theme='dark'] .flight-deck-panel-toggle--active {
+[data-theme='dark'] .flight-deck-panel-toggle--active,
+[data-theme='monokai'] .flight-deck-panel-toggle--active {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev-2));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 [data-theme='dark'] .flight-deck-workspace-bottom .session-prompt-dock-shell,
 [data-theme='dark'] .session-quick-notes-input,
-[data-theme='dark'] .session-quick-notes-toggle {
+[data-theme='dark'] .session-quick-notes-toggle,
+[data-theme='monokai'] .flight-deck-workspace-bottom .session-prompt-dock-shell,
+[data-theme='monokai'] .session-quick-notes-input,
+[data-theme='monokai'] .session-quick-notes-toggle {
   background: var(--bg-elev-2);
   border-color: var(--border);
 }
 
-[data-theme='dark'] .gh-monitor {
+[data-theme='dark'] .gh-monitor,
+[data-theme='monokai'] .gh-monitor {
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
 }
 
-[data-theme='dark'] .gh-metric-bar {
+[data-theme='dark'] .gh-metric-bar,
+[data-theme='monokai'] .gh-metric-bar {
   opacity: 1;
 }
 
@@ -4669,18 +4702,25 @@ body.resizing-bottom-dock-split .bottom-dock-divider {
 [data-theme='dark'] .session-prompt-dock-flyout,
 [data-theme='dark'] .session-prompt-menu,
 [data-theme='dark'] .session-quick-notes-panel,
-[data-theme='dark'] .flight-deck-snap-menu-dropdown {
+[data-theme='dark'] .flight-deck-snap-menu-dropdown,
+[data-theme='monokai'] .context-menu,
+[data-theme='monokai'] .session-prompt-dock-flyout,
+[data-theme='monokai'] .session-prompt-menu,
+[data-theme='monokai'] .session-quick-notes-panel,
+[data-theme='monokai'] .flight-deck-snap-menu-dropdown {
   border-color: color-mix(in srgb, var(--border-strong) 85%, #fff 6%);
   box-shadow:
     0 12px 40px color-mix(in srgb, #000 50%, transparent),
     0 0 0 1px color-mix(in srgb, #fff 4%, transparent);
 }
 
-[data-theme='dark'] .session-row.active {
+[data-theme='dark'] .session-row.active,
+[data-theme='monokai'] .session-row.active {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-elev-2));
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
 }
 
-[data-theme='dark'] .flight-deck-filter-chip.active {
+[data-theme='dark'] .flight-deck-filter-chip.active,
+[data-theme='monokai'] .flight-deck-filter-chip.active {
   background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2));
 }

@@ -52,7 +52,7 @@ export type SessionWithStatus = Session & {
   activity?: ActivityState;
 };
 
-export type ThemePreference = 'system' | 'dark' | 'light';
+export type ThemePreference = 'system' | 'dark' | 'light' | 'monokai';
 
 export type TaskSectionConfig = {
   id: string;

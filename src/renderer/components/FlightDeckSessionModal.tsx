@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionLabel, SessionPromptPreset, SessionWithStatus } from '@shared/types';
+import type { ResolvedTheme } from '../theme';
 import { quickNotesForSession } from '@shared/session-quick-notes';
 import { getAgent } from '@shared/agents';
 import {
@@ -80,7 +81,7 @@ type Props = {
   session: SessionWithStatus;
   sessionLabels: SessionLabel[];
   sessionPrompts: SessionPromptPreset[];
-  themeName: 'dark' | 'light';
+  themeName: ResolvedTheme;
   blurred?: boolean;
   onClose: () => void;
   onOpenInWorkspace: () => void;
