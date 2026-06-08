@@ -2,12 +2,13 @@ import { useEffect, useRef } from 'react';
 import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { DARK_TERMINAL_THEME, LIGHT_TERMINAL_THEME } from '../terminal-theme';
+import { getTerminalTheme } from '../terminal-theme';
+import type { ResolvedTheme } from '../theme';
 
 type Props = {
   sessionId: string;
   worktreePath: string;
-  themeName: 'dark' | 'light';
+  themeName: ResolvedTheme;
   blurred: boolean;
   onHide: () => void;
   /** When true, omits dock chrome for embedding in the flight deck modal grid. */
@@ -38,7 +39,7 @@ export function BuiltInTerminalPanel({
       fontSize: 13,
       lineHeight: 1.25,
       cursorBlink: true,
-      theme: themeName === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME,
+      theme: getTerminalTheme(themeName),
       allowProposedApi: true,
       scrollback: 5000,
     });
@@ -122,7 +123,7 @@ export function BuiltInTerminalPanel({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeName === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME;
+    term.options.theme = getTerminalTheme(themeName);
   }, [themeName]);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { nativeThemeSource } from '@shared/theme';
 import { exec, execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { AgentId } from '@shared/agents';
@@ -165,7 +166,7 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
     const next = await updateSettings(patch);
-    if (patch.theme) nativeTheme.themeSource = patch.theme;
+    if (patch.theme) nativeTheme.themeSource = nativeThemeSource(patch.theme);
     return next;
   });
 
@@ -201,7 +202,7 @@ export function registerIpc(): void {
       const parsed = parseSettingsImportJson(raw);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       const next = await replaceSettings(parsed.value);
-      nativeTheme.themeSource = next.theme;
+      nativeTheme.themeSource = nativeThemeSource(next.theme);
       return { ok: true, settings: next };
     } catch (err) {
       return { ok: false, error: (err as Error).message };

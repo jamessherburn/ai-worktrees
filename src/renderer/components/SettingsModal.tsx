@@ -336,14 +336,14 @@ export function SettingsModal({ current, initialTab, onClose, onSaved, onSetting
               <div className="field">
                 <span className="field-label">Appearance</span>
                 <div className="theme-toggle">
-                  {(['system', 'light', 'dark'] as ThemePreference[]).map((opt) => (
+                  {(['system', 'light', 'dark', 'monokai'] as ThemePreference[]).map((opt) => (
                     <button
                       key={opt}
                       className={`theme-option${theme === opt ? ' active' : ''}`}
                       onClick={() => setTheme(opt)}
                       type="button"
                     >
-                      {opt[0].toUpperCase() + opt.slice(1)}
+                      {opt === 'monokai' ? 'Monokai' : opt[0].toUpperCase() + opt.slice(1)}
                     </button>
                   ))}
                 </div>

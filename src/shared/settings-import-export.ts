@@ -23,7 +23,7 @@ export type SettingsImportResult =
   | { ok: false; cancelled: true }
   | { ok: false; error: string };
 
-const THEME_OPTIONS: ThemePreference[] = ['system', 'dark', 'light'];
+const THEME_OPTIONS: ThemePreference[] = ['system', 'dark', 'light', 'monokai'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,7 +60,7 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
 
   const theme = candidate.theme;
   if (typeof theme !== 'string' || !THEME_OPTIONS.includes(theme as ThemePreference)) {
-    return { ok: false, error: 'theme must be system, dark, or light.' };
+    return { ok: false, error: 'theme must be system, dark, light, or monokai.' };
   }
 
   const legacyRecapPrompt =
