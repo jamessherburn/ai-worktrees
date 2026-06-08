@@ -51,11 +51,6 @@ export async function startShellPty(opts: {
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
   if (shellPtys.has(opts.sessionId)) {
     const existing = shellPtys.get(opts.sessionId)!;
-    try {
-      existing.proc.resize(opts.cols, opts.rows);
-    } catch {
-      // ignore: pty may have just exited
-    }
     const snapshot = existing.backlog.join('');
     queueMicrotask(() => {
       if (snapshot) listener?.send(IPC.ShellPtyData, { sessionId: opts.sessionId, data: snapshot });
