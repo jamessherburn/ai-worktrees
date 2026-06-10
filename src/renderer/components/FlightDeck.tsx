@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { SessionLabel, SessionWithStatus } from '@shared/types';
 import { getAgent } from '@shared/agents';
 import {
@@ -8,6 +9,7 @@ import {
   sessionLabelMap,
   statusDotClass,
 } from '@shared/session-labels';
+import { sessionNotesPreview, sessionNotesText } from '@shared/session-notes';
 import { GitHubStatsModal } from './GitHubStatsModal';
 import { SessionLabelChips } from './SessionLabelChips';
 import { SessionLabelMenu } from './SessionLabelMenu';
@@ -313,14 +315,44 @@ function FlightInstrument({
   const kind = activityKindFor(session);
   const dot = statusDotClass(session);
   const isMuted = session.muted === true;
+  const noteText = sessionNotesText(session);
+  const notePreview = sessionNotesPreview(noteText);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [showNotePreview, setShowNotePreview] = useState(false);
+  const [previewAnchor, setPreviewAnchor] = useState<{
+    left: number;
+    width: number;
+    bottom: number;
+  } | null>(null);
+
+  const updatePreviewAnchor = () => {
+    const card = cardRef.current;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    setPreviewAnchor({
+      left: rect.left + 10,
+      width: Math.max(160, rect.width - 20),
+      bottom: window.innerHeight - rect.top + 8,
+    });
+  };
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       className={`flight-instrument flight-instrument--${kind}${isMuted ? ' flight-instrument--muted' : ''}`}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      onMouseEnter={() => {
+        if (!notePreview) return;
+        updatePreviewAnchor();
+        setShowNotePreview(true);
+      }}
+      onMouseLeave={() => {
+        setShowNotePreview(false);
+        setPreviewAnchor(null);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -371,9 +403,28 @@ function FlightInstrument({
           <SessionLabelChips labels={labels} compact />
         </div>
         <div className="flight-instrument-footer">
-          <span className="flight-instrument-hint">Click to expand</span>
+          <span className="flight-instrument-hint">
+            {notePreview ? 'Hover for notes · click to expand' : 'Click to expand'}
+          </span>
         </div>
       </div>
+      {showNotePreview &&
+        notePreview &&
+        previewAnchor &&
+        createPortal(
+          <div
+            className="flight-instrument-note-preview flight-instrument-note-preview--floating"
+            role="tooltip"
+            style={{
+              left: previewAnchor.left,
+              width: previewAnchor.width,
+              bottom: previewAnchor.bottom,
+            }}
+          >
+            {notePreview}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

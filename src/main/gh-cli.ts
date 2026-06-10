@@ -8,7 +8,7 @@ function loginShell(): string {
   return process.env.SHELL || '/bin/zsh';
 }
 
-async function runInLoginShell(
+export async function runInLoginShell(
   command: string,
   opts: { timeout: number; maxBuffer?: number },
 ): Promise<{ stdout: string; stderr: string }> {
@@ -100,7 +100,7 @@ async function ensureGhAuthOrOpenLogin(
   return { ok: true, outcome, needsGhAuth: true, launchedAuthTerminal };
 }
 
-async function brewInstall(
+export async function brewInstall(
   send: (m: string) => void,
   formula: string,
   progressLabel: string,
@@ -119,7 +119,7 @@ async function brewInstall(
   }
 }
 
-async function wingetInstall(
+export async function wingetInstall(
   send: (m: string) => void,
   wingetId: string,
   progressLabel: string,

@@ -6,9 +6,8 @@ import type {
   CreateSessionResult,
   DeleteSessionInput,
   Session,
-  SessionQuickNote,
 } from '@shared/types';
-import { quickNotesForSession } from '@shared/session-quick-notes';
+import { sessionNotesText } from '@shared/session-notes';
 import { DEFAULT_AGENT_ID } from '@shared/agents';
 import { normalizeSession, normalizeSessionLabelIds } from '@shared/session-labels';
 import {
@@ -34,11 +33,11 @@ function normalizeSessionRecord(s: Session): Session {
     ...s,
     agentId: s.agentId ?? DEFAULT_AGENT_ID,
   });
-  const quickNotes = quickNotesForSession(base);
-  const { notes: _legacy, ...rest } = base;
+  const notes = sessionNotesText(base);
+  const { quickNotes: _quickNotes, notes: _legacyNotes, ...rest } = base;
   return {
     ...rest,
-    quickNotes: quickNotes.length ? quickNotes : undefined,
+    notes: notes || undefined,
   };
 }
 
@@ -203,32 +202,13 @@ export async function setSessionMuted(id: string, value: boolean): Promise<void>
   }));
 }
 
-export async function addSessionQuickNote(id: string, text: string): Promise<SessionQuickNote> {
+export async function setSessionNotes(id: string, text: string): Promise<void> {
   const trimmed = text.trim();
-  if (!trimmed) throw new Error('Note text is required.');
-  const note: SessionQuickNote = {
-    id: randomUUID(),
-    text: trimmed,
-    createdAt: new Date().toISOString(),
-  };
   await store.update((current) => ({
     sessions: current.sessions.map((s) => {
       if (s.id !== id) return s;
-      const existing = quickNotesForSession(s);
-      const { notes: _legacy, ...rest } = s;
-      return { ...rest, quickNotes: [...existing, note] };
-    }),
-  }));
-  return note;
-}
-
-export async function removeSessionQuickNote(id: string, noteId: string): Promise<void> {
-  await store.update((current) => ({
-    sessions: current.sessions.map((s) => {
-      if (s.id !== id) return s;
-      const existing = quickNotesForSession(s).filter((n) => n.id !== noteId);
-      const { notes: _legacy, ...rest } = s;
-      return { ...rest, quickNotes: existing.length ? existing : undefined };
+      const { quickNotes: _quickNotes, notes: _legacyNotes, ...rest } = s;
+      return { ...rest, notes: trimmed || undefined };
     }),
   }));
 }

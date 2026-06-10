@@ -14,7 +14,8 @@
     "postinstall": "electron-builder install-app-deps && npm run fix-pty-perms",
     "dist": "electron-vite build && electron-builder --mac",
     "dist:ci": "electron-vite build && electron-builder --mac --publish never",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "npx tsx --test src/main/agents.test.ts"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

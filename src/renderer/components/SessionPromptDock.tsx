@@ -7,7 +7,8 @@ const VISIBLE_COUNT = 10;
 type FlyoutAnchor = {
   index: number;
   left: number;
-  bottom: number;
+  bottom?: number;
+  top?: number;
   minWidth: number;
 };
 
@@ -15,9 +16,18 @@ type Props = {
   prompts: SessionPromptPreset[];
   disabled?: boolean;
   onRun: (text: string) => void;
+  /** Where child-prompt flyouts open relative to the chip. */
+  flyoutPlacement?: 'above' | 'below';
+  className?: string;
 };
 
-export function SessionPromptDock({ prompts, disabled = false, onRun }: Props) {
+export function SessionPromptDock({
+  prompts,
+  disabled = false,
+  onRun,
+  flyoutPlacement = 'above',
+  className,
+}: Props) {
   const [windowStart, setWindowStart] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [flyoutAnchor, setFlyoutAnchor] = useState<FlyoutAnchor | null>(null);
@@ -80,10 +90,11 @@ export function SessionPromptDock({ prompts, disabled = false, onRun }: Props) {
     setFlyoutAnchor({
       index,
       left: rect.left + rect.width / 2,
-      bottom: window.innerHeight - rect.top + 6,
+      bottom: flyoutPlacement === 'above' ? window.innerHeight - rect.top + 6 : undefined,
+      top: flyoutPlacement === 'below' ? rect.bottom + 6 : undefined,
       minWidth: Math.max(rect.width, 140),
     });
-  }, []);
+  }, [flyoutPlacement]);
 
   const hoverParent = useCallback(
     (index: number) => {
@@ -139,7 +150,7 @@ export function SessionPromptDock({ prompts, disabled = false, onRun }: Props) {
   const showNav = prompts.length > VISIBLE_COUNT;
 
   return (
-    <div className="session-prompt-dock-shell">
+    <div className={`session-prompt-dock-shell${className ? ` ${className}` : ''}`}>
       {showNav && (
         <button
           type="button"
@@ -220,6 +231,7 @@ export function SessionPromptDock({ prompts, disabled = false, onRun }: Props) {
               position: 'fixed',
               left: flyoutAnchor.left,
               bottom: flyoutAnchor.bottom,
+              top: flyoutAnchor.top,
               minWidth: flyoutAnchor.minWidth,
               transform: 'translateX(-50%)',
             }}

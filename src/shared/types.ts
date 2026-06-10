@@ -1,5 +1,4 @@
 import type { AgentId } from './agents';
-import type { KeyboardShortcutsConfig } from './keyboard-shortcuts';
 import type { WizardConfig } from './wizard';
 
 export type SessionLabel = {
@@ -9,6 +8,7 @@ export type SessionLabel = {
   color: string;
 };
 
+/** @deprecated Migrated to notes on read; no longer written. */
 export type SessionQuickNote = {
   id: string;
   text: string;
@@ -30,9 +30,9 @@ export type Session = {
   labelIds?: string[];
   /** When true, the session is visually de-emphasised on the Flight Deck. */
   muted?: boolean;
-  /** @deprecated Migrated to quickNotes on read; no longer written. */
+  /** Free-form notes for this session (Flight Deck). */
   notes?: string;
-  /** Short-lived quick notes for this session (Flight Deck workspace). */
+  /** @deprecated Migrated to notes on read; no longer written. */
   quickNotes?: SessionQuickNote[];
   /** @deprecated Migrated to labelIds on read; no longer written. */
   waitingOnReview?: boolean;
@@ -90,8 +90,8 @@ export type Settings = {
   sessionPrompts?: SessionPromptPreset[];
   /** User-defined labels for categorizing sessions. */
   sessionLabels?: SessionLabel[];
-  /** Customizable keyboard shortcuts. */
-  keyboardShortcuts?: KeyboardShortcutsConfig;
+  /** Neovim init.lua used by the Flight Deck session editor (not your system config). */
+  nvimConfig?: string;
 };
 
 export type RepoInfo = {
@@ -223,5 +223,12 @@ export type GhSetupResult =
       needsGhAuth?: boolean;
       /** Whether the app tried to open a system terminal to run `gh auth login`. */
       launchedAuthTerminal?: boolean;
+    }
+  | { ok: false; error: string };
+
+export type FishSetupResult =
+  | {
+      ok: true;
+      outcome: 'already-installed' | 'installed' | 'skipped';
     }
   | { ok: false; error: string };

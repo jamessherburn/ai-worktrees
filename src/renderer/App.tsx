@@ -5,12 +5,7 @@ import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
 import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
-import {
-  keyboardShortcutMatches,
-  normalizeKeyboardShortcuts,
-  shouldAllowShortcut,
-  type KeyboardShortcutAction,
-} from '@shared/keyboard-shortcuts';
+import { matchesShiftL, shouldIgnoreAppShortcut } from '@shared/app-shortcuts';
 import { sessionsInSidebarOrder } from '@shared/session-sidebar-order';
 import type { AppView } from './components/app-view';
 import { FlightDeck } from './components/FlightDeck';
@@ -19,7 +14,7 @@ import { Sidebar } from './components/Sidebar';
 import { TerminalView, type TerminalApi } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
-import { SettingsModal, type ModalShortcutHandlers } from './components/SettingsModal';
+import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
 import { GitPanel } from './components/GitPanel';
 import { SessionPromptDock } from './components/SessionPromptDock';
@@ -57,7 +52,7 @@ const DEFAULT_SETTINGS: Settings = {
   sessionLabels: DEFAULT_SESSION_LABELS,
 };
 
-type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks' | 'shortcuts';
+type SettingsTab = 'general' | 'editor' | 'labels' | 'prompts' | 'wizard' | 'tasks';
 
 
 function clampSidebarWidth(value: number): number {
@@ -202,53 +197,82 @@ export function App() {
 
   useEffect(() => {
     let alive = true;
-    const unsub = window.api.onGitHubApiSetupProgress((message) => {
+    const unsubGh = window.api.onGitHubApiSetupProgress((message) => {
+      if (!alive) return;
+      setGhApiBar({ message, tone: 'pending' });
+    });
+    const unsubFish = window.api.onFishSetupProgress((message) => {
       if (!alive) return;
       setGhApiBar({ message, tone: 'pending' });
     });
     let dismissTimer: number | undefined;
-    void window.api
-      .ensureGitHubApi()
-      .then((result) => {
+
+    const scheduleDismiss = (ms: number) => {
+      if (dismissTimer !== undefined) window.clearTimeout(dismissTimer);
+      dismissTimer = window.setTimeout(() => {
+        if (alive) setGhApiBar(null);
+      }, ms);
+    };
+
+    void (async () => {
+      try {
+        const ghResult = await window.api.ensureGitHubApi();
         if (!alive) return;
-        if (result.ok) {
-          if (result.needsGhAuth) {
+        if (ghResult.ok) {
+          if (ghResult.needsGhAuth) {
             setGhApiBar({
-              message: result.launchedAuthTerminal
+              message: ghResult.launchedAuthTerminal
                 ? 'GitHub CLI needs sign-in — finish gh auth login in the Terminal window that opened.'
                 : 'GitHub CLI needs sign-in — run gh auth login in a terminal, then dismiss this message.',
               tone: 'warning',
             });
           } else {
             setGhApiBar({
-              message: result.outcome === 'already-installed' ? 'Already installed' : 'Installed',
+              message: ghResult.outcome === 'already-installed' ? 'Already installed' : 'Installed',
               tone: 'success',
             });
-            dismissTimer = window.setTimeout(() => {
-              if (alive) setGhApiBar(null);
-            }, 4200);
+            scheduleDismiss(4200);
           }
         } else {
           setGhApiBar({
-            message: result.error,
+            message: ghResult.error,
             tone: 'error',
           });
-          dismissTimer = window.setTimeout(() => {
-            if (alive) setGhApiBar(null);
-          }, 12000);
+          scheduleDismiss(12000);
         }
-      })
-      .catch((err: unknown) => {
+
+        const ghNeedsAuth = ghResult.ok && ghResult.needsGhAuth;
+        const fishResult = await window.api.ensureFishShell();
+        if (!alive) return;
+        if (fishResult.ok) {
+          if (fishResult.outcome === 'skipped' || ghNeedsAuth) return;
+          setGhApiBar({
+            message:
+              fishResult.outcome === 'already-installed'
+                ? 'Fish shell ready'
+                : 'Fish shell installed',
+            tone: 'success',
+          });
+          scheduleDismiss(4200);
+        } else {
+          setGhApiBar({
+            message: fishResult.error,
+            tone: 'error',
+          });
+          scheduleDismiss(12000);
+        }
+      } catch (err: unknown) {
         if (!alive) return;
         const message = err instanceof Error ? err.message : String(err);
-        setGhApiBar({ message: `GitHub API check failed: ${message}`, tone: 'error' });
-        dismissTimer = window.setTimeout(() => {
-          if (alive) setGhApiBar(null);
-        }, 12000);
-      });
+        setGhApiBar({ message: `Startup dependency check failed: ${message}`, tone: 'error' });
+        scheduleDismiss(12000);
+      }
+    })();
+
     return () => {
       alive = false;
-      unsub();
+      unsubGh();
+      unsubFish();
       if (dismissTimer !== undefined) window.clearTimeout(dismissTimer);
     };
   }, []);
@@ -312,15 +336,6 @@ export function App() {
 
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
   const pendingWizardBriefRef = useRef(new Map<string, string>());
-  const settingsModalShortcutsRef = useRef<ModalShortcutHandlers | null>(null);
-  const flightDeckModalShortcutsRef = useRef<ModalShortcutHandlers | null>(null);
-  const runShortcutActionRef = useRef<(action: KeyboardShortcutAction) => void>(() => {});
-
-  const keyboardShortcuts = useMemo(
-    () => normalizeKeyboardShortcuts(settings.keyboardShortcuts),
-    [settings.keyboardShortcuts],
-  );
-
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
     if (api) {
       terminalApisRef.current.set(id, api);
@@ -441,25 +456,14 @@ export function App() {
     [refresh],
   );
 
-  const addSessionQuickNote = useCallback(async (sessionId: string, text: string) => {
-    const note = await window.api.addSessionQuickNote(sessionId, text);
+  const saveSessionNotes = useCallback(async (sessionId: string, text: string) => {
+    await window.api.setSessionNotes(sessionId, text);
     setSessions((prev) =>
       prev.map((x) =>
         x.id === sessionId
-          ? { ...x, quickNotes: [...(x.quickNotes ?? []), note] }
+          ? { ...x, notes: text.trim() || undefined, quickNotes: undefined }
           : x,
       ),
-    );
-  }, []);
-
-  const removeSessionQuickNote = useCallback(async (sessionId: string, noteId: string) => {
-    await window.api.removeSessionQuickNote(sessionId, noteId);
-    setSessions((prev) =>
-      prev.map((x) => {
-        if (x.id !== sessionId) return x;
-        const next = (x.quickNotes ?? []).filter((n) => n.id !== noteId);
-        return { ...x, quickNotes: next.length ? next : undefined };
-      }),
     );
   }, []);
 
@@ -493,7 +497,7 @@ export function App() {
   }, []);
 
   const goToNextOpenSession = useCallback(() => {
-    const ordered = sessionsInSidebarOrder(sessions);
+    const ordered = sessionsInSidebarOrder(sessions).filter((s) => !s.muted);
     if (ordered.length === 0) return;
 
     const currentId = view === 'flight-deck' ? flightDeckModalId : activeId;
@@ -505,79 +509,24 @@ export function App() {
     else openSession(nextId);
   }, [view, sessions, activeId, flightDeckModalId, openSession, openFlightDeckSession]);
 
+  const goToNextOpenSessionRef = useRef(goToNextOpenSession);
+  goToNextOpenSessionRef.current = goToNextOpenSession;
+
   const openManageLabels = useCallback(() => {
     setSettingsInitialTab('labels');
     setShowSettings(true);
   }, []);
 
   useEffect(() => {
-    runShortcutActionRef.current = (action) => {
-      switch (action) {
-        case 'newSession':
-          setShowNew(true);
-          break;
-        case 'nextSession':
-          goToNextOpenSession();
-          break;
-        case 'scrollToBottom':
-          if (flightDeckModalId) scrollFlightDeckTerminalToBottom();
-          else scrollActiveTerminalToBottom();
-          break;
-        case 'focusAgentInput':
-          focusActiveAgentInput();
-          break;
-        case 'modalExpand':
-          if (showSettings) settingsModalShortcutsRef.current?.expand();
-          else if (flightDeckModalId) flightDeckModalShortcutsRef.current?.expand();
-          break;
-        case 'modalMinimize':
-          if (showSettings) settingsModalShortcutsRef.current?.minimize();
-          else if (flightDeckModalId) flightDeckModalShortcutsRef.current?.minimize();
-          break;
-      }
-    };
-  }, [
-    goToNextOpenSession,
-    scrollActiveTerminalToBottom,
-    scrollFlightDeckTerminalToBottom,
-    focusActiveAgentInput,
-    showSettings,
-    flightDeckModalId,
-  ]);
-
-  useEffect(() => {
-    window.api.syncKeyboardShortcuts(keyboardShortcuts);
-  }, [keyboardShortcuts]);
-
-  useEffect(() => {
-    const unsub = window.api.onShortcutAction((action) => {
-      runShortcutActionRef.current(action);
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const tryAction = (action: keyof typeof keyboardShortcuts, run: () => void) => {
-        if (!keyboardShortcutMatches(e, keyboardShortcuts[action])) return false;
-        if (!shouldAllowShortcut(e, action)) return false;
-        e.preventDefault();
-        e.stopPropagation();
-        run();
-        return true;
-      };
-
-      if (tryAction('newSession', () => runShortcutActionRef.current('newSession'))) return;
-      if (tryAction('nextSession', () => runShortcutActionRef.current('nextSession'))) return;
-      if (tryAction('scrollToBottom', () => runShortcutActionRef.current('scrollToBottom'))) return;
-      if (tryAction('focusAgentInput', () => runShortcutActionRef.current('focusAgentInput'))) return;
-      if (tryAction('modalExpand', () => runShortcutActionRef.current('modalExpand'))) return;
-      if (tryAction('modalMinimize', () => runShortcutActionRef.current('modalMinimize'))) return;
+      if (!matchesShiftL(e) || shouldIgnoreAppShortcut(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      goToNextOpenSessionRef.current();
     };
-
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [keyboardShortcuts]);
+  }, []);
 
   const flightDeckModalSession = useMemo(
     () => (flightDeckModalId ? sessions.find((s) => s.id === flightDeckModalId) ?? null : null),
@@ -819,19 +768,9 @@ export function App() {
           themeName={resolvedTheme}
           blurred={showNew || showSettings || showAgentData || pendingDelete !== null || vscodeMissing}
           onClose={() => setFlightDeckModalId(null)}
-          onOpenInWorkspace={() => {
-            openSession(flightDeckModalSession.id);
-            setFlightDeckModalId(null);
-            setView('workspace');
-          }}
           onRunPrompt={runFlightDeckPrompt}
-          onAddQuickNote={(id, text) => void addSessionQuickNote(id, text)}
-          onRemoveQuickNote={(id, noteId) => void removeSessionQuickNote(id, noteId)}
-          onScrollToBottom={scrollFlightDeckTerminalToBottom}
+          onSaveNotes={(id, text) => void saveSessionNotes(id, text)}
           onTerminalApi={handleTerminalApi}
-          onRegisterModalShortcuts={(handlers) => {
-            flightDeckModalShortcutsRef.current = handlers;
-          }}
         />
       )}
 
@@ -878,9 +817,6 @@ export function App() {
             setSettingsInitialTab(undefined);
           }}
           onSettingsChange={setSettings}
-          onRegisterModalShortcuts={(handlers) => {
-            settingsModalShortcutsRef.current = handlers;
-          }}
           onSaved={(next) => {
             setSettings(next);
             setShowSettings(false);

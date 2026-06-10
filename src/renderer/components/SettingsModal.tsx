@@ -6,11 +6,11 @@ import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { SessionLabelsEditor } from './SessionLabelsEditor';
 import type { WizardConfig } from '@shared/wizard';
 import { parseWizardConfigJson, wizardConfigToJson } from '@shared/wizard';
-import { normalizeKeyboardShortcuts } from '@shared/keyboard-shortcuts';
-import { KeyboardShortcutsSettingsEditor } from './KeyboardShortcutsSettingsEditor';
 import { SessionPromptsSettingsEditor } from './SessionPromptsSettingsEditor';
 import { TasksSettingsEditor } from './TasksSettingsEditor';
 import { WizardSettingsEditor } from './WizardSettingsEditor';
+import { NvimConfigSettingsEditor } from './NvimConfigSettingsEditor';
+import { DEFAULT_NVIM_CONFIG, normalizeNvimConfig } from '@shared/nvim-config';
 
 const SETTINGS_SIZE_KEY = 'settings-modal-size';
 
@@ -20,15 +20,15 @@ const MIN_WIDTH = 520;
 const MIN_HEIGHT = 360;
 const VIEWPORT_MARGIN = 24;
 
-type SettingsTab = 'general' | 'labels' | 'prompts' | 'wizard' | 'tasks' | 'shortcuts';
+type SettingsTab = 'general' | 'editor' | 'labels' | 'prompts' | 'wizard' | 'tasks';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'editor', label: 'Editor' },
   { id: 'labels', label: 'Labels' },
   { id: 'prompts', label: 'Quick Prompts' },
   { id: 'wizard', label: 'Wizard' },
   { id: 'tasks', label: 'Tasks' },
-  { id: 'shortcuts', label: 'Shortcuts' },
 ];
 
 type ModalSize = { width: number; height: number };
@@ -66,18 +66,12 @@ function persistModalSize(size: ModalSize) {
   localStorage.setItem(SETTINGS_SIZE_KEY, JSON.stringify(size));
 }
 
-export type ModalShortcutHandlers = {
-  expand: () => void;
-  minimize: () => void;
-};
-
 type Props = {
   current: Settings;
   initialTab?: SettingsTab;
   onClose: () => void;
   onSaved: (settings: Settings) => void;
   onSettingsChange?: (settings: Settings) => void;
-  onRegisterModalShortcuts?: (handlers: ModalShortcutHandlers | null) => void;
 };
 
 function applySettingsToForm(settings: Settings) {
@@ -88,7 +82,7 @@ function applySettingsToForm(settings: Settings) {
     tasks: normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
     sessionPrompts: resolveSessionPrompts(settings.sessionPrompts),
     sessionLabels: normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
-    keyboardShortcuts: normalizeKeyboardShortcuts(settings.keyboardShortcuts),
+    nvimConfig: normalizeNvimConfig(settings.nvimConfig ?? DEFAULT_NVIM_CONFIG),
   };
 }
 
@@ -98,7 +92,6 @@ export function SettingsModal({
   onClose,
   onSaved,
   onSettingsChange,
-  onRegisterModalShortcuts,
 }: Props) {
   const [codeDir, setCodeDir] = useState(current.codeDir);
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
@@ -112,8 +105,8 @@ export function SettingsModal({
   const [sessionLabels, setSessionLabels] = useState<SessionLabel[]>(() =>
     normalizeSessionLabels(current.sessionLabels ?? DEFAULT_SESSION_LABELS),
   );
-  const [keyboardShortcuts, setKeyboardShortcuts] = useState(() =>
-    normalizeKeyboardShortcuts(current.keyboardShortcuts),
+  const [nvimConfig, setNvimConfig] = useState(() =>
+    normalizeNvimConfig(current.nvimConfig ?? DEFAULT_NVIM_CONFIG),
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'general');
   const [busy, setBusy] = useState(false);
@@ -156,7 +149,7 @@ export function SettingsModal({
     setTasks(form.tasks);
     setSessionPrompts(form.sessionPrompts);
     setSessionLabels(form.sessionLabels);
-    setKeyboardShortcuts(form.keyboardShortcuts);
+    setNvimConfig(form.nvimConfig);
     initialSectionIdsRef.current = new Set(form.tasks.sections.map((s) => s.id));
     onSettingsChange?.(next);
   };
@@ -216,28 +209,6 @@ export function SettingsModal({
       setExpanded(true);
     }
   };
-
-  const expandModal = useCallback(() => {
-    if (expanded) return;
-    setSizeBeforeExpand(size);
-    setSize(maxModalSize());
-    setExpanded(true);
-  }, [expanded, size]);
-
-  const minimizeModal = useCallback(() => {
-    if (!expanded) return;
-    const restore = sizeBeforeExpand ?? loadModalSize();
-    const next = clampModalSize(restore.width, restore.height);
-    setSize(next);
-    setExpanded(false);
-    setSizeBeforeExpand(null);
-  }, [expanded, sizeBeforeExpand]);
-
-  useEffect(() => {
-    if (!onRegisterModalShortcuts) return;
-    onRegisterModalShortcuts({ expand: expandModal, minimize: minimizeModal });
-    return () => onRegisterModalShortcuts(null);
-  }, [onRegisterModalShortcuts, expandModal, minimizeModal]);
 
   const onResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -302,7 +273,7 @@ export function SettingsModal({
         tasks,
         sessionPrompts: resolveSessionPrompts(sessionPrompts),
         sessionLabels: normalizeSessionLabels(sessionLabels),
-        keyboardShortcuts: normalizeKeyboardShortcuts(keyboardShortcuts),
+        nvimConfig: normalizeNvimConfig(nvimConfig),
       });
       persistModalSize(size);
       onSaved(next);
@@ -397,8 +368,8 @@ export function SettingsModal({
                 <div className="settings-card">
                   <p className="settings-card-text">
                     Export all settings as JSON, or import a file from another install. Includes labels,
-                    quick prompts, wizard, tasks, and keyboard shortcuts. Sessions and task cards are not
-                    included.
+                    quick prompts, editor config, wizard, and tasks. Sessions and
+                    task cards are not included.
                   </p>
                   <div className="settings-transfer-actions">
                     <button
@@ -432,6 +403,16 @@ export function SettingsModal({
                   )}
                 </div>
               </div>
+            </div>
+          )}
+          {tab === 'editor' && (
+            <div
+              role="tabpanel"
+              id={panelId('editor')}
+              aria-labelledby={`${baseId}-tab-editor`}
+              className="settings-modal-panel"
+            >
+              <NvimConfigSettingsEditor value={nvimConfig} onChange={setNvimConfig} />
             </div>
           )}
           {tab === 'labels' && (
@@ -472,16 +453,6 @@ export function SettingsModal({
               className="settings-modal-panel"
             >
               <TasksSettingsEditor value={tasks} onChange={setTasks} />
-            </div>
-          )}
-          {tab === 'shortcuts' && (
-            <div
-              role="tabpanel"
-              id={panelId('shortcuts')}
-              aria-labelledby={`${baseId}-tab-shortcuts`}
-              className="settings-modal-panel"
-            >
-              <KeyboardShortcutsSettingsEditor value={keyboardShortcuts} onChange={setKeyboardShortcuts} />
             </div>
           )}
         </div>

@@ -1,5 +1,8 @@
 import type { ThemePreference } from './types';
 
+export type { ResolvedTheme } from './nvim-theme';
+export { resolveThemePreference } from './nvim-theme';
+
 export type NativeThemeSource = 'system' | 'light' | 'dark';
 
 /** Maps app theme preferences to Electron `nativeTheme.themeSource` values. */
