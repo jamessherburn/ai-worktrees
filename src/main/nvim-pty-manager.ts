@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { IPC } from '@shared/ipc-channels';
 import type { ResolvedTheme } from '@shared/nvim-theme';
 import { ensureNvimConfig, nvimConfigDir, nvimDataDir, nvimInitPath } from './nvim-config.js';
+import { enrichedPath, resolveNvimPath } from './resolve-shell-path.js';
 
 const VALID_THEMES = new Set<ResolvedTheme>(['dark', 'light', 'monokai']);
 
@@ -43,17 +44,6 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function resolveNvimPath(): Promise<string | null> {
-  const candidates = ['nvim', '/opt/homebrew/bin/nvim', '/usr/local/bin/nvim'];
-  for (const candidate of candidates) {
-    if (candidate === 'nvim') {
-      return candidate;
-    }
-    if (await exists(candidate)) return candidate;
-  }
-  return 'nvim';
-}
-
 function normalizeTheme(theme?: string): ResolvedTheme {
   if (theme && VALID_THEMES.has(theme as ResolvedTheme)) {
     return theme as ResolvedTheme;
@@ -87,10 +77,18 @@ export async function startNvimPty(opts: {
   await fs.mkdir(dataDir, { recursive: true });
 
   const nvimPath = await resolveNvimPath();
+  if (!nvimPath) {
+    return {
+      ok: false,
+      error: 'Neovim not found. Install nvim (e.g. brew install neovim) and restart the app.',
+    };
+  }
+
   const initPath = nvimInitPath();
   const theme = normalizeTheme(opts.theme);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    PATH: enrichedPath(),
     TERM: 'xterm-256color',
     AI_WORKTREES_NVIM_DATA: dataDir,
     AI_WORKTREES_NVIM_CONFIG_DIR: nvimConfigDir(),
@@ -100,7 +98,7 @@ export async function startNvimPty(opts: {
 
   let proc: pty.IPty;
   try {
-    proc = pty.spawn(nvimPath!, ['-u', initPath], {
+    proc = pty.spawn(nvimPath, ['-u', initPath], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,
