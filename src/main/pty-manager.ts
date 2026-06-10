@@ -96,7 +96,6 @@ export async function startPty(opts: {
   sessionId: string;
   agentId: AgentId;
   cwd: string;
-  previouslyStarted: boolean;
   cols: number;
   rows: number;
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
@@ -115,7 +114,6 @@ export async function startPty(opts: {
 
   const launch = await buildLaunchCommand(opts.agentId, {
     cwd: opts.cwd,
-    previouslyStarted: opts.previouslyStarted,
   });
 
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };

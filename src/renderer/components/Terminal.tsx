@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { getTerminalTheme } from '../terminal-theme';
 import { syncTerminalInteractive, waitForTerminalLayout } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
-import type { AgentId } from '@shared/agents';
+import { getAgent, type AgentId } from '@shared/agents';
 import { normalizePromptText, SESSION_PROMPT_SUBMIT_DELAY_MS } from '@shared/session-prompt-submit';
 
 export type TerminalApi = {
@@ -23,10 +23,13 @@ type Props = {
   themeName: ResolvedTheme;
   /** When true, omits outer padding and refits when the host layout changes (flight deck grid). */
   embedded?: boolean;
+  /** When true, this terminal takes keyboard focus once ready (e.g. agent in flight deck). */
+  preferFocus?: boolean;
   /** Bumped when an embedded terminal's container layout changes. */
   layoutRevision?: number;
   onExit?: (sessionId: string) => void;
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
+  onRegisterFocus?: (focus: (() => void) | null) => void;
 };
 
 export function TerminalView({
@@ -36,9 +39,11 @@ export function TerminalView({
   blurred,
   themeName,
   embedded = false,
+  preferFocus = false,
   layoutRevision = 0,
   onExit,
   onTerminalApi,
+  onRegisterFocus,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
@@ -47,10 +52,14 @@ export function TerminalView({
   const activationCleanupRef = useRef<(() => void) | null>(null);
   const visibleRef = useRef(visible);
   const blurredRef = useRef(blurred);
+  const preferFocusRef = useRef(preferFocus);
   const onTerminalApiRef = useRef(onTerminalApi);
+  const onRegisterFocusRef = useRef(onRegisterFocus);
   onTerminalApiRef.current = onTerminalApi;
+  onRegisterFocusRef.current = onRegisterFocus;
   visibleRef.current = visible;
   blurredRef.current = blurred;
+  preferFocusRef.current = preferFocus;
 
   const clearActivation = () => {
     activationCleanupRef.current?.();
@@ -69,6 +78,7 @@ export function TerminalView({
       (cols, rows) => window.api.pty.resize(sessionId, cols, rows),
       focusDelayMs,
       afterSync,
+      preferFocusRef.current,
     );
   };
 
@@ -94,6 +104,8 @@ export function TerminalView({
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(host);
+
+    onRegisterFocusRef.current?.(() => term.focus());
 
     const terminalApi: TerminalApi = {
       paste: (text: string) => {
@@ -142,10 +154,16 @@ export function TerminalView({
     let fitTimer: number | undefined;
     ptyReadyRef.current = false;
 
+    const syncPtySize = () => {
+      if (!ptyReadyRef.current || term.cols <= 0 || term.rows <= 0) return;
+      window.api.pty.resize(sessionId, term.cols, term.rows);
+    };
+
     const fitSafely = () => {
       if (host.clientWidth === 0 || host.clientHeight === 0) return;
       try {
         fitAddon.fit();
+        syncPtySize();
       } catch {
         // ignore: layout not stable
       }
@@ -185,7 +203,7 @@ export function TerminalView({
 
     unsubExit = window.api.pty.onExit(({ sessionId: id, exitCode }) => {
       if (id !== sessionId) return;
-      term.writeln(`\r\n\x1b[2m[claude exited with code ${exitCode}]\x1b[0m`);
+      term.writeln(`\r\n\x1b[2m[${getAgent(agentId).name} exited with code ${exitCode}]\x1b[0m`);
       onExit?.(sessionId);
     });
 
@@ -220,6 +238,14 @@ export function TerminalView({
         result.reattached ? 100 : 50,
         result.reattached ? () => terminalApi.scrollToBottom() : undefined,
       );
+
+      if (embedded) {
+        window.setTimeout(() => {
+          fitSafely();
+          syncPtySize();
+          terminalApi.scrollToBottom();
+        }, 350);
+      }
     };
 
     void start();
@@ -229,6 +255,7 @@ export function TerminalView({
       ptyReadyRef.current = false;
       clearActivation();
       onTerminalApiRef.current?.(sessionId, null);
+      onRegisterFocusRef.current?.(null);
       if (fitTimer !== undefined) window.clearTimeout(fitTimer);
       unsubData?.();
       unsubExit?.();
@@ -251,7 +278,7 @@ export function TerminalView({
     applyTerminalActivation(50);
     return clearActivation;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- activation tied to session mount refs
-  }, [visible, blurred]);
+  }, [visible, blurred, preferFocus]);
 
   useEffect(() => {
     if (!embedded) return;
@@ -260,6 +287,10 @@ export function TerminalView({
     const timer = window.setTimeout(() => {
       try {
         fit.fit();
+        const term = termRef.current;
+        if (term && ptyReadyRef.current && term.cols > 0 && term.rows > 0) {
+          window.api.pty.resize(sessionId, term.cols, term.rows);
+        }
       } catch {
         // ignore: layout not stable
       }

@@ -8,6 +8,7 @@ import type {
   CreateSessionInput,
   DeleteSessionInput,
   TaskItem,
+  FishSetupResult,
   GhSetupResult,
   GitDiffRequest,
   GitDiffResult,
@@ -24,6 +25,7 @@ import type { SettingsExportResult, SettingsImportResult } from '@shared/setting
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
 import type { GitHubMonitorRequest, GitHubMonitorResult, GitHubMonitorStatus } from '@shared/github-monitor';
+import { ensureFishShell } from './fish-setup.js';
 import { ensureGitHubCli } from './gh-cli.js';
 import { fetchGitHubMonitorStats, getGitHubMonitorStatus } from './github-monitor.js';
 import { listRepos } from './repos.js';
@@ -55,11 +57,9 @@ import {
   listSessions,
   setSessionLabels,
   setSessionMuted,
-  addSessionQuickNote,
-  removeSessionQuickNote,
+  setSessionNotes,
   setSessionWaitingOnReview,
 } from './sessions.js';
-import { setKeyboardShortcuts } from './keyboard-shortcuts-handler.js';
 import { getSettings, replaceSettings, updateSettings } from './settings.js';
 import {
   getActivityState,
@@ -78,6 +78,15 @@ import {
   startShellPty,
   writeShellPty,
 } from './shell-pty-manager.js';
+import { writeNvimConfig } from './nvim-config.js';
+import type { ResolvedTheme } from '@shared/nvim-theme';
+import {
+  killNvimPty,
+  resizeNvimPty,
+  setNvimPtyTheme,
+  startNvimPty,
+  writeNvimPty,
+} from './nvim-pty-manager.js';
 import {
   addItem as tasksAddItem,
   clearDoneBefore as tasksClearDoneBefore,
@@ -124,6 +133,13 @@ export function registerIpc(): void {
     });
   });
 
+  ipcMain.handle(IPC.FishSetupEnsure, async (event): Promise<FishSetupResult> => {
+    const wc = event.sender;
+    return ensureFishShell((message) => {
+      wc.send(IPC.FishSetupProgress, message);
+    });
+  });
+
   ipcMain.handle(IPC.GitHubMonitorStatus, async (): Promise<GitHubMonitorStatus> => {
     return getGitHubMonitorStatus();
   });
@@ -146,6 +162,7 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.DeleteSession, async (_e, input: DeleteSessionInput) => {
     killPty(input.id);
     killShellPty(input.id);
+    killNvimPty(input.id);
     if (isExternalSessionId(input.id)) {
       const session = getDiscoveredExternalSession(input.id);
       if (session?.external) {
@@ -168,12 +185,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
     const next = await updateSettings(patch);
     if (patch.theme) nativeTheme.themeSource = nativeThemeSource(patch.theme);
-    if (patch.keyboardShortcuts) setKeyboardShortcuts(next.keyboardShortcuts ?? {});
+    if (patch.nvimConfig !== undefined) await writeNvimConfig(next.nvimConfig);
     return next;
-  });
-
-  ipcMain.on(IPC.ShortcutsSync, (_e, shortcuts: Settings['keyboardShortcuts']) => {
-    setKeyboardShortcuts(shortcuts ?? {});
   });
 
   ipcMain.handle(IPC.ExportSettings, async (): Promise<SettingsExportResult> => {
@@ -209,7 +222,6 @@ export function registerIpc(): void {
       if (!parsed.ok) return { ok: false, error: parsed.error };
       const next = await replaceSettings(parsed.value);
       nativeTheme.themeSource = nativeThemeSource(next.theme);
-      setKeyboardShortcuts(next.keyboardShortcuts ?? {});
       return { ok: true, settings: next };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
@@ -265,7 +277,6 @@ export function registerIpc(): void {
       sessionId: session.id,
       agentId: session.agentId,
       cwd: session.worktreePath,
-      previouslyStarted: session.lastStartedAt !== null,
       cols: args.cols,
       rows: args.rows,
     });
@@ -322,6 +333,37 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(
+    IPC.NvimPtyStart,
+    async (_e, args: { sessionId: string; cols: number; rows: number; theme?: ResolvedTheme }) => {
+      const session = await getSessionById(args.sessionId);
+      if (!session) return { ok: false, error: 'Session not found.' };
+      return startNvimPty({
+        sessionId: session.id,
+        cwd: session.worktreePath,
+        cols: args.cols,
+        rows: args.rows,
+        theme: args.theme,
+      });
+    },
+  );
+
+  ipcMain.on(IPC.NvimPtyWrite, (_e, args: { sessionId: string; data: string }) => {
+    writeNvimPty(args.sessionId, args.data);
+  });
+
+  ipcMain.on(IPC.NvimPtyResize, (_e, args: { sessionId: string; cols: number; rows: number }) => {
+    resizeNvimPty(args.sessionId, args.cols, args.rows);
+  });
+
+  ipcMain.handle(IPC.NvimPtyKill, async (_e, sessionId: string) => {
+    killNvimPty(sessionId);
+  });
+
+  ipcMain.on(IPC.NvimPtySetTheme, (_e, args: { sessionId: string; theme: ResolvedTheme }) => {
+    setNvimPtyTheme(args.sessionId, args.theme);
+  });
+
+  ipcMain.handle(
     IPC.SessionsSetWaitingOnReview,
     async (_e, args: { sessionId: string; value: boolean }) => {
       if (isExternalSessionId(args.sessionId)) return;
@@ -346,20 +388,12 @@ export function registerIpc(): void {
   );
 
   ipcMain.handle(
-    IPC.SessionsAddQuickNote,
+    IPC.SessionsSetNotes,
     async (_e, args: { sessionId: string; text: string }) => {
       if (isExternalSessionId(args.sessionId)) {
-        throw new Error('Quick notes are not available for external sessions.');
+        throw new Error('Notes are not available for external sessions.');
       }
-      return addSessionQuickNote(args.sessionId, args.text);
-    },
-  );
-
-  ipcMain.handle(
-    IPC.SessionsRemoveQuickNote,
-    async (_e, args: { sessionId: string; noteId: string }) => {
-      if (isExternalSessionId(args.sessionId)) return;
-      await removeSessionQuickNote(args.sessionId, args.noteId);
+      await setSessionNotes(args.sessionId, args.text);
     },
   );
 

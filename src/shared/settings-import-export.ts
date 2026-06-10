@@ -1,8 +1,8 @@
 import type { SessionLabel, SessionPromptPreset, Settings, TasksConfig, ThemePreference } from './types';
-import { normalizeKeyboardShortcuts } from './keyboard-shortcuts';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from './session-labels';
 import { resolveSessionPrompts } from './session-prompts';
 import { normalizeTasksConfig } from './tasks';
+import { normalizeNvimConfig } from './nvim-config';
 import { normalizeWizardConfig } from './wizard';
 
 export const SETTINGS_EXPORT_VERSION = 1;
@@ -81,9 +81,7 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
       sessionLabels: normalizeSessionLabels(
         (candidate.sessionLabels as SessionLabel[] | undefined) ?? DEFAULT_SESSION_LABELS,
       ),
-      keyboardShortcuts: normalizeKeyboardShortcuts(
-        candidate.keyboardShortcuts as Settings['keyboardShortcuts'],
-      ),
+      nvimConfig: normalizeNvimConfig(candidate.nvimConfig as string | undefined),
     },
   };
 }

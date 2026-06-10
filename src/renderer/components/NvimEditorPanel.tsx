@@ -8,28 +8,24 @@ import type { ResolvedTheme } from '../theme';
 
 type Props = {
   sessionId: string;
-  worktreePath: string;
   themeName: ResolvedTheme;
   blurred: boolean;
-  onHide: () => void;
-  /** When true, omits dock chrome for embedding in the flight deck modal grid. */
-  embedded?: boolean;
-  /** Bumped when an embedded terminal's container layout changes. */
+  /** When false, the editor accepts input but does not steal focus on mount. */
+  autoFocus?: boolean;
+  /** Bumped when the panel container layout changes. */
   layoutRevision?: number;
   /** Delay PTY start so the agent terminal can claim focus and layout first. */
   startDelayMs?: number;
   onRegisterFocus?: (focus: (() => void) | null) => void;
 };
 
-export function BuiltInTerminalPanel({
+export function NvimEditorPanel({
   sessionId,
-  worktreePath,
   themeName,
   blurred,
-  onHide,
-  embedded,
+  autoFocus = false,
   layoutRevision = 0,
-  startDelayMs = 0,
+  startDelayMs = 600,
   onRegisterFocus,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -38,8 +34,10 @@ export function BuiltInTerminalPanel({
   const ptyReadyRef = useRef(false);
   const activationCleanupRef = useRef<(() => void) | null>(null);
   const blurredRef = useRef(blurred);
+  const autoFocusRef = useRef(autoFocus);
   const onRegisterFocusRef = useRef(onRegisterFocus);
   blurredRef.current = blurred;
+  autoFocusRef.current = autoFocus;
   onRegisterFocusRef.current = onRegisterFocus;
 
   const clearActivation = () => {
@@ -55,10 +53,10 @@ export function BuiltInTerminalPanel({
       term,
       fitRef.current,
       !blurredRef.current,
-      (cols, rows) => window.api.shellPty.resize(sessionId, cols, rows),
+      (cols, rows) => window.api.nvimPty.resize(sessionId, cols, rows),
       focusDelayMs,
       afterSync,
-      !embedded,
+      autoFocusRef.current,
     );
   };
 
@@ -108,7 +106,7 @@ export function BuiltInTerminalPanel({
       fitTimer = window.setTimeout(fitSafely, 32);
     };
 
-    unsubData = window.api.shellPty.onData(({ sessionId: id, data }) => {
+    unsubData = window.api.nvimPty.onData(({ sessionId: id, data }) => {
       if (id !== sessionId) return;
       const replayingBacklog = pendingBacklogReplay;
       if (pendingBacklogReplay) pendingBacklogReplay = false;
@@ -117,16 +115,16 @@ export function BuiltInTerminalPanel({
         requestAnimationFrame(() => {
           fitSafely();
           if (term.cols > 0 && term.rows > 0) {
-            window.api.shellPty.resize(sessionId, term.cols, term.rows);
+            window.api.nvimPty.resize(sessionId, term.cols, term.rows);
           }
           term.scrollToBottom();
         });
       }
     });
 
-    unsubExit = window.api.shellPty.onExit(({ sessionId: id, exitCode }) => {
+    unsubExit = window.api.nvimPty.onExit(({ sessionId: id, exitCode }) => {
       if (id !== sessionId) return;
-      term.writeln(`\r\n\x1b[2m[shell exited with code ${exitCode}]\x1b[0m`);
+      term.writeln(`\r\n\x1b[2m[editor exited with code ${exitCode}]\x1b[0m`);
     });
 
     const start = async () => {
@@ -136,7 +134,7 @@ export function BuiltInTerminalPanel({
       if (cancelled) return;
       await waitForTerminalLayout(host);
       fitSafely();
-      const result = await window.api.shellPty.start(sessionId, term.cols, term.rows);
+      const result = await window.api.nvimPty.start(sessionId, term.cols, term.rows, themeName);
       if (cancelled) return;
       if (!result.ok) {
         term.writeln(`\r\n\x1b[31m${result.error}\x1b[0m`);
@@ -145,17 +143,15 @@ export function BuiltInTerminalPanel({
 
       pendingBacklogReplay = result.reattached;
 
-      term.onData((data) => window.api.shellPty.write(sessionId, data));
-      term.onResize(({ cols, rows }) => window.api.shellPty.resize(sessionId, cols, rows));
+      term.onData((data) => window.api.nvimPty.write(sessionId, data));
+      term.onResize(({ cols, rows }) => window.api.nvimPty.resize(sessionId, cols, rows));
 
       resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(host);
-      if (embedded) {
-        const parent = host.parentElement;
-        if (parent) resizeObserver.observe(parent);
-        const grandparent = parent?.parentElement;
-        if (grandparent) resizeObserver.observe(grandparent);
-      }
+      const parent = host.parentElement;
+      if (parent) resizeObserver.observe(parent);
+      const grandparent = parent?.parentElement;
+      if (grandparent) resizeObserver.observe(grandparent);
 
       ptyReadyRef.current = true;
       applyTerminalActivation(result.reattached ? 100 : 50, result.reattached ? () => term.scrollToBottom() : undefined);
@@ -179,21 +175,30 @@ export function BuiltInTerminalPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- terminal tied to sessionId
   }, [sessionId, startDelayMs]);
 
+  const mountedThemeRef = useRef<ResolvedTheme | null>(null);
+
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.theme = getTerminalTheme(themeName);
-  }, [themeName]);
+    if (!ptyReadyRef.current) return;
+    if (mountedThemeRef.current === null) {
+      mountedThemeRef.current = themeName;
+      return;
+    }
+    if (mountedThemeRef.current === themeName) return;
+    mountedThemeRef.current = themeName;
+    window.api.nvimPty.setTheme(sessionId, themeName);
+  }, [themeName, sessionId]);
 
   useEffect(() => {
     if (!ptyReadyRef.current) return;
     applyTerminalActivation(50);
     return clearActivation;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- activation tied to session mount refs
-  }, [blurred]);
+  }, [blurred, autoFocus]);
 
   useEffect(() => {
-    if (!embedded) return;
     const fit = fitRef.current;
     if (!fit) return;
     const timer = window.setTimeout(() => {
@@ -204,51 +209,15 @@ export function BuiltInTerminalPanel({
       }
     }, 140);
     return () => window.clearTimeout(timer);
-  }, [embedded, layoutRevision]);
-
-  if (embedded) {
-    return (
-      <div className="built-in-terminal-panel built-in-terminal-panel--embedded">
-        <div className="built-in-terminal-body built-in-terminal-body--embedded">
-          <div className="built-in-terminal-shell built-in-terminal-shell--embedded" aria-hidden={blurred}>
-            <div className="built-in-terminal-host" ref={hostRef} />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [layoutRevision]);
 
   return (
-    <section className="built-in-terminal-panel bottom-dock-panel">
-      <div className="bottom-dock-panel-header">
-        <div className="bottom-dock-panel-title">Terminal</div>
-        <div className="built-in-terminal-subtitle" title={worktreePath}>
-          {worktreePath}
-        </div>
-        <div className="bottom-dock-panel-header-actions">
-          <button
-            className="icon-btn"
-            onClick={onHide}
-            title="Hide Terminal panel"
-            aria-label="Hide Terminal panel"
-          >
-            <ChevronDownIcon />
-          </button>
+    <div className="nvim-editor-panel">
+      <div className="nvim-editor-body">
+        <div className="nvim-editor-shell" aria-hidden={blurred}>
+          <div className="nvim-editor-host" ref={hostRef} />
         </div>
       </div>
-      <div className="built-in-terminal-body">
-        <div className="built-in-terminal-shell" aria-hidden={blurred}>
-          <div className="built-in-terminal-host" ref={hostRef} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+    </div>
   );
 }

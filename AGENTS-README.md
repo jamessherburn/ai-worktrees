@@ -6,7 +6,9 @@ How AI Worktrees is wired together, how to add a new coding agent, and what to r
 
 ## 1. What the app does, in one paragraph
 
-Each **worktree session** is a git worktree (new branch) with a long-lived PTY running one agent CLI in that directory. **Global sessions** skip worktree creation and use the configured code directory as cwd. Sessions persist across app restarts: PTYs are recreated on demand, but worktrees, branches, and each agent’s on-disk history remain until you delete the session. The UI is React + xterm.js; git, PTY, filesystem, and CLI detection live in the Electron main process behind a narrow `window.api` bridge.
+Each **worktree session** is a git worktree (new branch) with a long-lived PTY running one agent CLI in that directory. **Global sessions** skip worktree creation and use the configured code directory as cwd. Sessions persist across app restarts: PTYs are recreated on demand, but worktrees, branches, and each agent’s on-disk history remain until you delete the session.
+
+The UI has two views: **Flight Deck** (default) — a filterable grid of session cards opening a fullscreen three-panel workspace (Neovim editor, agent REPL, shell) — and **Workspace** — sidebar + main agent terminal + bottom dock (shell, Git, tasks). React + xterm.js in the renderer; git, PTY, Neovim, filesystem, and CLI detection live in the Electron main process behind a narrow `window.api` bridge.
 
 ---
 
@@ -21,7 +23,9 @@ Each **worktree session** is a git worktree (new branch) with a long-lived PTY r
   - `cursor-agent` — Cursor Agent
   - `gemini` — Google Gemini CLI
   - `codex` — OpenAI Codex CLI
+- `nvim` on `PATH` for the Flight Deck embedded editor (other panels work without it)
 - A folder of git repos (default `~/code`, configurable in Settings)
+- Optional: `gh` for GitHub Stats and startup auto-setup; **fish** for the built-in shell (auto-installed via Homebrew when missing on macOS/Linux)
 
 ### Develop
 
@@ -46,8 +50,8 @@ npm run dist        # full mac dmg in release/
 | --- | --- |
 | `~/Library/Application Support/ai-worktrees/` | Typical userData when running `npm run dev` |
 | `~/Library/Application Support/AI Worktrees/` | Typical userData for the packaged `.app` |
-| `sessions.json` | Sessions (worktree path, agent, wizard brief, global flag, …) |
-| `settings.json` | Code dir, theme, wizard config, tasks sections, session prompts |
+| `sessions.json` | Sessions (worktree path, agent, wizard brief, global flag, labelIds, notes, …) |
+| `settings.json` | Code dir, theme, wizard config, tasks sections, session prompts, session labels, nvim config |
 | `diary.json` | Tasks kanban items |
 | `<codeDir>/<repo>-<session>` | Worktree directory (session name slashes → dashes) |
 
@@ -69,13 +73,19 @@ src/
 │   ├── git.ts                  worktree + status/diff/stage (execFile only)
 │   ├── repos.ts                Scans codeDir for git repos
 │   ├── pty-manager.ts          Agent PTY per session + activity tracking
-│   ├── shell-pty-manager.ts    Built-in shell PTY per session (bottom dock)
+│   ├── shell-pty-manager.ts    Built-in shell PTY (fish preferred via resolve-shell-path)
+│   ├── nvim-pty-manager.ts     Neovim PTY per session (Flight Deck editor)
+│   ├── nvim-config.ts          Writes managed init.lua + plugin dir under userData
+│   ├── resolve-shell-path.ts   find fish / fall back to login shell
+│   ├── fish-setup.ts           Optional fish install at startup (brew)
 │   ├── agents.ts               Per-agent launch command builder
 │   ├── agent-detection.ts      `command -v` probes in login shell (cached)
 │   ├── agent-data.ts           Instructions I/O + billing/spend per agent
 │   ├── usage.ts                Claude spend via pinned ccusage (npx/bun)
 │   ├── gh-cli.ts               Optional git/gh install + gh auth flow
-│   ├── settings.ts             settings.json
+│   ├── github-monitor.ts       GitHub Stats via `gh api graphql`
+│   ├── external-sessions.ts    Discover running agent CLIs outside the app
+│   ├── settings.ts             settings.json + import/export
 │   ├── diary.ts                diary.json (tasks)
 │   ├── vscode.ts               `code --reuse-window`
 │   └── store.ts                Serial JSON read/write
@@ -84,16 +94,22 @@ src/
 │   └── index.ts                contextBridge → window.api (typed CWApi)
 │
 ├── renderer/
-│   ├── App.tsx                 Layout, dock, modals, GitHub setup bar
+│   ├── App.tsx                 Views, dock, modals, startup setup bar
 │   ├── components/
+│   │   ├── FlightDeck.tsx            Session grid + filters + GitHub Stats entry
+│   │   ├── FlightDeckSessionModal.tsx  Fullscreen editor / agent / shell workspace
+│   │   ├── NvimEditorPanel.tsx       xterm host for nvim PTY
+│   │   ├── ViewSwitcher.tsx          Flight Deck ↔ Workspace toggle
 │   │   ├── Sidebar.tsx
 │   │   ├── Terminal.tsx              Agent REPL
-│   │   ├── BuiltInTerminalPanel.tsx  Shell REPL (bottom dock)
-│   │   ├── BottomDock.tsx            Shell + Git + prompts
+│   │   ├── BuiltInTerminalPanel.tsx  Shell REPL
+│   │   ├── BottomDock.tsx            Shell + Git + prompts (Workspace)
 │   │   ├── GitPanel.tsx              Status / diff / file actions
+│   │   ├── SessionNotesButton.tsx    Per-session notes (Flight Deck workspace)
+│   │   ├── GitHubStatsModal.tsx      Cross-repo gh GraphQL stats
 │   │   ├── NewSessionModal.tsx       Create + wizard step
-│   │   ├── WizardSessionStep.tsx
-│   │   ├── SettingsModal.tsx         Tabs: general, prompts, wizard, tasks
+│   │   ├── SettingsModal.tsx         Tabs: general, editor, labels, prompts, wizard, tasks
+│   │   ├── NvimConfigSettingsEditor.tsx  Editor tab + shortcut reference
 │   │   ├── AgentDataModal.tsx
 │   │   ├── TasksPanel.tsx
 │   │   └── …
@@ -101,8 +117,13 @@ src/
 │
 └── shared/
     ├── agents.ts               AGENTS registry + AgentId
+    ├── app-shortcuts.ts        Shift+L/K/N/J reference + matchers
     ├── types.ts                Session, Settings, git types, …
     ├── ipc-channels.ts         IPC name constants
+    ├── nvim-config.ts          Default Neovim config + migrations
+    ├── session-labels.ts       Labels, activity kinds, mute
+    ├── session-notes.ts        Per-session notes helpers
+    ├── github-monitor.ts       GitHub Stats types + bucket helpers
     ├── wizard.ts               Wizard config + DEFAULT_WIZARD_CONFIG
     ├── tasks.ts                Tasks kanban defaults
     └── session-prompts.ts      Quick prompt defaults
@@ -159,9 +180,30 @@ Same as above, but `createSession({ global: true, name, agentId, … })` sets `w
 ### Delete
 
 ```
-DeleteSession → killPty + killShellPty → (if not global) git worktree remove,
+DeleteSession → killPty + killShellPty + killNvimPty → (if not global) git worktree remove,
                 optional branch -D → remove from sessions.json
 ```
+
+### Flight Deck session workspace
+
+```
+User clicks session card on Flight Deck grid
+    │
+    ▼
+FlightDeckSessionModal (fullscreen, fixed layout)
+    │
+    ├─ NvimEditorPanel → nvimPty.start(sessionId, theme)
+    │       main: nvim-pty-manager.ts spawns nvim with userData init config
+    │
+    ├─ TerminalView (embedded) → pty.start(sessionId)  [agent REPL]
+    │
+    └─ BuiltInTerminalPanel (embedded) → shellPty.start(sessionId)
+            main: shell-pty-manager.ts uses resolveShellPath() → fish when available
+```
+
+**Shift+K** cycles focus editor → agent → shell. **Shift+N** toggles notes. **Shift+L** (app-wide) opens the next non-muted session. **Escape** closes the workspace.
+
+Startup (renderer `App.tsx`): `ensureGitHubApi()` then `ensureFishShell()` — progress on the status bar; fish cache cleared in main after install so new shell PTYs pick up fish.
 
 ---
 
@@ -261,7 +303,7 @@ Handlers that accept a **filesystem path** from the renderer today: `RevealInFin
 | Session names restricted before path/branch use | Yes — `NAME_PATTERN` in `sessions.ts` |
 | Built-in agent commands are literals, not user-built shell | Yes — `agents.ts` |
 | Zero network ever | **No** — subprocesses may network (see below) |
-| Only touches code dir + userData | **No** — also agent homes, optional brew/gh/npm |
+| Only touches code dir + userData | **No** — also agent homes, optional brew/gh/fish/npm, tmp GraphQL input files |
 
 ### 7.2 Electron hardening
 
@@ -282,13 +324,15 @@ Use this when reviewing PRs:
 | --- | --- | --- |
 | `execFile('git', argv, { cwd })` | All git operations | No — paths/refs in argv |
 | `execFile('osascript', argv)` | Terminal.app `cd`, gh auth terminal | Path escaped in AppleScript string |
-| `execFile('which'/'code', …)` | VS Code CLI resolution | Path as argv to `code` |
-| `execFile(shell, ['-lic', cmd])` | Agent detection, gh-cli brew/gh | `cmd` built from literals in our code |
+| `execFile('which'/'code', …)` | VS Code CLI resolution, fish lookup | Fixed argv |
+| `execFile(shell, ['-lic', cmd])` | Agent detection, gh-cli/fish-setup brew | `cmd` built from literals in our code |
 | `execFile('winget', argv)` | Windows git/gh install | Fixed argv |
 | `execFile(npx\|bun, argv)` | ccusage for Claude spend | Pinned package version in argv |
 | `exec(osascript shell string)` | Legacy OpenInITerm IPC | Worktree path escaped |
 | `pty.spawn(shell, ['-lic', launch.shellCommand])` | Agent REPL | `shellCommand` from `agents.ts` literals |
-| `pty.spawn(shell, ['-l'])` | Built-in shell | No user command string |
+| `pty.spawn(resolvedShell, ['-l'])` | Built-in shell (fish preferred) | No user command string |
+| `pty.spawn(nvim, argv, …)` | Flight Deck Neovim | Fixed argv; config path from userData |
+| `runInLoginShell('gh api graphql --input …')` | GitHub Stats | GraphQL query from our code; temp path in `tmpdir` |
 | `shell.openPath(path)` | Finder reveal | Path from IPC (UI: session path) |
 
 ### 7.4 Shell injection rules for contributors
@@ -307,10 +351,10 @@ Subprocesses may use the network:
 
 - `git fetch` / remotes
 - Agent CLIs → vendor APIs
-- `gh auth status`, `brew install`, `winget install`
+- `gh auth status`, `gh api graphql` (GitHub Stats), `brew install` (git/gh/fish), `winget install`
 - `npx --yes ccusage@<pin>` → npm registry when uncached
 
-Document new subprocesses that can download or phone home.
+Document new subprocesses that can download or phone home. **Neovim** itself is local; only add network-bearing plugins to the managed config deliberately.
 
 ### 7.6 Filesystem scope
 
@@ -318,9 +362,11 @@ Document new subprocesses that can download or phone home.
 | --- | --- |
 | `settings.codeDir` | List repos, global session cwd, worktree parent paths |
 | userData JSON | Read/write sessions, settings, tasks |
+| userData nvim config | Generated `init.lua`, plugin tree (`nvim-config.ts`) |
 | `~/agent-home/…` | Instructions read/write per `AgentDefinition` |
 | Agent auth paths | Read-only for billing chips (`agent-data.ts`) |
 | Worktree paths | Git panel + PTY cwd; paths originate from git status inside that worktree |
+| `os.tmpdir()` | Short-lived JSON files for `gh api graphql --input` |
 
 ### 7.7 Adding an agent — checklist
 

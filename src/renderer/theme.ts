@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ThemePreference } from '@shared/types';
+import { resolveThemePreference, type ResolvedTheme } from '@shared/theme';
 
-export type ResolvedTheme = 'dark' | 'light' | 'monokai';
+export type { ResolvedTheme };
 
 export function resolveTheme(pref: ThemePreference): ResolvedTheme {
-  if (pref === 'dark' || pref === 'light' || pref === 'monokai') return pref;
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  return resolveThemePreference(pref, window.matchMedia('(prefers-color-scheme: light)').matches);
 }
 
 export function useResolvedTheme(pref: ThemePreference): ResolvedTheme {

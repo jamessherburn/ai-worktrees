@@ -2,6 +2,7 @@ import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
 import { promises as fs } from 'node:fs';
 import { IPC } from '@shared/ipc-channels';
+import { resolveShellPath } from './resolve-shell-path.js';
 
 type ShellPtyEntry = {
   proc: pty.IPty;
@@ -28,10 +29,6 @@ function pushBacklog(entry: ShellPtyEntry, chunk: string): void {
     const removed = entry.backlog.shift()!;
     entry.backlogBytes -= removed.length;
   }
-}
-
-function shellPath(): string {
-  return process.env.SHELL || '/bin/zsh';
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -62,11 +59,12 @@ export async function startShellPty(opts: {
     return { ok: false, error: `Worktree path no longer exists: ${opts.cwd}` };
   }
 
-  const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };
+  const shell = await resolveShellPath();
+  const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color', SHELL: shell };
 
   let proc: pty.IPty;
   try {
-    proc = pty.spawn(shellPath(), ['-l'], {
+    proc = pty.spawn(shell, ['-l'], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,
