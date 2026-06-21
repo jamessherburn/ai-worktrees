@@ -5,7 +5,9 @@ import { IPC } from '@shared/ipc-channels';
 import type { AgentId } from '@shared/agents';
 import type { ActivityState } from '@shared/types';
 import { buildLaunchCommand } from './agents.js';
+import { detectAgents } from './agent-detection.js';
 import { markSessionStarted } from './sessions.js';
+import { enrichedPath, probeShellPath } from './resolve-shell-path.js';
 
 type ActivityEvent = { at: number; bytes: number };
 
@@ -79,8 +81,12 @@ function ensureActivityTimer(): void {
   activityTimer = setInterval(tickActivity, POLL_INTERVAL_MS);
 }
 
-function shellPath(): string {
-  return process.env.SHELL || '/bin/zsh';
+function agentShellEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    TERM: 'xterm-256color',
+    PATH: enrichedPath(),
+  };
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -121,13 +127,14 @@ export async function startPty(opts: {
       : {}),
   });
 
-  const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };
+  const env = agentShellEnv();
+  const shell = probeShellPath();
 
   let proc: pty.IPty;
   try {
-    // Match agent-detection.ts: login + interactive (-lic) so ~/.zshrc PATH
-    // (nvm, fnm, etc.) matches what `command -v` saw when marking the agent installed.
-    proc = pty.spawn(shellPath(), ['-lic', launch.shellCommand], {
+    // Match agent-detection.ts: POSIX login shell + enriched PATH so agent CLIs
+    // resolve the same way as the install probe (fish lacks our probe scripts).
+    proc = pty.spawn(shell, ['-lic', launch.shellCommand], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,

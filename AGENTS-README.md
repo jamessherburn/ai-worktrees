@@ -61,12 +61,26 @@ The app has a single workspace layout (no view switcher):
 | Bottom dock | `components/BottomDock.tsx` | Resizable split between dock panels |
 | New session | `components/NewSessionModal.tsx` | Type → Agent → Details wizard |
 | To Do | `components/TodoModal.tsx` | Global tasks (`diary.json`) |
-| Settings | `components/SettingsModal.tsx` | General, Labels, Shortcuts tabs |
+| Skills bar | `components/WorktreesSkillPrompter.tsx` | Slash-command skills prompt (bottom bar) |
+| Skills editor | `components/WorktreesSkillsEditor.tsx` | Settings → Skills tab |
+| Settings | `components/SettingsModal.tsx` | General, Skills, Labels, Shortcuts tabs |
 | Agent Data | `components/AgentDataModal.tsx` | Instructions + spend per agent |
 
 Per-session **panel prefs** (shell/git open or closed) live in renderer `localStorage` (`session-panel-prefs`), not in `settings.json`. Cycling sessions restores each session’s own dock state.
 
-Keyboard shortcuts are defined in `shared/app-shortcuts.ts` and handled in `App.tsx` (capture phase; skipped when modals are open or a form field is focused).
+Keyboard shortcuts are defined in `shared/app-shortcuts.ts` and handled in `App.tsx` (capture phase; skipped when modals are open or a form field is focused — except **Shift+J** from the skills bar, which cycles focus away).
+
+### Skills (Worktrees Skills)
+
+Cross-agent reusable prompts live in `settings.json` as `worktreesSkills` (see `shared/worktrees-skills.ts`). They are **not** migrated from the legacy `sessionPrompts` quick-prompt setting.
+
+- **Settings → Skills** — `WorktreesSkillsEditor.tsx` edits name, description, and prompt body.
+- **Bottom bar** — `WorktreesSkillPrompter.tsx` provides `/skill-name` autocomplete; first **Enter** commits the slash display, second **Enter** expands the prompt (plus any trailing text) and submits via `Terminal.submitPrompt` (`shared/session-prompt-submit.ts`).
+- **Focus** — **Shift+J** includes the skills bar in the agent ↔ shell ↔ skills cycle (`skillPrompterFocusRef` in `App.tsx`).
+
+Default skills: **Summarise Session**, **Create Pull Request** (`DEFAULT_WORKTREES_SKILLS`).
+
+Import/export: `settings-import-export.ts` includes `worktreesSkills` in the exported JSON document; import normalizes via `normalizeWorktreesSkills`.
 
 ---
 
@@ -181,6 +195,7 @@ src/
     ├── ipc-channels.ts       Channel name constants
     ├── session-labels.ts     Labels, mute, chips
     ├── session-sidebar-order.ts  Shift+N ordering
+    ├── worktrees-skills.ts       Skills defaults, slash parsing, normalization
     ├── tasks.ts              To-do sections + filters
     ├── settings-import-export.ts
     └── theme.ts
@@ -195,7 +210,7 @@ Path alias `@shared/*` is configured in `electron.vite.config.ts` and the tsconf
 | File | Contents |
 | --- | --- |
 | `sessions.json` | `{ sessions: Session[] }` |
-| `settings.json` | `codeDir`, `theme`, `sessionLabels` (legacy keys stripped on read) |
+| `settings.json` | `codeDir`, `theme`, `sessionLabels`, `worktreesSkills` (legacy keys stripped on read) |
 | `diary.json` | To-do items (sections: `todo`, `doing`, `done`) |
 
 userData path: `~/Library/Application Support/ai-worktrees/` (dev) or `~/Library/Application Support/AI Worktrees/` (packaged).

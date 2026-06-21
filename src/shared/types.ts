@@ -50,11 +50,22 @@ export type SessionWithStatus = Session & {
 
 export type ThemePreference = 'system' | 'dark' | 'light';
 
+/** Cross-agent skill launched into the active session terminal. */
+export type WorktreesSkill = {
+  name: string;
+  /** Text pasted into the agent session and submitted. */
+  prompt: string;
+  /** Optional hint shown in Settings; not sent to the agent. */
+  description?: string;
+};
+
 export type Settings = {
   codeDir: string;
   theme: ThemePreference;
   /** User-defined labels for categorizing sessions and to-do items. */
   sessionLabels?: SessionLabel[];
+  /** Cross-agent skills launched from the bottom skills bar. */
+  worktreesSkills?: WorktreesSkill[];
 };
 
 export type RepoInfo = {

@@ -68,6 +68,13 @@ export function clearShellPathCache(): void {
   cachedShellPath = undefined;
 }
 
+/** Login shell for POSIX one-liner probes. Fish cannot run the probe scripts. */
+export function probeShellPath(): string {
+  const shell = process.env.SHELL || '/bin/zsh';
+  if (isFishPath(shell)) return '/bin/zsh';
+  return shell;
+}
+
 /** Prefer fish when installed; fall back to the user's login shell. */
 export async function resolveShellPath(): Promise<string> {
   if (cachedShellPath) return cachedShellPath;

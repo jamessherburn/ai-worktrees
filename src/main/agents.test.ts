@@ -1,9 +1,36 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { AgentId } from '@shared/agents';
-import { AGENT_LAUNCH_SPECS, composeLaunchCommand } from './agents.js';
+import {
+  AGENT_LAUNCH_SPECS,
+  composeLaunchCommand,
+  encodeClaudeProjectPath,
+  encodeCursorProjectPath,
+  encodeProjectPath,
+} from './agents.js';
 
 const AGENT_IDS: AgentId[] = ['claude', 'cursor', 'codex', 'gemini'];
+
+describe('encodeProjectPath', () => {
+  it('encodeCursorProjectPath matches Cursor CLI project directory names', () => {
+    assert.equal(
+      encodeCursorProjectPath('/Users/jamessherburn/code/ai-worktrees-skills-tray'),
+      'Users-jamessherburn-code-ai-worktrees-skills-tray',
+    );
+  });
+
+  it('encodeClaudeProjectPath keeps the leading dash from the root slash', () => {
+    assert.equal(
+      encodeClaudeProjectPath('/Users/jamessherburn/code/ai-worktrees-skills-tray'),
+      '-Users-jamessherburn-code-ai-worktrees-skills-tray',
+    );
+  });
+
+  it('encodeProjectPath is an alias for the Cursor encoding', () => {
+    const path = '/tmp/foo';
+    assert.equal(encodeProjectPath(path), encodeCursorProjectPath(path));
+  });
+});
 
 describe('composeLaunchCommand', () => {
   for (const agentId of AGENT_IDS) {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
+import { normalizeWorktreesSkills } from '@shared/worktrees-skills';
 import { matchAppShortcut, shouldIgnoreAppShortcut } from '@shared/app-shortcuts';
 import { sessionsInSidebarOrder } from '@shared/session-sidebar-order';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +14,7 @@ import { GitPanel } from './components/GitPanel';
 import { TodoModal } from './components/TodoModal';
 import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
 import { BottomDock, type BottomDockPanelSpec } from './components/BottomDock';
+import { WorktreesSkillPrompter } from './components/WorktreesSkillPrompter';
 import { Logo } from './components/Logo';
 import { useResolvedTheme, type ResolvedTheme } from './theme';
 
@@ -29,7 +31,7 @@ const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
 const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
 const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
-const BOTTOM_ACTION_BAR_HEIGHT = 48;
+const BOTTOM_ACTION_BAR_HEIGHT = 56;
 const BOTTOM_TERMINAL_MIN_WIDTH = 220;
 const BOTTOM_GIT_MIN_WIDTH = 280;
 
@@ -39,7 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
   sessionLabels: DEFAULT_SESSION_LABELS,
 };
 
-type SettingsTab = 'general' | 'labels' | 'shortcuts';
+type SettingsTab = 'general' | 'skills' | 'labels' | 'shortcuts';
 
 type SessionPanelPrefs = {
   terminalCollapsed: boolean;
@@ -203,6 +205,10 @@ export function App() {
     () => normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
     [settings.sessionLabels],
   );
+  const worktreesSkills = useMemo(
+    () => normalizeWorktreesSkills(settings.worktreesSkills),
+    [settings.worktreesSkills],
+  );
 
   const modalOpen =
     showNew ||
@@ -348,7 +354,9 @@ export function App() {
 
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
   const shellFocusRef = useRef<(() => void) | null>(null);
-  const focusPaneRef = useRef<'agent' | 'shell'>('agent');
+  const skillPrompterFocusRef = useRef<(() => void) | null>(null);
+  const focusPaneRef = useRef<'agent' | 'shell' | 'skills'>('agent');
+  const suppressArrowUntilRef = useRef(0);
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
     if (api) {
       terminalApisRef.current.set(id, api);
@@ -378,6 +386,33 @@ export function App() {
     };
     window.setTimeout(retry, 50);
   }, [activeId]);
+
+  const submitPromptToSession = useCallback((sessionId: string, text: string) => {
+    const api = terminalApisRef.current.get(sessionId);
+    if (api) {
+      api.submitPrompt(text);
+      return;
+    }
+    let attempts = 0;
+    const retry = () => {
+      const next = terminalApisRef.current.get(sessionId);
+      if (next) {
+        next.submitPrompt(text);
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, []);
+
+  const runWorktreesSkill = useCallback(
+    (prompt: string) => {
+      if (!activeId) return;
+      submitPromptToSession(activeId, prompt);
+    },
+    [activeId, submitPromptToSession],
+  );
 
   const setSessionLabels = useCallback(
     async (sessionId: string, labelIds: string[]) => {
@@ -412,19 +447,39 @@ export function App() {
 
   const jumpFocusBetweenPanes = useCallback(() => {
     if (!activeId) return;
+
+    const focusSkills = () => {
+      if (!activeSession || worktreesSkills.length === 0) {
+        terminalApisRef.current.get(activeId)?.focus();
+        focusPaneRef.current = 'agent';
+        return;
+      }
+      skillPrompterFocusRef.current?.();
+      focusPaneRef.current = 'skills';
+    };
+
     if (builtInTerminalCollapsed) {
+      if (focusPaneRef.current === 'agent') {
+        focusSkills();
+        return;
+      }
       terminalApisRef.current.get(activeId)?.focus();
       focusPaneRef.current = 'agent';
       return;
     }
+
     if (focusPaneRef.current === 'agent') {
       shellFocusRef.current?.();
       focusPaneRef.current = 'shell';
-    } else {
-      terminalApisRef.current.get(activeId)?.focus();
-      focusPaneRef.current = 'agent';
+      return;
     }
-  }, [activeId, builtInTerminalCollapsed]);
+    if (focusPaneRef.current === 'shell') {
+      focusSkills();
+      return;
+    }
+    terminalApisRef.current.get(activeId)?.focus();
+    focusPaneRef.current = 'agent';
+  }, [activeId, activeSession, builtInTerminalCollapsed, worktreesSkills.length]);
 
   useEffect(() => {
     focusPaneRef.current = 'agent';
@@ -441,6 +496,9 @@ export function App() {
 
   const jumpFocusBetweenPanesRef = useRef(jumpFocusBetweenPanes);
   jumpFocusBetweenPanesRef.current = jumpFocusBetweenPanes;
+
+  const scrollActiveTerminalToBottomRef = useRef(scrollActiveTerminalToBottom);
+  scrollActiveTerminalToBottomRef.current = scrollActiveTerminalToBottom;
 
   const toggleBuiltInTerminalRef = useRef(toggleBuiltInTerminal);
   toggleBuiltInTerminalRef.current = toggleBuiltInTerminal;
@@ -470,6 +528,14 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (Date.now() < suppressArrowUntilRef.current) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      }
+
       if (shouldIgnoreAppShortcut(e.target)) return;
       const shortcut = matchAppShortcut(e);
       if (!shortcut) return;
@@ -493,6 +559,11 @@ export function App() {
         case 'jumpFocus':
           if (!activeSessionRef.current) return;
           jumpFocusBetweenPanesRef.current();
+          break;
+        case 'scrollToBottom':
+          if (!activeSessionRef.current) return;
+          suppressArrowUntilRef.current = Date.now() + 500;
+          scrollActiveTerminalToBottomRef.current();
           break;
         case 'openVSCode':
           if (!activeSessionRef.current) return;
@@ -696,18 +767,33 @@ export function App() {
           )}
         </div>
         <footer className="bottom-action-bar" aria-label="Agent actions">
-          <div className="bottom-action-bar-center" />
-          <button
-            type="button"
-            className={`bottom-action-bar-todo${showTodoModal ? ' bottom-action-bar-todo--active' : ''}`}
-            onClick={toggleTodoModal}
-            title={showTodoModal ? 'Close To Do' : 'To Do'}
-            aria-label="To Do"
-            aria-pressed={showTodoModal}
-          >
-            <TasksIcon />
-            <span>To Do</span>
-          </button>
+          <div className="bottom-action-bar-leading">
+            <WorktreesSkillPrompter
+              skills={worktreesSkills}
+              disabled={!activeSession}
+              onRun={runWorktreesSkill}
+              onRegisterFocus={(focus) => {
+                skillPrompterFocusRef.current = focus;
+              }}
+              onFocusPane={() => {
+                focusPaneRef.current = 'skills';
+              }}
+              onCycleFocus={jumpFocusBetweenPanes}
+            />
+          </div>
+          <div className="bottom-action-bar-trailing">
+            <button
+              type="button"
+              className={`bottom-action-bar-todo${showTodoModal ? ' bottom-action-bar-todo--active' : ''}`}
+              onClick={toggleTodoModal}
+              title={showTodoModal ? 'Close To Do' : 'To Do'}
+              aria-label="To Do"
+              aria-pressed={showTodoModal}
+            >
+              <TasksIcon />
+              <span>To Do</span>
+            </button>
+          </div>
         </footer>
       </main>
 

@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Settings, ThemePreference } from '@shared/types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
+import { normalizeWorktreesSkills } from '@shared/worktrees-skills';
 import { JsonStore } from './store.js';
 
 const DEFAULTS: Settings = {
@@ -16,7 +17,7 @@ type StoredSettings = Settings & {
   recapPrompt?: string;
   wizard?: unknown;
   tasks?: unknown;
-  sessionPrompts?: unknown;
+  sessionPrompts?: { title?: string; text?: string; children?: { title?: string; text?: string }[] }[];
 };
 
 function normalizeTheme(theme: unknown): ThemePreference {
@@ -30,13 +31,14 @@ function normalizeSettings(s: StoredSettings): Settings {
     recapPrompt: _legacy,
     wizard: _wizard,
     tasks: _tasks,
-    sessionPrompts: _prompts,
+    sessionPrompts: _sessionPrompts,
     ...rest
   } = s;
   return {
     ...rest,
     theme: normalizeTheme(s.theme),
     sessionLabels: normalizeSessionLabels(s.sessionLabels),
+    worktreesSkills: normalizeWorktreesSkills(s.worktreesSkills),
   };
 }
 

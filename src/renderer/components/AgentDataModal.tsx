@@ -20,7 +20,7 @@ export function AgentDataModal({ onClose }: Props) {
   const [editingAgent, setEditingAgent] = useState<AgentId | null>(null);
 
   useEffect(() => {
-    void window.api.detectAgents().then(setAvailability);
+    void window.api.detectAgents(true).then(setAvailability);
   }, []);
 
   useEffect(() => {
