@@ -36,6 +36,7 @@ export function BuiltInTerminalPanel({
   const termRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const ptyReadyRef = useRef(false);
+  const mountGenerationRef = useRef(0);
   const activationCleanupRef = useRef<(() => void) | null>(null);
   const blurredRef = useRef(blurred);
   const onRegisterFocusRef = useRef(onRegisterFocus);
@@ -65,6 +66,8 @@ export function BuiltInTerminalPanel({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+
+    const mountGeneration = ++mountGenerationRef.current;
 
     const term = new Xterm({
       fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace',
@@ -133,11 +136,12 @@ export function BuiltInTerminalPanel({
       if (startDelayMs > 0) {
         await new Promise((resolve) => window.setTimeout(resolve, startDelayMs));
       }
-      if (cancelled) return;
+      if (cancelled || mountGeneration !== mountGenerationRef.current) return;
       await waitForTerminalLayout(host);
+      if (cancelled || mountGeneration !== mountGenerationRef.current) return;
       fitSafely();
       const result = await window.api.shellPty.start(sessionId, term.cols, term.rows);
-      if (cancelled) return;
+      if (cancelled || mountGeneration !== mountGenerationRef.current) return;
       if (!result.ok) {
         term.writeln(`\r\n\x1b[31m${result.error}\x1b[0m`);
         return;

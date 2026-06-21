@@ -1,43 +1,60 @@
+export type AppShortcutId =
+  | 'nextSession'
+  | 'toggleTerminal'
+  | 'toggleGit'
+  | 'jumpFocus'
+  | 'openVSCode'
+  | 'openFinder'
+  | 'newSession';
+
 export type AppShortcutReference = {
+  id: AppShortcutId;
   keys: string;
   description: string;
 };
 
 export const APP_KEYBOARD_SHORTCUTS: AppShortcutReference[] = [
-  { keys: 'Shift+L', description: 'Next session (skips muted)' },
-  { keys: 'Shift+K', description: 'Cycle panels (editor → agent → terminal)' },
-  { keys: 'Shift+N', description: 'Toggle session notes' },
-  { keys: 'Shift+J', description: 'Toggle file tree ↔ editor (Neovim only)' },
+  { id: 'nextSession', keys: 'Shift+N', description: 'Next session in sidebar — global and repo (skips muted)' },
+  { id: 'toggleTerminal', keys: 'Shift+T', description: 'Toggle terminal panel (active session)' },
+  { id: 'toggleGit', keys: 'Shift+G', description: 'Toggle git panel (active session)' },
+  {
+    id: 'jumpFocus',
+    keys: 'Shift+J',
+    description: 'Focus agent terminal; jump between agent and shell panel when shell is open',
+  },
+  { id: 'openVSCode', keys: 'Shift+V', description: 'Open session in VS Code (active session)' },
+  { id: 'openFinder', keys: 'Shift+F', description: 'Open session in Finder (active session)' },
+  { id: 'newSession', keys: 'Shift+C', description: 'Create new session' },
 ];
 
-function shiftKeyMatches(
+type ShortcutLetter = 'n' | 't' | 'g' | 'j' | 'v' | 'f' | 'c';
+
+function matchesShiftLetter(
   event: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey'>,
-  letter: 'j' | 'k' | 'l' | 'n',
+  letter: ShortcutLetter,
 ): boolean {
   if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
-  const lower = event.key.toLowerCase();
-  if (lower === letter) return true;
-  const code =
-    letter === 'j' ? 'KeyJ' : letter === 'k' ? 'KeyK' : letter === 'l' ? 'KeyL' : 'KeyN';
-  return event.code === code;
+  const code = `Key${letter.toUpperCase()}`;
+  if (event.code === code) return true;
+  return event.key.toLowerCase() === letter;
 }
 
-export function matchesShiftL(event: KeyboardEvent): boolean {
-  return shiftKeyMatches(event, 'l');
-}
-
-export function matchesShiftK(event: KeyboardEvent): boolean {
-  return shiftKeyMatches(event, 'k');
-}
-
-export function matchesShiftN(event: KeyboardEvent): boolean {
-  return shiftKeyMatches(event, 'n');
+export function matchAppShortcut(
+  event: KeyboardEvent,
+): AppShortcutId | null {
+  if (matchesShiftLetter(event, 'n')) return 'nextSession';
+  if (matchesShiftLetter(event, 't')) return 'toggleTerminal';
+  if (matchesShiftLetter(event, 'g')) return 'toggleGit';
+  if (matchesShiftLetter(event, 'j')) return 'jumpFocus';
+  if (matchesShiftLetter(event, 'v')) return 'openVSCode';
+  if (matchesShiftLetter(event, 'f')) return 'openFinder';
+  if (matchesShiftLetter(event, 'c')) return 'newSession';
+  return null;
 }
 
 /** Ignore app shortcuts while typing in regular form fields (not xterm). */
 export function shouldIgnoreAppShortcut(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  if (target.closest('.session-notes-textarea')) return false;
   if (target.closest('.xterm, .terminal-host')) return false;
   const tag = target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;

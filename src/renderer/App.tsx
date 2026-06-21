@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
-import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
-import { WIZARD_BRIEF_READY_DELAY_MS } from '@shared/session-prompt-submit';
-import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
-import { DEFAULT_WIZARD_CONFIG } from '@shared/wizard';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
-import { matchesShiftL, shouldIgnoreAppShortcut } from '@shared/app-shortcuts';
+import { matchAppShortcut, shouldIgnoreAppShortcut } from '@shared/app-shortcuts';
 import { sessionsInSidebarOrder } from '@shared/session-sidebar-order';
-import type { AppView } from './components/app-view';
-import { FlightDeck } from './components/FlightDeck';
-import { FlightDeckSessionModal } from './components/FlightDeckSessionModal';
 import { Sidebar } from './components/Sidebar';
 import { TerminalView, type TerminalApi } from './components/Terminal';
 import { NewSessionModal } from './components/NewSessionModal';
@@ -17,8 +10,7 @@ import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
 import { GitPanel } from './components/GitPanel';
-import { SessionPromptDock } from './components/SessionPromptDock';
-import { TasksPanel } from './components/TasksPanel';
+import { TodoModal } from './components/TodoModal';
 import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
 import { BottomDock, type BottomDockPanelSpec } from './components/BottomDock';
 import { Logo } from './components/Logo';
@@ -29,30 +21,71 @@ const SIDEBAR_WIDTH_KEY = 'sidebar-width';
 const SIDEBAR_DEFAULT_WIDTH = 400;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 600;
-const SIDEBAR_COMPACT_WIDTH = 84;
 const SIDEBAR_UPGRADE_THRESHOLD = 340;
 const MAIN_PANE_MIN_WIDTH = 80;
-const TASKS_PANEL_COLLAPSED_KEY = 'tasks-panel-collapsed';
 const BUILTIN_TERMINAL_COLLAPSED_KEY = 'builtin-terminal-collapsed';
+const SESSION_PANEL_PREFS_KEY = 'session-panel-prefs';
 const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
 const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
 const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
 const BOTTOM_ACTION_BAR_HEIGHT = 48;
 const BOTTOM_TERMINAL_MIN_WIDTH = 220;
-const BOTTOM_TASKS_MIN_WIDTH = 240;
 const BOTTOM_GIT_MIN_WIDTH = 280;
 
 const DEFAULT_SETTINGS: Settings = {
   codeDir: '',
   theme: 'system',
-  wizard: DEFAULT_WIZARD_CONFIG,
-  tasks: DEFAULT_TASKS_CONFIG,
-  sessionPrompts: DEFAULT_SESSION_PROMPTS,
   sessionLabels: DEFAULT_SESSION_LABELS,
 };
 
-type SettingsTab = 'general' | 'editor' | 'labels' | 'prompts' | 'wizard' | 'tasks';
+type SettingsTab = 'general' | 'labels' | 'shortcuts';
+
+type SessionPanelPrefs = {
+  terminalCollapsed: boolean;
+  gitCollapsed: boolean;
+};
+
+type SessionPanelPrefsMap = Record<string, SessionPanelPrefs>;
+
+function defaultSessionPanelPrefs(): SessionPanelPrefs {
+  const terminalCollapsed = localStorage.getItem(BUILTIN_TERMINAL_COLLAPSED_KEY) !== '0';
+  const gitStored = localStorage.getItem(GIT_PANEL_COLLAPSED_KEY);
+  let gitCollapsed = true;
+  if (gitStored !== null) gitCollapsed = gitStored === '1';
+  else {
+    const legacyDev = localStorage.getItem('developer-panel-collapsed');
+    if (legacyDev !== null) gitCollapsed = legacyDev !== '0';
+  }
+  return { terminalCollapsed, gitCollapsed };
+}
+
+function readSessionPanelPrefsMap(): SessionPanelPrefsMap {
+  try {
+    const raw = localStorage.getItem(SESSION_PANEL_PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as SessionPanelPrefsMap;
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function writeSessionPanelPrefsMap(map: SessionPanelPrefsMap): void {
+  localStorage.setItem(SESSION_PANEL_PREFS_KEY, JSON.stringify(map));
+}
+
+function sessionPanelPrefs(map: SessionPanelPrefsMap, sessionId: string): SessionPanelPrefs {
+  return map[sessionId] ?? defaultSessionPanelPrefs();
+}
+
+function removeSessionPanelPrefs(map: SessionPanelPrefsMap, sessionId: string): SessionPanelPrefsMap {
+  if (!(sessionId in map)) return map;
+  const next = { ...map };
+  delete next[sessionId];
+  return next;
+}
 
 
 function clampSidebarWidth(value: number): number {
@@ -81,27 +114,16 @@ function clampBottomDockHeight(value: number): number {
 }
 
 export function App() {
-  const [view, setView] = useState<AppView>('flight-deck');
-  const [flightDeckModalId, setFlightDeckModalId] = useState<string | null>(null);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionWithStatus[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentData, setShowAgentData] = useState(false);
-  const [tasksPanelCollapsed, setTasksPanelCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem(TASKS_PANEL_COLLAPSED_KEY) !== '0';
-  });
-  const [builtInTerminalCollapsed, setBuiltInTerminalCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem(BUILTIN_TERMINAL_COLLAPSED_KEY) !== '0';
-  });
-  const [gitPanelCollapsed, setGitPanelCollapsed] = useState<boolean>(() => {
-    const stored = localStorage.getItem(GIT_PANEL_COLLAPSED_KEY);
-    if (stored !== null) return stored === '1';
-    const legacyDev = localStorage.getItem('developer-panel-collapsed');
-    if (legacyDev !== null) return legacyDev !== '0';
-    return true;
-  });
+  const [showTodoModal, setShowTodoModal] = useState(false);
+  const [panelPrefsBySession, setPanelPrefsBySession] = useState<SessionPanelPrefsMap>(() =>
+    readSessionPanelPrefsMap(),
+  );
   const [bottomDockHeight, setBottomDockHeight] = useState<number>(() => {
     const stored = Number(
       localStorage.getItem(BOTTOM_DOCK_HEIGHT_KEY) ??
@@ -129,28 +151,39 @@ export function App() {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(clamped)));
   }, []);
 
+  const activePanelPrefs = useMemo(
+    () => (activeId ? sessionPanelPrefs(panelPrefsBySession, activeId) : null),
+    [activeId, panelPrefsBySession],
+  );
+  const builtInTerminalCollapsed = activePanelPrefs?.terminalCollapsed ?? true;
+  const gitPanelCollapsed = activePanelPrefs?.gitCollapsed ?? true;
+
   const toggleGitPanel = useCallback(() => {
     if (!activeId) return;
-    setGitPanelCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(GIT_PANEL_COLLAPSED_KEY, next ? '1' : '0');
+    setPanelPrefsBySession((prev) => {
+      const current = sessionPanelPrefs(prev, activeId);
+      const next = {
+        ...prev,
+        [activeId]: { ...current, gitCollapsed: !current.gitCollapsed },
+      };
+      writeSessionPanelPrefsMap(next);
       return next;
     });
   }, [activeId]);
 
-  const toggleTasksPanel = useCallback(() => {
-    setTasksPanelCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(TASKS_PANEL_COLLAPSED_KEY, next ? '1' : '0');
-      return next;
-    });
+  const toggleTodoModal = useCallback(() => {
+    setShowTodoModal((prev) => !prev);
   }, []);
 
   const toggleBuiltInTerminal = useCallback(() => {
     if (!activeId) return;
-    setBuiltInTerminalCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(BUILTIN_TERMINAL_COLLAPSED_KEY, next ? '1' : '0');
+    setPanelPrefsBySession((prev) => {
+      const current = sessionPanelPrefs(prev, activeId);
+      const next = {
+        ...prev,
+        [activeId]: { ...current, terminalCollapsed: !current.terminalCollapsed },
+      };
+      writeSessionPanelPrefsMap(next);
       return next;
     });
   }, [activeId]);
@@ -165,17 +198,7 @@ export function App() {
     localStorage.setItem(BOTTOM_DOCK_HEIGHT_KEY, String(Math.round(clamped)));
   }, []);
 
-  const tasksConfig = useMemo(
-    () => normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
-    [settings.tasks],
-  );
-
   const resolvedTheme = useResolvedTheme(settings.theme);
-  const sessionPrompts = useMemo(
-    () => resolveSessionPrompts(settings.sessionPrompts),
-    [settings.sessionPrompts],
-  );
-
   const sessionLabels = useMemo(
     () => normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
     [settings.sessionLabels],
@@ -185,9 +208,9 @@ export function App() {
     showNew ||
     showSettings ||
     showAgentData ||
+    showTodoModal ||
     pendingDelete !== null ||
-    vscodeMissing ||
-    flightDeckModalId !== null;
+    vscodeMissing;
 
   const refresh = useCallback(async () => {
     const list = await window.api.listSessions();
@@ -323,67 +346,16 @@ export function App() {
     await window.api.revealInFinder(activeSession.worktreePath);
   }, [activeSession]);
 
-  const openSessionInVSCode = useCallback(async (session: SessionWithStatus) => {
-    const result = await window.api.openInVSCode(session.worktreePath);
-    if (!result.ok && result.reason === 'not-installed') {
-      setVscodeMissing(true);
-    }
-  }, []);
-
-  const openSessionInFinder = useCallback(async (session: SessionWithStatus) => {
-    await window.api.revealInFinder(session.worktreePath);
-  }, []);
-
   const terminalApisRef = useRef(new Map<string, TerminalApi>());
-  const pendingWizardBriefRef = useRef(new Map<string, string>());
+  const shellFocusRef = useRef<(() => void) | null>(null);
+  const focusPaneRef = useRef<'agent' | 'shell'>('agent');
   const handleTerminalApi = useCallback((id: string, api: TerminalApi | null) => {
     if (api) {
       terminalApisRef.current.set(id, api);
-      const pending = pendingWizardBriefRef.current.get(id);
-      if (pending) {
-        pendingWizardBriefRef.current.delete(id);
-        window.setTimeout(() => {
-          terminalApisRef.current.get(id)?.submitPrompt(pending);
-        }, WIZARD_BRIEF_READY_DELAY_MS);
-      }
     } else {
       terminalApisRef.current.delete(id);
     }
   }, []);
-
-  const queueWizardBriefSubmit = useCallback((sessionId: string, text: string) => {
-    pendingWizardBriefRef.current.set(sessionId, text);
-    const api = terminalApisRef.current.get(sessionId);
-    if (api) {
-      pendingWizardBriefRef.current.delete(sessionId);
-      window.setTimeout(() => {
-        terminalApisRef.current.get(sessionId)?.submitPrompt(text);
-      }, WIZARD_BRIEF_READY_DELAY_MS);
-    }
-  }, []);
-
-  const pasteWizardBrief = useCallback(() => {
-    const s = activeSession;
-    if (!s?.wizardBriefMarkdown) return;
-    terminalApisRef.current.get(s.id)?.paste(s.wizardBriefMarkdown);
-  }, [activeSession]);
-
-  const focusActiveAgentInput = useCallback(() => {
-    const sessionId = flightDeckModalId ?? activeId;
-    if (!sessionId) return;
-    const api = terminalApisRef.current.get(sessionId);
-    if (api) {
-      api.focus();
-      return;
-    }
-    let attempts = 0;
-    const retry = () => {
-      attempts += 1;
-      terminalApisRef.current.get(sessionId)?.focus();
-      if (attempts < 20) window.setTimeout(retry, 50);
-    };
-    window.setTimeout(retry, 50);
-  }, [activeId, flightDeckModalId]);
 
   const openSession = useCallback((id: string) => {
     setActiveId(id);
@@ -407,33 +379,6 @@ export function App() {
     window.setTimeout(retry, 50);
   }, [activeId]);
 
-  const submitPromptToSession = useCallback((sessionId: string, text: string) => {
-    const api = terminalApisRef.current.get(sessionId);
-    if (api) {
-      api.submitPrompt(text);
-      return;
-    }
-    let attempts = 0;
-    const retry = () => {
-      const next = terminalApisRef.current.get(sessionId);
-      if (next) {
-        next.submitPrompt(text);
-        return;
-      }
-      attempts += 1;
-      if (attempts < 30) window.setTimeout(retry, 50);
-    };
-    window.setTimeout(retry, 50);
-  }, []);
-
-  const runSessionPrompt = useCallback(
-    (text: string) => {
-      if (!activeId) return;
-      submitPromptToSession(activeId, text);
-    },
-    [activeId, submitPromptToSession],
-  );
-
   const setSessionLabels = useCallback(
     async (sessionId: string, labelIds: string[]) => {
       setSessions((prev) =>
@@ -456,61 +401,67 @@ export function App() {
     [refresh],
   );
 
-  const saveSessionNotes = useCallback(async (sessionId: string, text: string) => {
-    await window.api.setSessionNotes(sessionId, text);
-    setSessions((prev) =>
-      prev.map((x) =>
-        x.id === sessionId
-          ? { ...x, notes: text.trim() || undefined, quickNotes: undefined }
-          : x,
-      ),
-    );
-  }, []);
-
-  const runFlightDeckPrompt = useCallback(
-    (text: string) => {
-      if (!flightDeckModalId) return;
-      submitPromptToSession(flightDeckModalId, text);
-    },
-    [flightDeckModalId, submitPromptToSession],
-  );
-
-  const scrollFlightDeckTerminalToBottom = useCallback(() => {
-    if (!flightDeckModalId) return;
-    const api = terminalApisRef.current.get(flightDeckModalId);
-    if (api) {
-      api.scrollToBottom();
-      return;
-    }
-    let attempts = 0;
-    const retry = () => {
-      attempts += 1;
-      terminalApisRef.current.get(flightDeckModalId)?.scrollToBottom();
-      if (attempts < 20) window.setTimeout(retry, 50);
-    };
-    window.setTimeout(retry, 50);
-  }, [flightDeckModalId]);
-
-  const openFlightDeckSession = useCallback((id: string) => {
-    setFlightDeckModalId(id);
-    setOpenedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
-
   const goToNextOpenSession = useCallback(() => {
     const ordered = sessionsInSidebarOrder(sessions).filter((s) => !s.muted);
-    if (ordered.length === 0) return;
+    if (ordered.length <= 1) return;
 
-    const currentId = view === 'flight-deck' ? flightDeckModalId : activeId;
-    const currentIndex = currentId ? ordered.findIndex((s) => s.id === currentId) : -1;
+    const currentIndex = activeId ? ordered.findIndex((s) => s.id === activeId) : -1;
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % ordered.length;
-    const nextId = ordered[nextIndex].id;
+    openSession(ordered[nextIndex].id);
+  }, [sessions, activeId, openSession]);
 
-    if (view === 'flight-deck') openFlightDeckSession(nextId);
-    else openSession(nextId);
-  }, [view, sessions, activeId, flightDeckModalId, openSession, openFlightDeckSession]);
+  const jumpFocusBetweenPanes = useCallback(() => {
+    if (!activeId) return;
+    if (builtInTerminalCollapsed) {
+      terminalApisRef.current.get(activeId)?.focus();
+      focusPaneRef.current = 'agent';
+      return;
+    }
+    if (focusPaneRef.current === 'agent') {
+      shellFocusRef.current?.();
+      focusPaneRef.current = 'shell';
+    } else {
+      terminalApisRef.current.get(activeId)?.focus();
+      focusPaneRef.current = 'agent';
+    }
+  }, [activeId, builtInTerminalCollapsed]);
+
+  useEffect(() => {
+    focusPaneRef.current = 'agent';
+  }, [activeId]);
+
+  useEffect(() => {
+    if (builtInTerminalCollapsed) {
+      focusPaneRef.current = 'agent';
+    }
+  }, [builtInTerminalCollapsed]);
 
   const goToNextOpenSessionRef = useRef(goToNextOpenSession);
   goToNextOpenSessionRef.current = goToNextOpenSession;
+
+  const jumpFocusBetweenPanesRef = useRef(jumpFocusBetweenPanes);
+  jumpFocusBetweenPanesRef.current = jumpFocusBetweenPanes;
+
+  const toggleBuiltInTerminalRef = useRef(toggleBuiltInTerminal);
+  toggleBuiltInTerminalRef.current = toggleBuiltInTerminal;
+
+  const toggleGitPanelRef = useRef(toggleGitPanel);
+  toggleGitPanelRef.current = toggleGitPanel;
+
+  const openActiveInVSCodeRef = useRef(openActiveInVSCode);
+  openActiveInVSCodeRef.current = openActiveInVSCode;
+
+  const openActiveInFileWindowRef = useRef(openActiveInFileWindow);
+  openActiveInFileWindowRef.current = openActiveInFileWindow;
+
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+
+  const modalOpenRef = useRef(modalOpen);
+  modalOpenRef.current = modalOpen;
+
+  const setShowNewRef = useRef(setShowNew);
+  setShowNewRef.current = setShowNew;
 
   const openManageLabels = useCallback(() => {
     setSettingsInitialTab('labels');
@@ -519,33 +470,57 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!matchesShiftL(e) || shouldIgnoreAppShortcut(e.target)) return;
+      if (shouldIgnoreAppShortcut(e.target)) return;
+      const shortcut = matchAppShortcut(e);
+      if (!shortcut) return;
+      if (modalOpenRef.current) return;
+
       e.preventDefault();
       e.stopPropagation();
-      goToNextOpenSessionRef.current();
+
+      switch (shortcut) {
+        case 'nextSession':
+          goToNextOpenSessionRef.current();
+          break;
+        case 'toggleTerminal':
+          if (!activeSessionRef.current) return;
+          toggleBuiltInTerminalRef.current();
+          break;
+        case 'toggleGit':
+          if (!activeSessionRef.current) return;
+          toggleGitPanelRef.current();
+          break;
+        case 'jumpFocus':
+          if (!activeSessionRef.current) return;
+          jumpFocusBetweenPanesRef.current();
+          break;
+        case 'openVSCode':
+          if (!activeSessionRef.current) return;
+          void openActiveInVSCodeRef.current();
+          break;
+        case 'openFinder':
+          if (!activeSessionRef.current) return;
+          void openActiveInFileWindowRef.current();
+          break;
+        case 'newSession':
+          setShowNewRef.current(true);
+          break;
+      }
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
-  const flightDeckModalSession = useMemo(
-    () => (flightDeckModalId ? sessions.find((s) => s.id === flightDeckModalId) ?? null : null),
-    [sessions, flightDeckModalId],
-  );
-
   const closeSessionTerminal = useCallback((id: string) => {
     setOpenedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
-  const showTasksPanel = !tasksPanelCollapsed;
   const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
   const showGitPanel = activeSession !== null && !gitPanelCollapsed;
-  const showBottomDock = showTasksPanel || showBuiltInTerminal || showGitPanel;
-  const sidebarCompact = view === 'flight-deck';
-  const effectiveSidebarWidth = sidebarCompact ? SIDEBAR_COMPACT_WIDTH : sidebarWidth;
-  const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}${sidebarCompact ? ' app--sidebar-compact' : ''}`;
+  const showBottomDock = showBuiltInTerminal || showGitPanel;
+  const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
-    ['--sidebar-width' as string]: `${effectiveSidebarWidth}px`,
+    ['--sidebar-width' as string]: `${sidebarWidth}px`,
     ['--bottom-action-bar-height' as string]: `${BOTTOM_ACTION_BAR_HEIGHT}px`,
     ...(showBottomDock ? { ['--bottom-dock-height' as string]: `${bottomDockHeight}px` } : {}),
   } as React.CSSProperties;
@@ -564,6 +539,9 @@ export function App() {
             themeName={resolvedTheme}
             blurred={modalOpen}
             onHide={toggleBuiltInTerminal}
+            onRegisterFocus={(focus) => {
+              shellFocusRef.current = focus;
+            }}
           />
         ) : (
           <section className="built-in-terminal-panel bottom-dock-panel built-in-terminal-placeholder">
@@ -585,13 +563,6 @@ export function App() {
             </div>
           </section>
         ),
-      });
-    }
-    if (showTasksPanel) {
-      panels.push({
-        id: 'tasks',
-        minWidth: BOTTOM_TASKS_MIN_WIDTH,
-        content: <TasksPanel tasksConfig={tasksConfig} onHide={toggleTasksPanel} />,
       });
     }
     if (showGitPanel) {
@@ -629,24 +600,17 @@ export function App() {
     return panels;
   }, [
     showBuiltInTerminal,
-    showTasksPanel,
     showGitPanel,
     activeSession,
     resolvedTheme,
     modalOpen,
-    tasksConfig,
     toggleBuiltInTerminal,
-    toggleTasksPanel,
     toggleGitPanel,
   ]);
 
   return (
     <div className={appClass} style={appStyle}>
       <Sidebar
-        view={view}
-        onViewChange={setView}
-        compact={sidebarCompact}
-        showSessions={view === 'workspace'}
         sessions={sessions}
         sessionLabels={sessionLabels}
         activeId={activeId}
@@ -668,29 +632,14 @@ export function App() {
         onManageLabels={openManageLabels}
       />
 
-      {view === 'flight-deck' ? (
-        <FlightDeck
-          sessions={sessions}
-          sessionLabels={sessionLabels}
-          onSelectSession={openFlightDeckSession}
-          onSetSessionLabels={(s, labelIds) => void setSessionLabels(s.id, labelIds)}
-          onToggleMuted={(s, muted) => void setSessionMuted(s.id, muted)}
-          onRevealInFinder={(s) => void openSessionInFinder(s)}
-          onOpenInVSCode={(s) => void openSessionInVSCode(s)}
-          onDelete={(s) => setPendingDelete(s)}
-          onManageLabels={openManageLabels}
-        />
-      ) : (
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader session={activeSession} onPasteWizardBrief={pasteWizardBrief}>
+          <PaneHeader session={activeSession}>
             <PaneToolbar
               activeSession={activeSession}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
-              tasksPanelCollapsed={tasksPanelCollapsed}
               gitPanelCollapsed={gitPanelCollapsed}
               onToggleBuiltInTerminal={toggleBuiltInTerminal}
-              onToggleTasksPanel={toggleTasksPanel}
               onToggleGitPanel={toggleGitPanel}
               onScrollToBottom={scrollActiveTerminalToBottom}
               onOpenInVSCode={() => void openActiveInVSCode()}
@@ -702,10 +651,8 @@ export function App() {
             <PaneToolbar
               activeSession={null}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
-              tasksPanelCollapsed={tasksPanelCollapsed}
               gitPanelCollapsed={gitPanelCollapsed}
               onToggleBuiltInTerminal={toggleBuiltInTerminal}
-              onToggleTasksPanel={toggleTasksPanel}
               onToggleGitPanel={toggleGitPanel}
               onScrollToBottom={scrollActiveTerminalToBottom}
               onOpenInVSCode={() => void openActiveInVSCode()}
@@ -748,48 +695,32 @@ export function App() {
             />
           )}
         </div>
-        {sessionPrompts.length > 0 && (
-          <footer className="bottom-action-bar" aria-label="Quick prompts">
-            <SessionPromptDock
-              prompts={sessionPrompts}
-              disabled={!activeSession}
-              onRun={runSessionPrompt}
-            />
-          </footer>
-        )}
+        <footer className="bottom-action-bar" aria-label="Agent actions">
+          <div className="bottom-action-bar-center" />
+          <button
+            type="button"
+            className={`bottom-action-bar-todo${showTodoModal ? ' bottom-action-bar-todo--active' : ''}`}
+            onClick={toggleTodoModal}
+            title={showTodoModal ? 'Close To Do' : 'To Do'}
+            aria-label="To Do"
+            aria-pressed={showTodoModal}
+          >
+            <TasksIcon />
+            <span>To Do</span>
+          </button>
+        </footer>
       </main>
-      )}
-
-      {flightDeckModalSession && (
-        <FlightDeckSessionModal
-          session={flightDeckModalSession}
-          sessionLabels={sessionLabels}
-          sessionPrompts={sessionPrompts}
-          themeName={resolvedTheme}
-          blurred={showNew || showSettings || showAgentData || pendingDelete !== null || vscodeMissing}
-          onClose={() => setFlightDeckModalId(null)}
-          onRunPrompt={runFlightDeckPrompt}
-          onSaveNotes={(id, text) => void saveSessionNotes(id, text)}
-          onTerminalApi={handleTerminalApi}
-        />
-      )}
 
       {showNew && (
         <NewSessionModal
+          sessionLabels={sessionLabels}
           onClose={() => setShowNew(false)}
           onCreated={async ({ session }) => {
             setShowNew(false);
             const list = await refresh();
             const created = list.find((s) => s.id === session.id);
             if (!created) return;
-            if (view === 'flight-deck') {
-              openFlightDeckSession(created.id);
-            } else {
-              openSession(created.id);
-            }
-            if (created.wizardBriefMarkdown) {
-              queueWizardBriefSubmit(created.id, created.wizardBriefMarkdown);
-            }
+            openSession(created.id);
           }}
         />
       )}
@@ -801,7 +732,12 @@ export function App() {
           onDeleted={async (id) => {
             setPendingDelete(null);
             closeSessionTerminal(id);
-            if (flightDeckModalId === id) setFlightDeckModalId(null);
+            setPanelPrefsBySession((prev) => {
+              const next = removeSessionPanelPrefs(prev, id);
+              if (next === prev) return prev;
+              writeSessionPanelPrefsMap(next);
+              return next;
+            });
             if (activeId === id) setActiveId(null);
             await refresh();
           }}
@@ -823,6 +759,10 @@ export function App() {
             setSettingsInitialTab(undefined);
           }}
         />
+      )}
+
+      {showTodoModal && (
+        <TodoModal sessionLabels={sessionLabels} onClose={() => setShowTodoModal(false)} />
       )}
 
       {showAgentData && <AgentDataModal onClose={() => setShowAgentData(false)} />}
@@ -882,10 +822,8 @@ function VSCodeMissingModal({ onClose }: { onClose: () => void }) {
 type PaneToolbarProps = {
   activeSession: SessionWithStatus | null;
   builtInTerminalCollapsed: boolean;
-  tasksPanelCollapsed: boolean;
   gitPanelCollapsed: boolean;
   onToggleBuiltInTerminal: () => void;
-  onToggleTasksPanel: () => void;
   onToggleGitPanel: () => void;
   onScrollToBottom: () => void;
   onOpenInVSCode: () => void;
@@ -895,10 +833,8 @@ type PaneToolbarProps = {
 function PaneToolbar({
   activeSession,
   builtInTerminalCollapsed,
-  tasksPanelCollapsed,
   gitPanelCollapsed,
   onToggleBuiltInTerminal,
-  onToggleTasksPanel,
   onToggleGitPanel,
   onScrollToBottom,
   onOpenInVSCode,
@@ -907,7 +843,6 @@ function PaneToolbar({
   const hasSession = activeSession !== null;
 
   const terminalOpen = hasSession && !builtInTerminalCollapsed;
-  const tasksOpen = !tasksPanelCollapsed;
   const gitOpen = hasSession && !gitPanelCollapsed;
 
   return (
@@ -928,16 +863,6 @@ function PaneToolbar({
         aria-pressed={terminalOpen}
       >
         <TerminalIcon />
-      </button>
-      <button
-        type="button"
-        className={`icon-btn pane-toolbar-btn${tasksOpen ? ' pane-toolbar-btn--active' : ''}`}
-        onClick={onToggleTasksPanel}
-        title={tasksOpen ? 'Hide Tasks' : 'Tasks'}
-        aria-label="Tasks"
-        aria-pressed={tasksOpen}
-      >
-        <TasksIcon />
       </button>
       <button
         type="button"
@@ -986,11 +911,9 @@ function PaneToolbar({
 
 function PaneHeader({
   session,
-  onPasteWizardBrief,
   children,
 }: {
   session: SessionWithStatus;
-  onPasteWizardBrief: () => void;
   children: ReactNode;
 }) {
   return (
@@ -1003,16 +926,6 @@ function PaneHeader({
               Global
             </span>
           ) : null}
-          {session.wizardBriefMarkdown ? (
-            <span className="pane-wizard-label" title="Wizard session">
-              Wizard Session
-            </span>
-          ) : null}
-          {session.external ? (
-            <span className="pane-external-label" title="External session">
-              External Session
-            </span>
-          ) : null}
         </div>
         <div className="pane-subtitle">
           {session.global
@@ -1021,16 +934,6 @@ function PaneHeader({
         </div>
       </div>
       <div className="pane-header-trailing">
-        {session.wizardBriefMarkdown && (
-          <button
-            className="btn btn-ghost pane-wizard-cmd-btn"
-            type="button"
-            onClick={onPasteWizardBrief}
-            title="Paste the wizard-generated briefing into the agent terminal at the cursor"
-          >
-            Allow Wizard Command
-          </button>
-        )}
         {children}
         <Logo />
       </div>

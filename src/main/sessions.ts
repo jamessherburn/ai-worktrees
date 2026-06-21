@@ -18,7 +18,6 @@ import {
   removeWorktree,
   resolveDefaultBranch,
 } from './git.js';
-import { getDiscoveredExternalSession } from './external-sessions.js';
 import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
@@ -84,6 +83,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       return { ok: false, error: `A global session named "${name}" already exists.` };
     }
 
+    const labelIds = normalizeSessionLabelIds(input.labelIds);
+
     const session: Session = {
       id: randomUUID(),
       name,
@@ -96,9 +97,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       createdAt: new Date().toISOString(),
       lastStartedAt: null,
       global: true,
-      ...(input.wizardBriefMarkdown != null && input.wizardBriefMarkdown !== ''
-        ? { wizardBriefMarkdown: input.wizardBriefMarkdown }
-        : {}),
+      labelIds: labelIds.length ? labelIds : undefined,
     };
 
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
@@ -148,6 +147,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     return { ok: false, error: `git worktree add failed: ${(err as Error).message}` };
   }
 
+  const labelIds = normalizeSessionLabelIds(input.labelIds);
+
   const session: Session = {
     id: randomUUID(),
     name,
@@ -159,9 +160,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     agentId: input.agentId ?? DEFAULT_AGENT_ID,
     createdAt: new Date().toISOString(),
     lastStartedAt: null,
-    ...(input.wizardBriefMarkdown != null && input.wizardBriefMarkdown !== ''
-      ? { wizardBriefMarkdown: input.wizardBriefMarkdown }
-      : {}),
+    labelIds: labelIds.length ? labelIds : undefined,
   };
 
   await store.update((current) => ({ sessions: [...current.sessions, session] }));
@@ -252,7 +251,5 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
 
 export async function getSessionById(id: string): Promise<Session | undefined> {
   const sessions = await listSessions();
-  const found = sessions.find((s) => s.id === id);
-  if (found) return found;
-  return getDiscoveredExternalSession(id);
+  return sessions.find((s) => s.id === id);
 }

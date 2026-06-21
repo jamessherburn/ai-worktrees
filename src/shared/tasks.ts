@@ -1,43 +1,63 @@
-import type { TasksConfig, TaskSectionConfig } from './types';
+import type { TaskItem } from './types';
 
 export const TASK_SECTION_TODO = 'todo';
-export const TASK_SECTION_IN_PROGRESS = 'in-progress';
+export const TASK_SECTION_DOING = 'doing';
 export const TASK_SECTION_DONE = 'done';
 
-export const DEFAULT_TASKS_CONFIG: TasksConfig = {
-  sections: [
-    { id: TASK_SECTION_TODO, name: 'To Do' },
-    { id: TASK_SECTION_IN_PROGRESS, name: 'In Progress' },
-    { id: TASK_SECTION_DONE, name: 'Done' },
-  ],
-  whatDidIDoSectionId: TASK_SECTION_DONE,
-};
+/** @deprecated Migrated to `doing` on read. */
+export const TASK_SECTION_IN_PROGRESS = 'in-progress';
 
-export function normalizeTasksConfig(raw: TasksConfig | undefined): TasksConfig {
-  if (!raw?.sections?.length) return { ...DEFAULT_TASKS_CONFIG };
+export const TASK_SECTIONS = [
+  { id: TASK_SECTION_TODO, name: 'To Do' },
+  { id: TASK_SECTION_DOING, name: 'Doing' },
+  { id: TASK_SECTION_DONE, name: 'Done' },
+] as const;
 
-  const sections: TaskSectionConfig[] = raw.sections
-    .filter((s) => s.id && s.name)
-    .map((s) => ({
-      id: s.id.trim(),
-      name: s.name.trim(),
-      hidden: s.hidden === true,
-    }));
+export type TaskSectionId =
+  | typeof TASK_SECTION_TODO
+  | typeof TASK_SECTION_DOING
+  | typeof TASK_SECTION_DONE;
 
-  if (sections.length === 0) return { ...DEFAULT_TASKS_CONFIG };
-
-  const sectionIds = new Set(sections.map((s) => s.id));
-  const whatDidIDoSectionId = sectionIds.has(raw.whatDidIDoSectionId)
-    ? raw.whatDidIDoSectionId
-    : sections.find((s) => s.id === TASK_SECTION_DONE)?.id ?? sections[0].id;
-
-  return { sections, whatDidIDoSectionId };
+export function normalizeTaskSectionId(sectionId: string): TaskSectionId {
+  if (sectionId === TASK_SECTION_IN_PROGRESS) return TASK_SECTION_DOING;
+  if (
+    sectionId === TASK_SECTION_TODO ||
+    sectionId === TASK_SECTION_DOING ||
+    sectionId === TASK_SECTION_DONE
+  ) {
+    return sectionId;
+  }
+  return TASK_SECTION_TODO;
 }
 
-export function visibleSectionIds(config: TasksConfig): string[] {
-  return config.sections.filter((s) => !s.hidden).map((s) => s.id);
+export function isoLocalDate(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-export function sectionName(config: TasksConfig, sectionId: string): string {
-  return config.sections.find((s) => s.id === sectionId)?.name ?? sectionId;
+/** Match tasks against optional label and date filters (both must pass when set). */
+export function taskMatchesFilters(
+  item: Pick<TaskItem, 'labelIds' | 'createdAt' | 'doneAt'>,
+  labelFilter: string[],
+  dateFilter: string | null,
+): boolean {
+  if (labelFilter.length > 0) {
+    const ids = item.labelIds ?? [];
+    if (!labelFilter.some((id) => ids.includes(id))) return false;
+  }
+  if (dateFilter) {
+    const day = isoLocalDate(item.doneAt ?? item.createdAt);
+    if (day !== dateFilter) return false;
+  }
+  return true;
+}
+
+export function toggleTaskLabelIds(labelIds: string[] | undefined, labelId: string): string[] {
+  const set = new Set(labelIds ?? []);
+  if (set.has(labelId)) set.delete(labelId);
+  else set.add(labelId);
+  return Array.from(set);
 }

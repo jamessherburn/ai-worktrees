@@ -34,8 +34,8 @@ export function SessionLabelsEditor({ labels, onChange }: Props) {
   return (
     <div className="session-labels-editor">
       <p className="muted session-labels-editor-intro">
-        Create custom labels with colours to categorise sessions. Labels appear on the Flight Deck and
-        in the session list. Use them to filter and draw attention to sessions that need action.
+        Create custom labels with colours for sessions and to-do items. Labels appear in the session
+        list and on the to-do board, where you can filter tasks by label.
       </p>
       <div className="session-labels-list">
         {labels.map((label) => (

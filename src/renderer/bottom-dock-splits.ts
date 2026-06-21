@@ -1,4 +1,4 @@
-export type BottomDockPanelId = 'terminal' | 'tasks' | 'git';
+export type BottomDockPanelId = 'terminal' | 'git';
 
 const SPLITS_KEY = 'bottom-dock-panel-weights';
 const DIVIDER_WIDTH = 5;

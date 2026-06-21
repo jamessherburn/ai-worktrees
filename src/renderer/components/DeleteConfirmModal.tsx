@@ -9,8 +9,7 @@ type Props = {
 
 export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
   const isGlobal = session.global === true;
-  const isExternal = session.external === true;
-  const [deleteBranch, setDeleteBranch] = useState(!isGlobal && !isExternal);
+  const [deleteBranch, setDeleteBranch] = useState(!isGlobal);
   const [force, setForce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,12 +32,7 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
         <div className="modal-header">
           <div className="modal-title">Delete session "{session.name}"?</div>
           <div className="modal-subtitle">
-            {isExternal ? (
-              <>
-                This will terminate the agent process running at{' '}
-                <span className="kbd">{session.worktreePath}</span>. The worktree is not removed.
-              </>
-            ) : isGlobal ? (
+            {isGlobal ? (
               <>This will remove the global session record. Your code directory is not modified.</>
             ) : (
               <>
@@ -48,7 +42,7 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
           </div>
         </div>
         <div className="modal-body">
-          {!isGlobal && !isExternal && (
+          {!isGlobal && (
             <>
               <label className="checkbox">
                 <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />

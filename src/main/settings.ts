@@ -1,36 +1,35 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Settings } from '@shared/types';
-import { DEFAULT_SESSION_PROMPTS, resolveSessionPrompts } from '@shared/session-prompts';
-import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
-import { DEFAULT_NVIM_CONFIG, normalizeNvimConfig } from '@shared/nvim-config';
-import { DEFAULT_WIZARD_CONFIG, normalizeWizardConfig } from '@shared/wizard';
 import { JsonStore } from './store.js';
 
 const DEFAULTS: Settings = {
   codeDir: join(homedir(), 'code'),
   theme: 'system',
-  wizard: DEFAULT_WIZARD_CONFIG,
-  tasks: DEFAULT_TASKS_CONFIG,
-  sessionPrompts: DEFAULT_SESSION_PROMPTS,
   sessionLabels: DEFAULT_SESSION_LABELS,
-  nvimConfig: DEFAULT_NVIM_CONFIG,
 };
 
 const store = new JsonStore<Settings>('settings.json', DEFAULTS);
 
-type StoredSettings = Settings & { recapPrompt?: string };
+type StoredSettings = Settings & {
+  recapPrompt?: string;
+  wizard?: unknown;
+  tasks?: unknown;
+  sessionPrompts?: unknown;
+};
 
 function normalizeSettings(s: StoredSettings): Settings {
-  const { recapPrompt: _legacy, ...rest } = s;
+  const {
+    recapPrompt: _legacy,
+    wizard: _wizard,
+    tasks: _tasks,
+    sessionPrompts: _prompts,
+    ...rest
+  } = s;
   return {
     ...rest,
-    wizard: normalizeWizardConfig(s.wizard),
-    tasks: normalizeTasksConfig(s.tasks),
-    sessionPrompts: resolveSessionPrompts(s.sessionPrompts, s.recapPrompt),
     sessionLabels: normalizeSessionLabels(s.sessionLabels),
-    nvimConfig: normalizeNvimConfig(s.nvimConfig),
   };
 }
 

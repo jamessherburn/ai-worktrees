@@ -9,15 +9,8 @@ import {
 } from '@shared/session-labels';
 import { SessionLabelChips } from './SessionLabelChips';
 import { SessionLabelMenu } from './SessionLabelMenu';
-import type { AppView } from './app-view';
-import { ViewSwitcher } from './ViewSwitcher';
 
 type Props = {
-  view: AppView;
-  onViewChange: (view: AppView) => void;
-  compact?: boolean;
-  hidden?: boolean;
-  showSessions: boolean;
   sessions: SessionWithStatus[];
   sessionLabels: SessionLabel[];
   activeId: string | null;
@@ -52,11 +45,6 @@ type ContextMenuState = {
 };
 
 export function Sidebar({
-  view,
-  onViewChange,
-  compact = false,
-  hidden = false,
-  showSessions,
   sessions,
   sessionLabels,
   activeId,
@@ -120,36 +108,27 @@ export function Sidebar({
   }, [menu]);
 
   return (
-    <aside className={`sidebar${compact ? ' sidebar--compact' : ''}${hidden ? ' sidebar--hidden' : ''}`}>
+    <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-header-drag" aria-hidden />
         <div className="sidebar-header-main">
-          {!compact && <div className="sidebar-title">AI Worktrees</div>}
-          <ViewSwitcher view={view} onChange={onViewChange} compact={compact} />
+          <div className="sidebar-title">AI Worktrees</div>
         </div>
       </div>
-      {!compact && !hidden && (
-        <div
-          className="sidebar-resize"
-          onMouseDown={onResizeMouseDown}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize sidebar"
-        />
-      )}
+      <div
+        className="sidebar-resize"
+        onMouseDown={onResizeMouseDown}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+      />
       <div className="sidebar-actions">
-        {compact ? (
-          <button className="sidebar-compact-btn" onClick={onNewSession} title="New Session" aria-label="New Session">
-            <PlusIcon />
-          </button>
-        ) : (
-          <button className="btn btn-primary" onClick={onNewSession}>
-            + New Session
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={onNewSession}>
+          + New Session
+        </button>
         <div className="sidebar-actions-icons">
           <button
-            className={compact ? 'sidebar-compact-btn' : 'icon-btn'}
+            className="icon-btn"
             title="Agent Data"
             onClick={onOpenAgentData}
             aria-label="Agent Data"
@@ -157,7 +136,7 @@ export function Sidebar({
             <DocIcon />
           </button>
           <button
-            className={compact ? 'sidebar-compact-btn' : 'icon-btn'}
+            className="icon-btn"
             title="Settings"
             onClick={onOpenSettings}
             aria-label="Settings"
@@ -167,12 +146,7 @@ export function Sidebar({
         </div>
       </div>
       <div className="sessions-scroll">
-        {!showSessions ? (
-          <div className="sidebar-view-hint">
-            <p>Sessions are monitored on the Flight Deck.</p>
-            <p className="muted">Switch to Workspace to focus on one session at a time.</p>
-          </div>
-        ) : sessions.length === 0 ? (
+        {sessions.length === 0 ? (
           <div className="repo-label" style={{ textAlign: 'center', marginTop: 24 }}>
             No sessions yet
           </div>
@@ -186,10 +160,13 @@ export function Sidebar({
                 {repos.map(([repo, items]) => (
                   <div key={repo} className="repo-group">
                     <div className="repo-label">{repo}</div>
-                    {items.map((s) => (
+                    {items.map((s) => {
+                      const appliedLabels = labelsForSession(s, labelMap);
+                      const isActive = s.id === activeId;
+                      return (
                       <div
                         key={s.id}
-                        className={`session-row${s.id === activeId ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.wizardBriefMarkdown ? ' session-row--wizard' : ''}${s.muted ? ' session-row--muted' : ''}`}
+                        className={`session-row${isActive ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.muted ? ' session-row--muted' : ''}`}
                         onClick={() => onSelect(s.id)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -197,22 +174,23 @@ export function Sidebar({
                           setMenu({ session: s, x: e.clientX, y: e.clientY });
                         }}
                       >
-                        <span className={`status-dot ${statusDotClass(s)}`} title={statusDotClass(s)} />
-                        <div className="session-name" title={s.name}>
-                          <span className="session-name-text">
-                            <span className="session-name-primary">{s.name}</span>
+                        <span
+                          className={`status-dot ${statusDotClass(s)}`}
+                          title={statusDotClass(s)}
+                          aria-hidden
+                        />
+                        <div className="session-card-content">
+                          <div className="session-card-top">
+                            <span className="session-name-primary" title={s.name}>
+                              {s.name}
+                            </span>
                             {s.global ? (
                               <span className="session-global-label" title="Global session">
                                 Global
                               </span>
                             ) : null}
-                            {s.wizardBriefMarkdown ? (
-                              <span className="session-wizard-label" title="Wizard session">
-                                Wizard Session
-                              </span>
-                            ) : null}
-                          </span>
-                          <div className="session-branch">
+                          </div>
+                          <div className="session-card-meta">
                             <span
                               className="session-agent-tag-group"
                               title={`Agent: ${getAgent(s.agentId).name}`}
@@ -220,35 +198,54 @@ export function Sidebar({
                               <span className={`session-agent-tag agent-${s.agentId}`}>
                                 {getAgent(s.agentId).name}
                               </span>
-                              {s.external ? (
-                                <span className="session-external-label" title="External session">
-                                  External Session
-                                </span>
-                              ) : null}
                             </span>
-                            {!s.global && <span className="session-branch-name">{s.branchName}</span>}
+                            {!s.global && (
+                              <>
+                                <span className="session-meta-sep" aria-hidden>
+                                  ·
+                                </span>
+                                <span className="session-branch-name" title={s.branchName}>
+                                  {s.branchName}
+                                </span>
+                              </>
+                            )}
                           </div>
-                          <div className="session-row-labels">
-                            <SessionLabelChips
-                              labels={labelsForSession(s, labelMap)}
-                              compact
-                            />
-                          </div>
+                          {appliedLabels.length > 0 && (
+                            <div className="session-row-labels">
+                              <SessionLabelChips labels={appliedLabels} compact />
+                            </div>
+                          )}
                         </div>
-                        <button
-                          className="session-delete"
-                          type="button"
-                          title="Delete session"
-                          aria-label="Delete session"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(s);
-                          }}
-                        >
-                          <TrashIcon />
-                        </button>
+                        <div className="session-row-actions">
+                          <button
+                            type="button"
+                            className={`session-mute${s.muted ? ' session-mute--active' : ''}`}
+                            title={s.muted ? 'Unmute session' : 'Mute session'}
+                            aria-label={s.muted ? 'Unmute session' : 'Mute session'}
+                            aria-pressed={s.muted === true}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleMuted(s, !s.muted);
+                            }}
+                          >
+                            <MuteIcon muted={s.muted === true} />
+                          </button>
+                          <button
+                            className="session-delete"
+                            type="button"
+                            title="Delete session"
+                            aria-label="Delete session"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDelete(s);
+                            }}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 ))}
               </div>
@@ -324,15 +321,6 @@ function groupByRepo(sessions: SessionWithStatus[]): [string, SessionWithStatus[
     .sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-function PlusIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
 function SettingsIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -349,6 +337,24 @@ function TrashIcon() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
       <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function MuteIcon({ muted }: { muted: boolean }) {
+  if (muted) {
+    return (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 5L6 9H2v6h4l5 4V5z" />
+        <line x1="23" y1="9" x2="17" y2="15" />
+        <line x1="17" y1="9" x2="23" y2="15" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 5L6 9H2v6h4l5 4V5z" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
     </svg>
   );
 }

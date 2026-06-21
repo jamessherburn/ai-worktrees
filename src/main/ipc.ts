@@ -24,10 +24,8 @@ import type {
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
-import type { GitHubMonitorRequest, GitHubMonitorResult, GitHubMonitorStatus } from '@shared/github-monitor';
 import { ensureFishShell } from './fish-setup.js';
 import { ensureGitHubCli } from './gh-cli.js';
-import { fetchGitHubMonitorStats, getGitHubMonitorStatus } from './github-monitor.js';
 import { listRepos } from './repos.js';
 import {
   discardFileChanges,
@@ -45,19 +43,12 @@ import {
 } from './agent-data.js';
 import { promises as fs } from 'node:fs';
 import {
-  discoverExternalSessions,
-  getDiscoveredExternalSession,
-  isExternalSessionId,
-  killExternalAgentProcesses,
-} from './external-sessions.js';
-import {
   createSession,
   deleteSession,
   getSessionById,
   listSessions,
   setSessionLabels,
   setSessionMuted,
-  setSessionNotes,
   setSessionWaitingOnReview,
 } from './sessions.js';
 import { getSettings, replaceSettings, updateSettings } from './settings.js';
@@ -78,21 +69,12 @@ import {
   startShellPty,
   writeShellPty,
 } from './shell-pty-manager.js';
-import { writeNvimConfig } from './nvim-config.js';
-import type { ResolvedTheme } from '@shared/nvim-theme';
-import {
-  killNvimPty,
-  resizeNvimPty,
-  setNvimPtyTheme,
-  startNvimPty,
-  writeNvimPty,
-} from './nvim-pty-manager.js';
 import {
   addItem as tasksAddItem,
-  clearDoneBefore as tasksClearDoneBefore,
   listItems as tasksListItems,
   moveToSection as tasksMoveToSection,
   removeItem as tasksRemoveItem,
+  setItemLabels as tasksSetItemLabels,
   updateItem as tasksUpdateItem,
 } from './diary.js';
 
@@ -107,18 +89,16 @@ async function pathExists(p: string): Promise<boolean> {
 
 
 async function decorate(sessions: Session[]): Promise<SessionWithStatus[]> {
-  const external = await discoverExternalSessions(sessions);
-  const all = [...sessions, ...external];
   const running = new Set(runningSessionIds());
   const result: SessionWithStatus[] = [];
-  for (const s of all) {
+  for (const s of sessions) {
     let status: SessionWithStatus['status'];
-    if (s.external || running.has(s.id)) status = 'running';
+    if (running.has(s.id)) status = 'running';
     else if (!(await pathExists(s.worktreePath))) status = 'orphaned';
     else status = 'stopped';
     const decorated: SessionWithStatus = { ...s, status };
     if (status === 'running') {
-      decorated.activity = s.external ? 'working' : getActivityState(s.id);
+      decorated.activity = getActivityState(s.id);
     }
     result.push(decorated);
   }
@@ -140,17 +120,6 @@ export function registerIpc(): void {
     });
   });
 
-  ipcMain.handle(IPC.GitHubMonitorStatus, async (): Promise<GitHubMonitorStatus> => {
-    return getGitHubMonitorStatus();
-  });
-
-  ipcMain.handle(
-    IPC.GitHubMonitorFetch,
-    async (_e, request: GitHubMonitorRequest): Promise<GitHubMonitorResult> => {
-      return fetchGitHubMonitorStats(request);
-    },
-  );
-
   ipcMain.handle(IPC.ListSessions, async (): Promise<SessionWithStatus[]> => {
     return decorate(await listSessions());
   });
@@ -162,14 +131,6 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.DeleteSession, async (_e, input: DeleteSessionInput) => {
     killPty(input.id);
     killShellPty(input.id);
-    killNvimPty(input.id);
-    if (isExternalSessionId(input.id)) {
-      const session = getDiscoveredExternalSession(input.id);
-      if (session?.external) {
-        await killExternalAgentProcesses(session.worktreePath, session.agentId);
-      }
-      return { ok: true };
-    }
     return deleteSession(input);
   });
 
@@ -185,7 +146,6 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
     const next = await updateSettings(patch);
     if (patch.theme) nativeTheme.themeSource = nativeThemeSource(patch.theme);
-    if (patch.nvimConfig !== undefined) await writeNvimConfig(next.nvimConfig);
     return next;
   });
 
@@ -333,40 +293,8 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(
-    IPC.NvimPtyStart,
-    async (_e, args: { sessionId: string; cols: number; rows: number; theme?: ResolvedTheme }) => {
-      const session = await getSessionById(args.sessionId);
-      if (!session) return { ok: false, error: 'Session not found.' };
-      return startNvimPty({
-        sessionId: session.id,
-        cwd: session.worktreePath,
-        cols: args.cols,
-        rows: args.rows,
-        theme: args.theme,
-      });
-    },
-  );
-
-  ipcMain.on(IPC.NvimPtyWrite, (_e, args: { sessionId: string; data: string }) => {
-    writeNvimPty(args.sessionId, args.data);
-  });
-
-  ipcMain.on(IPC.NvimPtyResize, (_e, args: { sessionId: string; cols: number; rows: number }) => {
-    resizeNvimPty(args.sessionId, args.cols, args.rows);
-  });
-
-  ipcMain.handle(IPC.NvimPtyKill, async (_e, sessionId: string) => {
-    killNvimPty(sessionId);
-  });
-
-  ipcMain.on(IPC.NvimPtySetTheme, (_e, args: { sessionId: string; theme: ResolvedTheme }) => {
-    setNvimPtyTheme(args.sessionId, args.theme);
-  });
-
-  ipcMain.handle(
     IPC.SessionsSetWaitingOnReview,
     async (_e, args: { sessionId: string; value: boolean }) => {
-      if (isExternalSessionId(args.sessionId)) return;
       await setSessionWaitingOnReview(args.sessionId, args.value);
     },
   );
@@ -374,7 +302,6 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsSetLabels,
     async (_e, args: { sessionId: string; labelIds: string[] }) => {
-      if (isExternalSessionId(args.sessionId)) return;
       await setSessionLabels(args.sessionId, args.labelIds);
     },
   );
@@ -382,18 +309,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.SessionsSetMuted,
     async (_e, args: { sessionId: string; value: boolean }) => {
-      if (isExternalSessionId(args.sessionId)) return;
       await setSessionMuted(args.sessionId, args.value);
-    },
-  );
-
-  ipcMain.handle(
-    IPC.SessionsSetNotes,
-    async (_e, args: { sessionId: string; text: string }) => {
-      if (isExternalSessionId(args.sessionId)) {
-        throw new Error('Notes are not available for external sessions.');
-      }
-      await setSessionNotes(args.sessionId, args.text);
     },
   );
 
@@ -419,8 +335,8 @@ export function registerIpc(): void {
 
   ipcMain.handle(
     IPC.TasksAdd,
-    async (_e, args: { text: string; sectionId: string }): Promise<TaskItem> =>
-      tasksAddItem(args.text, args.sectionId),
+    async (_e, args: { text: string; sectionId: string; labelIds?: string[] }): Promise<TaskItem> =>
+      tasksAddItem(args.text, args.sectionId, args.labelIds),
   );
 
   ipcMain.handle(
@@ -433,12 +349,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     IPC.TasksMove,
     async (_e, args: { id: string; sectionId: string }): Promise<void> => {
-      const settings = await getSettings();
-      await tasksMoveToSection(
-        args.id,
-        args.sectionId,
-        settings.tasks!.whatDidIDoSectionId,
-      );
+      await tasksMoveToSection(args.id, args.sectionId);
     },
   );
 
@@ -446,9 +357,12 @@ export function registerIpc(): void {
     await tasksRemoveItem(id);
   });
 
-  ipcMain.handle(IPC.TasksClearDoneBefore, async (_e, cutoffISO: string): Promise<number> => {
-    return tasksClearDoneBefore(cutoffISO);
-  });
+  ipcMain.handle(
+    IPC.TasksSetLabels,
+    async (_e, args: { id: string; labelIds: string[] }): Promise<void> => {
+      await tasksSetItemLabels(args.id, args.labelIds);
+    },
+  );
 
   ipcMain.handle(IPC.GitStatus, async (_e, sessionId: string): Promise<GitStatusResult> => {
     const session = await getSessionById(sessionId);
