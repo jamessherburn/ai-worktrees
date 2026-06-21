@@ -24,7 +24,15 @@ function resolveIconPath(resolved: ResolvedTheme): string {
   return join(app.getAppPath(), 'build', fileName);
 }
 
-export function applyAppTheme(pref: ThemePreference, opts?: { reloadWindows?: boolean }): void {
+function applyDockIcon(resolved: ResolvedTheme): void {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  const icon = nativeImage.createFromPath(resolveIconPath(resolved));
+  if (!icon.isEmpty()) {
+    app.dock.setIcon(icon);
+  }
+}
+
+export function applyAppTheme(pref: ThemePreference): void {
   nativeTheme.themeSource = nativeThemeSource(pref);
   const resolved = resolveTheme(pref);
   const backgroundColor = windowBackgroundColor(pref, !nativeTheme.shouldUseDarkColors);
@@ -33,16 +41,5 @@ export function applyAppTheme(pref: ThemePreference, opts?: { reloadWindows?: bo
     win.setBackgroundColor(backgroundColor);
   }
 
-  if (process.platform === 'darwin' && app.dock) {
-    const icon = nativeImage.createFromPath(resolveIconPath(resolved));
-    if (!icon.isEmpty()) {
-      app.dock.setIcon(icon);
-    }
-  }
-
-  if (opts?.reloadWindows) {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.reload();
-    }
-  }
+  applyDockIcon(resolved);
 }

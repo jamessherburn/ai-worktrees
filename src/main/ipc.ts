@@ -146,9 +146,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
     const previous = await getSettings();
     const next = await updateSettings(patch);
-    if (patch.theme !== undefined) {
-      const themeChanged = patch.theme !== previous.theme;
-      applyAppTheme(next.theme, { reloadWindows: themeChanged });
+    if (patch.theme !== undefined && patch.theme !== previous.theme) {
+      applyAppTheme(next.theme);
     }
     return next;
   });
@@ -185,7 +184,7 @@ export function registerIpc(): void {
       const parsed = parseSettingsImportJson(raw);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       const next = await replaceSettings(parsed.value);
-      applyAppTheme(next.theme, { reloadWindows: true });
+      applyAppTheme(next.theme);
       return { ok: true, settings: next };
     } catch (err) {
       return { ok: false, error: (err as Error).message };

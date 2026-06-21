@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { getTerminalTheme } from '../terminal-theme';
+import { applyXtermTheme, buildXtermTheme } from '../terminal-theme';
 import { syncTerminalInteractive, waitForTerminalLayout } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
 import { getAgent, type AgentId } from '@shared/agents';
@@ -93,9 +93,7 @@ export function TerminalView({
       lineHeight: 1.25,
       cursorBlink: !hideNativeCursor,
       cursorInactiveStyle: hideNativeCursor ? 'none' : 'outline',
-      theme: hideNativeCursor
-        ? { ...getTerminalTheme(themeName), cursor: 'rgba(0,0,0,0)', cursorAccent: 'rgba(0,0,0,0)' }
-        : getTerminalTheme(themeName),
+      theme: buildXtermTheme(themeName, hideNativeCursor),
       allowProposedApi: true,
       scrollback: 5000,
     });
@@ -264,8 +262,20 @@ export function TerminalView({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = getTerminalTheme(themeName);
-  }, [themeName]);
+    applyXtermTheme(term, themeName, {
+      hideNativeCursor: agentId === 'cursor',
+      nudgeRedraw: () => {
+        if (!ptyReadyRef.current || term.cols <= 0 || term.rows <= 1) return;
+        if (agentId !== 'cursor' && agentId !== 'claude') return;
+        const cols = term.cols;
+        const rows = term.rows;
+        window.api.pty.resize(sessionId, cols, rows - 1);
+        requestAnimationFrame(() => {
+          window.api.pty.resize(sessionId, cols, rows);
+        });
+      },
+    });
+  }, [themeName, agentId, sessionId]);
 
   useEffect(() => {
     if (!ptyReadyRef.current) return;
