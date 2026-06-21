@@ -25,50 +25,6 @@ export function enrichedPath(): string {
   ].join(':');
 }
 
-let cachedNvimPath: string | undefined;
-
-/** Locate nvim when installed; returns null if not found. */
-export async function findNvimPath(): Promise<string | null> {
-  const candidates = [
-    '/opt/homebrew/bin/nvim',
-    '/usr/local/bin/nvim',
-    '/usr/bin/nvim',
-    `${homedir()}/.local/bin/nvim`,
-  ];
-
-  for (const path of candidates) {
-    if (await isExecutable(path)) {
-      return path;
-    }
-  }
-
-  try {
-    const { stdout } = await execFileAsync('which', ['nvim'], {
-      env: { ...process.env, PATH: enrichedPath() },
-    });
-    const found = stdout.trim().split('\n')[0]?.trim();
-    if (found && (await isExecutable(found))) {
-      return found;
-    }
-  } catch {
-    // nvim not installed
-  }
-
-  return null;
-}
-
-export function clearNvimPathCache(): void {
-  cachedNvimPath = undefined;
-}
-
-/** Resolve nvim binary for embedded editor PTYs. */
-export async function resolveNvimPath(): Promise<string | null> {
-  if (cachedNvimPath) return cachedNvimPath;
-  const nvim = await findNvimPath();
-  if (nvim) cachedNvimPath = nvim;
-  return nvim;
-}
-
 export function isFishPath(path: string): boolean {
   return path === 'fish' || path.endsWith('/fish');
 }

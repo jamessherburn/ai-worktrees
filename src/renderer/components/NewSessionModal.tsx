@@ -1,30 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CreateSessionResult, RepoInfo } from '@shared/types';
-import type { WizardConfig } from '@shared/wizard';
+import { useEffect, useRef, useState } from 'react';
+import type { CreateSessionResult, RepoInfo, SessionLabel } from '@shared/types';
 import { AGENTS, DEFAULT_AGENT_ID, type AgentAvailability, type AgentId } from '@shared/agents';
-import { WizardSessionStep } from './WizardSessionStep';
+import { toggleTaskLabelIds } from '@shared/tasks';
+import { SessionLabelChips } from './SessionLabelChips';
 
 type Props = {
+  sessionLabels: SessionLabel[];
   onClose: () => void;
   onCreated: (result: Extract<CreateSessionResult, { ok: true }>) => void;
 };
 
-type Step = 'form' | 'wizard';
+type ScopeKind = 'repo' | 'global';
 
-export function NewSessionModal({ onClose, onCreated }: Props) {
+const STEPS = [
+  { id: 'scope', label: 'Type' },
+  { id: 'agent', label: 'Agent' },
+  { id: 'details', label: 'Details' },
+] as const;
+
+export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
+  const [step, setStep] = useState(0);
   const [repos, setRepos] = useState<RepoInfo[] | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
+  const [scope, setScope] = useState<ScopeKind>('repo');
   const [agentId, setAgentId] = useState<AgentId>(DEFAULT_AGENT_ID);
   const [repoPath, setRepoPath] = useState('');
   const [name, setName] = useState('');
+  const [labelIds, setLabelIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [useWizardMode, setUseWizardMode] = useState(false);
-  const [isGlobalSession, setIsGlobalSession] = useState(false);
   const [codeDir, setCodeDir] = useState<string | null>(null);
-  const [step, setStep] = useState<Step>('form');
-  const [wizardConfig, setWizardConfig] = useState<WizardConfig | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void window.api.getSettings().then((s) => setCodeDir(s.codeDir));
@@ -48,22 +54,25 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
   }, []);
 
   useEffect(() => {
-    if (step === 'form') inputRef.current?.focus();
-  }, [repos, step]);
+    if (step === 2) nameInputRef.current?.focus();
+  }, [step]);
 
+  const isGlobalSession = scope === 'global';
   const selectedAvailable = availability ? availability[agentId] : true;
   const anyAvailable = availability ? AGENTS.some((a) => availability[a.id]) : true;
 
-  const canSubmit = useMemo(
-    () =>
-      selectedAvailable &&
-      (isGlobalSession || repoPath) &&
-      name.trim().length > 0 &&
-      !busy,
-    [selectedAvailable, isGlobalSession, repoPath, name, busy],
-  );
+  const selectedLabels = sessionLabels.filter((l) => labelIds.includes(l.id));
 
-  const runCreate = async (wizardBriefMarkdown: string | null) => {
+  const canAdvanceFromScope =
+    scope === 'global' || (repos !== null && repos.length > 0 && repoPath.length > 0);
+  const canAdvanceFromAgent = selectedAvailable;
+  const canSubmit = name.trim().length > 0 && !busy && canAdvanceFromAgent;
+
+  const canGoNext =
+    step === 0 ? canAdvanceFromScope : step === 1 ? canAdvanceFromAgent : canSubmit;
+
+  const createSession = async () => {
+    if (!canSubmit) return;
     setBusy(true);
     setError(null);
     try {
@@ -71,7 +80,7 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
         ...(isGlobalSession ? { global: true } : { repoPath }),
         name: name.trim(),
         agentId,
-        wizardBriefMarkdown: wizardBriefMarkdown ?? undefined,
+        labelIds: labelIds.length ? labelIds : undefined,
       });
       if (result.ok) {
         onCreated(result);
@@ -85,26 +94,29 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     }
   };
 
-  const beginCreate = async () => {
-    if (!canSubmit) return;
-    if (useWizardMode) {
-      const s = await window.api.getSettings();
-      setWizardConfig(s.wizard);
-      setStep('wizard');
+  const goNext = () => {
+    if (step < STEPS.length - 1 && canGoNext) {
       setError(null);
-      return;
+      setStep((s) => s + 1);
+    } else if (step === STEPS.length - 1) {
+      void createSession();
     }
-    await runCreate(null);
+  };
+
+  const goBack = () => {
+    setError(null);
+    setStep((s) => Math.max(0, s - 1));
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (step === 'wizard') setStep('form');
-      else onClose();
-    }
-    if (step === 'form' && e.key === 'Enter' && canSubmit) {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'Enter' && canGoNext && step < STEPS.length - 1) {
       e.preventDefault();
-      void beginCreate();
+      goNext();
+    }
+    if (e.key === 'Enter' && step === STEPS.length - 1 && canSubmit) {
+      e.preventDefault();
+      void createSession();
     }
   };
 
@@ -112,136 +124,239 @@ export function NewSessionModal({ onClose, onCreated }: Props) {
     setName(raw.replace(/\s+/g, '-'));
   };
 
-  if (step === 'wizard' && wizardConfig) {
-    return (
-      <div className="modal-backdrop" onClick={() => !busy && setStep('form')}>
-        <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
-          <WizardSessionStep
-            config={wizardConfig}
-            onBack={() => !busy && setStep('form')}
-            onConfirm={(markdown) => void runCreate(markdown)}
-            busy={busy}
-          />
-        </div>
-      </div>
-    );
-  }
+  const toggleLabel = (id: string) => {
+    setLabelIds((prev) => toggleTaskLabelIds(prev, id));
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
-        <div className="modal-header">
-          <div className="modal-title">New Session</div>
-          <div className="modal-subtitle">
-            {isGlobalSession
-              ? 'Runs the agent at your code directory — no git worktree is created.'
-              : 'Creates a new git worktree branched off the latest origin/main.'}
+      <div
+        className="modal modal-wide new-session-modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+        role="dialog"
+        aria-labelledby="new-session-title"
+        aria-modal="true"
+      >
+        <div className="modal-header new-session-header">
+          <div className="modal-title" id="new-session-title">
+            New Session
           </div>
+          <div className="modal-subtitle">Step {step + 1} of {STEPS.length} — {STEPS[step].label}</div>
+          <ol className="new-session-steps" aria-label="Progress">
+            {STEPS.map((s, index) => (
+              <li
+                key={s.id}
+                className={`new-session-step${index === step ? ' active' : ''}${index < step ? ' done' : ''}`}
+              >
+                <span className="new-session-step-index">{index + 1}</span>
+                <span className="new-session-step-label">{s.label}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-        <div className="modal-body">
-          <div className="field field-row">
-            <label className="wizard-mode-check">
-              <input
-                type="checkbox"
-                checked={isGlobalSession}
-                onChange={(e) => setIsGlobalSession(e.target.checked)}
-              />
-              <span>Global session</span>
-            </label>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-              Run the agent at your code directory from Settings
-              {codeDir ? ` (${codeDir})` : ''} without creating a worktree or branch.
-            </div>
-          </div>
-          <div className="field">
-            <label className="field-label">AI Agent</label>
-            <div className="agent-grid">
-              {AGENTS.map((a) => {
-                const known = availability !== null;
-                const available = known ? availability[a.id] : true;
-                const isSelected = agentId === a.id;
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    className={`agent-card${isSelected ? ' selected' : ''}${!available ? ' disabled' : ''}`}
-                    disabled={!available}
-                    onClick={() => available && setAgentId(a.id)}
-                  >
-                    <div className="agent-card-header">
-                      <span
-                        className={`agent-dot ${known ? (available ? 'available' : 'unavailable') : 'unknown'}`}
-                        title={known ? (available ? 'Installed' : 'Not installed') : 'Checking…'}
-                      />
-                      <span className="agent-name">{a.name}</span>
+
+        <div className="modal-body new-session-body">
+          {step === 0 && (
+            <div className="new-session-panel">
+              <p className="new-session-intro muted">
+                Choose where this session runs. Repository sessions get an isolated git worktree;
+                global sessions run directly in your code directory.
+              </p>
+              <div className="new-session-scope-grid">
+                <button
+                  type="button"
+                  className={`new-session-scope-card${scope === 'repo' ? ' selected' : ''}`}
+                  onClick={() => setScope('repo')}
+                >
+                  <span className="new-session-scope-icon" aria-hidden>
+                    ⎇
+                  </span>
+                  <span className="new-session-scope-title">Repository</span>
+                  <span className="new-session-scope-desc">
+                    New worktree branched from origin/main in a selected repo.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`new-session-scope-card${scope === 'global' ? ' selected' : ''}`}
+                  onClick={() => setScope('global')}
+                >
+                  <span className="new-session-scope-icon" aria-hidden>
+                    ◉
+                  </span>
+                  <span className="new-session-scope-title">Global</span>
+                  <span className="new-session-scope-desc">
+                    Run at your code directory — no worktree or branch is created.
+                  </span>
+                </button>
+              </div>
+              {scope === 'repo' ? (
+                <div className="field new-session-repo-field">
+                  <label className="field-label" htmlFor="new-session-repo">
+                    Repository
+                  </label>
+                  {repos === null ? (
+                    <div className="muted">Scanning repos…</div>
+                  ) : repos.length === 0 ? (
+                    <div className="modal-warn">
+                      No git repos found in your code directory. Update the code directory in Settings.
                     </div>
-                    <div className="agent-desc">{a.description}</div>
-                    {known && !available && <div className="agent-missing">Not installed</div>}
-                  </button>
-                );
-              })}
+                  ) : (
+                    <select
+                      id="new-session-repo"
+                      value={repoPath}
+                      onChange={(e) => setRepoPath(e.target.value)}
+                    >
+                      {repos.map((r) => (
+                        <option key={r.path} value={r.path}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <div className="new-session-code-dir muted">
+                  Code directory
+                  {codeDir ? `: ${codeDir}` : ' — set in Settings'}
+                </div>
+              )}
             </div>
-            {availability !== null && !anyAvailable && (
-              <div className="modal-warn">
-                No supported agent CLIs were found on your PATH. Install one and try again.
+          )}
+
+          {step === 1 && (
+            <div className="new-session-panel">
+              <p className="new-session-intro muted">
+                Pick the AI agent CLI for this session. Only installed agents can be selected.
+              </p>
+              <div className="agent-grid">
+                {AGENTS.map((a) => {
+                  const known = availability !== null;
+                  const available = known ? availability[a.id] : true;
+                  const isSelected = agentId === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={`agent-card${isSelected ? ' selected' : ''}${!available ? ' disabled' : ''}`}
+                      disabled={!available}
+                      onClick={() => available && setAgentId(a.id)}
+                    >
+                      <div className="agent-card-header">
+                        <span
+                          className={`agent-dot ${known ? (available ? 'available' : 'unavailable') : 'unknown'}`}
+                          title={known ? (available ? 'Installed' : 'Not installed') : 'Checking…'}
+                        />
+                        <span className="agent-name">{a.name}</span>
+                      </div>
+                      <div className="agent-desc">{a.description}</div>
+                      {known && !available && <div className="agent-missing">Not installed</div>}
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
-          <div className="field">
-            <label className="field-label">Repository</label>
-            {isGlobalSession ? (
-              <div className="muted" style={{ fontSize: 12 }}>
-                Not applicable — global sessions run at your code directory.
+              {availability !== null && !anyAvailable && (
+                <div className="modal-warn">
+                  No supported agent CLIs were found on your PATH. Install one and try again.
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="new-session-panel">
+              <p className="new-session-intro muted">
+                Name your session and optionally tag it with labels so it stands out in the sidebar.
+              </p>
+              <div className="field">
+                <label className="field-label" htmlFor="new-session-name">
+                  Session name
+                </label>
+                <input
+                  id="new-session-name"
+                  ref={nameInputRef}
+                  value={name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  placeholder="e.g. feature-auth"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <div className="muted new-session-name-hint">
+                  {isGlobalSession
+                    ? 'Letters, numbers, dot, underscore, slash, dash. Spaces become dashes.'
+                    : 'Also used as the branch name. Spaces become dashes as you type.'}
+                </div>
               </div>
-            ) : repos === null ? (
-              <div className="muted">Scanning repos…</div>
-            ) : repos.length === 0 ? (
-              <div className="modal-warn">No git repos found in your code directory. Update the code directory in Settings.</div>
-            ) : (
-              <select value={repoPath} onChange={(e) => setRepoPath(e.target.value)}>
-                {repos.map((r) => (
-                  <option key={r.path} value={r.path}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div className="field">
-            <label className="field-label">Session name</label>
-            <input
-              ref={inputRef}
-              value={name}
-              onChange={(e) => onNameChange(e.target.value)}
-              placeholder="e.g. feature-1"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <div className="muted" style={{ fontSize: 11 }}>
-              {isGlobalSession
-                ? 'Letters, numbers, dot, underscore, slash, dash. Spaces become dashes as you type.'
-                : 'This is also the branch name (letters, numbers, dot, underscore, slash, dash). Spaces become dashes as you type.'}
+              {sessionLabels.length > 0 && (
+                <div className="field">
+                  <span className="field-label">Labels</span>
+                  <div className="new-session-label-grid">
+                    {sessionLabels.map((label) => {
+                      const checked = labelIds.includes(label.id);
+                      return (
+                        <button
+                          key={label.id}
+                          type="button"
+                          className={`new-session-label-option${checked ? ' active' : ''}`}
+                          style={{ ['--label-color' as string]: label.color }}
+                          onClick={() => toggleLabel(label.id)}
+                        >
+                          <span className="new-session-label-check" aria-hidden>
+                            {checked ? '✓' : ''}
+                          </span>
+                          {label.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedLabels.length > 0 && (
+                    <div className="new-session-label-preview">
+                      <SessionLabelChips labels={selectedLabels} compact />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="new-session-summary">
+                <div className="new-session-summary-row">
+                  <span className="new-session-summary-key">Type</span>
+                  <span>{isGlobalSession ? 'Global' : 'Repository worktree'}</span>
+                </div>
+                {!isGlobalSession && repoPath && (
+                  <div className="new-session-summary-row">
+                    <span className="new-session-summary-key">Repo</span>
+                    <span>{repos?.find((r) => r.path === repoPath)?.name ?? repoPath}</span>
+                  </div>
+                )}
+                <div className="new-session-summary-row">
+                  <span className="new-session-summary-key">Agent</span>
+                  <span>{AGENTS.find((a) => a.id === agentId)?.name ?? agentId}</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="field field-row">
-            <label className="wizard-mode-check">
-              <input type="checkbox" checked={useWizardMode} onChange={(e) => setUseWizardMode(e.target.checked)} />
-              <span>Use Wizard Mode</span>
-            </label>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-              When enabled, you answer a short questionnaire before the session is created so we can draft a briefing for
-              your agent.
-            </div>
-          </div>
+          )}
+
           {error && <div className="modal-error">{error}</div>}
         </div>
-        <div className="modal-footer">
+
+        <div className="modal-footer new-session-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={() => void beginCreate()} disabled={!canSubmit}>
-            {busy ? 'Creating…' : 'Create Session'}
-          </button>
+          <div className="new-session-footer-actions">
+            {step > 0 && (
+              <button className="btn btn-ghost" onClick={goBack} disabled={busy}>
+                Back
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={() => (step < STEPS.length - 1 ? goNext() : void createSession())}
+              disabled={!canGoNext}
+            >
+              {busy ? 'Creating…' : step < STEPS.length - 1 ? 'Continue' : 'Create Session'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,11 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/ipc-channels';
 import type {
-  GitHubMonitorRequest,
-  GitHubMonitorResult,
-  GitHubMonitorStatus,
-} from '@shared/github-monitor';
-import type {
   ActivityState,
   AgentSpendInfo,
   CreateSessionInput,
@@ -26,24 +21,16 @@ import type {
 } from '@shared/types';
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import type { AgentAvailability, AgentId } from '@shared/agents';
-import type { ResolvedTheme } from '@shared/nvim-theme';
 
 type PtyDataPayload = { sessionId: string; data: string };
 type PtyExitPayload = { sessionId: string; exitCode: number };
 type PtyActivityPayload = { sessionId: string; activity: ActivityState };
 type ShellPtyDataPayload = { sessionId: string; data: string };
 type ShellPtyExitPayload = { sessionId: string; exitCode: number };
-type NvimPtyDataPayload = { sessionId: string; data: string };
-type NvimPtyExitPayload = { sessionId: string; exitCode: number };
 
 const api = {
   ensureGitHubApi: (): Promise<GhSetupResult> => ipcRenderer.invoke(IPC.GhSetupEnsure),
   ensureFishShell: (): Promise<FishSetupResult> => ipcRenderer.invoke(IPC.FishSetupEnsure),
-  githubMonitor: {
-    status: (): Promise<GitHubMonitorStatus> => ipcRenderer.invoke(IPC.GitHubMonitorStatus),
-    fetch: (request: GitHubMonitorRequest): Promise<GitHubMonitorResult> =>
-      ipcRenderer.invoke(IPC.GitHubMonitorFetch, request),
-  },
   onGitHubApiSetupProgress: (cb: (message: string) => void) => {
     const listener = (_: unknown, message: string) => cb(message);
     ipcRenderer.on(IPC.GhSetupProgress, listener);
@@ -61,8 +48,6 @@ const api = {
     ipcRenderer.invoke(IPC.SessionsSetLabels, { sessionId, labelIds }),
   setSessionMuted: (sessionId: string, value: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.SessionsSetMuted, { sessionId, value }),
-  setSessionNotes: (sessionId: string, text: string): Promise<void> =>
-    ipcRenderer.invoke(IPC.SessionsSetNotes, { sessionId, text }),
   createSession: (input: CreateSessionInput): Promise<CreateSessionResult> =>
     ipcRenderer.invoke(IPC.CreateSession, input),
   deleteSession: (input: DeleteSessionInput) => ipcRenderer.invoke(IPC.DeleteSession, input),
@@ -97,15 +82,15 @@ const api = {
   },
   tasks: {
     list: (): Promise<TaskItem[]> => ipcRenderer.invoke(IPC.TasksList),
-    add: (text: string, sectionId: string): Promise<TaskItem> =>
-      ipcRenderer.invoke(IPC.TasksAdd, { text, sectionId }),
+    add: (text: string, sectionId: string, labelIds?: string[]): Promise<TaskItem> =>
+      ipcRenderer.invoke(IPC.TasksAdd, { text, sectionId, labelIds }),
     update: (id: string, text: string): Promise<void> =>
       ipcRenderer.invoke(IPC.TasksUpdate, { id, text }),
     move: (id: string, sectionId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.TasksMove, { id, sectionId }),
     remove: (id: string): Promise<void> => ipcRenderer.invoke(IPC.TasksRemove, id),
-    clearDoneBefore: (cutoffISO: string): Promise<number> =>
-      ipcRenderer.invoke(IPC.TasksClearDoneBefore, cutoffISO),
+    setLabels: (id: string, labelIds: string[]): Promise<void> =>
+      ipcRenderer.invoke(IPC.TasksSetLabels, { id, labelIds }),
   },
   pty: {
     start: (sessionId: string, cols: number, rows: number) =>
@@ -158,29 +143,6 @@ const api = {
       const listener = (_: unknown, payload: ShellPtyExitPayload) => cb(payload);
       ipcRenderer.on(IPC.ShellPtyExit, listener);
       return () => ipcRenderer.removeListener(IPC.ShellPtyExit, listener);
-    },
-  },
-  nvimPty: {
-    start: (sessionId: string, cols: number, rows: number, theme?: ResolvedTheme) =>
-      ipcRenderer.invoke(IPC.NvimPtyStart, { sessionId, cols, rows, theme }) as Promise<
-        { ok: true; reattached: boolean } | { ok: false; error: string }
-      >,
-    setTheme: (sessionId: string, theme: ResolvedTheme) =>
-      ipcRenderer.send(IPC.NvimPtySetTheme, { sessionId, theme }),
-    write: (sessionId: string, data: string) =>
-      ipcRenderer.send(IPC.NvimPtyWrite, { sessionId, data }),
-    resize: (sessionId: string, cols: number, rows: number) =>
-      ipcRenderer.send(IPC.NvimPtyResize, { sessionId, cols, rows }),
-    kill: (sessionId: string) => ipcRenderer.invoke(IPC.NvimPtyKill, sessionId),
-    onData: (cb: (payload: NvimPtyDataPayload) => void) => {
-      const listener = (_: unknown, payload: NvimPtyDataPayload) => cb(payload);
-      ipcRenderer.on(IPC.NvimPtyData, listener);
-      return () => ipcRenderer.removeListener(IPC.NvimPtyData, listener);
-    },
-    onExit: (cb: (payload: NvimPtyExitPayload) => void) => {
-      const listener = (_: unknown, payload: NvimPtyExitPayload) => cb(payload);
-      ipcRenderer.on(IPC.NvimPtyExit, listener);
-      return () => ipcRenderer.removeListener(IPC.NvimPtyExit, listener);
     },
   },
 };

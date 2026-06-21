@@ -1,9 +1,5 @@
-import type { SessionLabel, SessionPromptPreset, Settings, TasksConfig, ThemePreference } from './types';
+import type { SessionLabel, Settings, ThemePreference } from './types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from './session-labels';
-import { resolveSessionPrompts } from './session-prompts';
-import { normalizeTasksConfig } from './tasks';
-import { normalizeNvimConfig } from './nvim-config';
-import { normalizeWizardConfig } from './wizard';
 
 export const SETTINGS_EXPORT_VERSION = 1;
 
@@ -64,24 +60,14 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
     return { ok: false, error: 'theme must be system, dark, light, or monokai.' };
   }
 
-  const legacyRecapPrompt =
-    typeof candidate.recapPrompt === 'string' ? candidate.recapPrompt : undefined;
-
   return {
     ok: true,
     value: {
       codeDir: codeDir.trim(),
       theme: theme as ThemePreference,
-      wizard: normalizeWizardConfig(candidate.wizard),
-      tasks: normalizeTasksConfig(candidate.tasks as TasksConfig | undefined),
-      sessionPrompts: resolveSessionPrompts(
-        candidate.sessionPrompts as SessionPromptPreset[] | undefined,
-        legacyRecapPrompt,
-      ),
       sessionLabels: normalizeSessionLabels(
         (candidate.sessionLabels as SessionLabel[] | undefined) ?? DEFAULT_SESSION_LABELS,
       ),
-      nvimConfig: normalizeNvimConfig(candidate.nvimConfig as string | undefined),
     },
   };
 }

@@ -5,9 +5,7 @@ import type { ThemePreference } from '@shared/types';
 import { registerIpc } from './ipc.js';
 import { migrateLegacyUserData } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
-import { gracefulNvimShutdown, registerNvimPtyWebContents } from './nvim-pty-manager.js';
 import { gracefulShellShutdown, registerShellPtyWebContents } from './shell-pty-manager.js';
-import { ensureNvimConfig } from './nvim-config.js';
 import { getSettings } from './settings.js';
 
 const isDev = !app.isPackaged;
@@ -38,14 +36,12 @@ function createMainWindow(theme: ThemePreference): BrowserWindow {
 
   registerWebContents(win.webContents);
   registerShellPtyWebContents(win.webContents);
-  registerNvimPtyWebContents(win.webContents);
   return win;
 }
 
 app.whenReady().then(async () => {
   await migrateLegacyUserData();
   const settings = await getSettings();
-  await ensureNvimConfig();
   nativeTheme.themeSource = nativeThemeSource(settings.theme);
   registerIpc();
   createMainWindow(settings.theme);
@@ -66,6 +62,6 @@ app.on('before-quit', async (event) => {
   if (isQuitting) return;
   event.preventDefault();
   isQuitting = true;
-  await Promise.all([gracefulShutdown(), gracefulShellShutdown(), gracefulNvimShutdown()]);
+  await Promise.all([gracefulShutdown(), gracefulShellShutdown()]);
   app.quit();
 });

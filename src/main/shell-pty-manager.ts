@@ -13,6 +13,10 @@ type ShellPtyEntry = {
 const MAX_BACKLOG_BYTES = 500_000;
 
 const shellPtys = new Map<string, ShellPtyEntry>();
+const startInflight = new Map<
+  string,
+  Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }>
+>();
 let listener: WebContents | undefined;
 
 export function registerShellPtyWebContents(wc: WebContents): void {
@@ -40,19 +44,30 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-export async function startShellPty(opts: {
+type ShellStartResult = { ok: true; reattached: boolean } | { ok: false; error: string };
+
+function reattachShellPty(opts: { sessionId: string; cols: number; rows: number }): ShellStartResult {
+  const existing = shellPtys.get(opts.sessionId)!;
+  try {
+    existing.proc.resize(Math.max(1, opts.cols), Math.max(1, opts.rows));
+  } catch {
+    // ignore: pty may have just exited
+  }
+  const snapshot = existing.backlog.join('');
+  queueMicrotask(() => {
+    if (snapshot) listener?.send(IPC.ShellPtyData, { sessionId: opts.sessionId, data: snapshot });
+  });
+  return { ok: true, reattached: true };
+}
+
+async function createShellPty(opts: {
   sessionId: string;
   cwd: string;
   cols: number;
   rows: number;
-}): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
+}): Promise<ShellStartResult> {
   if (shellPtys.has(opts.sessionId)) {
-    const existing = shellPtys.get(opts.sessionId)!;
-    const snapshot = existing.backlog.join('');
-    queueMicrotask(() => {
-      if (snapshot) listener?.send(IPC.ShellPtyData, { sessionId: opts.sessionId, data: snapshot });
-    });
-    return { ok: true, reattached: true };
+    return reattachShellPty(opts);
   }
 
   if (!(await exists(opts.cwd))) {
@@ -75,6 +90,15 @@ export async function startShellPty(opts: {
     return { ok: false, error: `Failed to spawn shell: ${(err as Error).message}` };
   }
 
+  if (shellPtys.has(opts.sessionId)) {
+    try {
+      proc.kill();
+    } catch {
+      // ignore
+    }
+    return reattachShellPty(opts);
+  }
+
   const entry: ShellPtyEntry = {
     proc,
     backlog: [],
@@ -93,6 +117,28 @@ export async function startShellPty(opts: {
   });
 
   return { ok: true, reattached: false };
+}
+
+export async function startShellPty(opts: {
+  sessionId: string;
+  cwd: string;
+  cols: number;
+  rows: number;
+}): Promise<ShellStartResult> {
+  if (shellPtys.has(opts.sessionId)) {
+    return reattachShellPty(opts);
+  }
+
+  const inflight = startInflight.get(opts.sessionId);
+  if (inflight) return inflight;
+
+  const promise = createShellPty(opts);
+  startInflight.set(opts.sessionId, promise);
+  try {
+    return await promise;
+  } finally {
+    startInflight.delete(opts.sessionId);
+  }
 }
 
 export function writeShellPty(sessionId: string, data: string): void {

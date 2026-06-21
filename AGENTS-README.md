@@ -1,217 +1,205 @@
 # AGENTS-README
 
-How AI Worktrees is wired together, how to add a new coding agent, and what to respect for security when you change the main process.
+Architecture guide for contributors: how the pieces connect, how data flows, and what to respect when you change the main process or IPC.
+
+For install, daily use, and a user-facing security summary, see [README.md](./README.md).
 
 ---
 
-## 1. What the app does, in one paragraph
+## 1. The story of a session
 
-Each **worktree session** is a git worktree (new branch) with a long-lived PTY running one agent CLI in that directory. **Global sessions** skip worktree creation and use the configured code directory as cwd. Sessions persist across app restarts: PTYs are recreated on demand, but worktrees, branches, and each agent’s on-disk history remain until you delete the session.
+When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: the agent’s working directory is the configured code directory from settings.
 
-The UI has two views: **Flight Deck** (default) — a filterable grid of session cards opening a fullscreen three-panel workspace (Neovim editor, agent REPL, shell) — and **Workspace** — sidebar + main agent terminal + bottom dock (shell, Git, tasks). React + xterm.js in the renderer; git, PTY, Neovim, filesystem, and CLI detection live in the Electron main process behind a narrow `window.api` bridge.
+Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session, builds a **fixed** launch command for that agent (`claude --continue`, etc.), and spawns a PTY in the session directory. Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
 
----
+Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the same cwd. Agent and shell are independent processes with independent backlogs.
 
-## 2. Setup
+Deleting a session kills both PTYs, removes the JSON entry, and — for repo sessions — removes the worktree and optionally the branch. Global sessions only drop the record; your code directory is untouched.
 
-### Requirements
-
-- macOS
-- Node 20+ and npm (development only; not needed for a packaged build)
-- Agent CLIs on `PATH` for whichever agents you use:
-  - `claude` — Anthropic Claude Code
-  - `cursor-agent` — Cursor Agent
-  - `gemini` — Google Gemini CLI
-  - `codex` — OpenAI Codex CLI
-- `nvim` on `PATH` for the Flight Deck embedded editor (other panels work without it)
-- A folder of git repos (default `~/code`, configurable in Settings)
-- Optional: `gh` for GitHub Stats and startup auto-setup; **fish** for the built-in shell (auto-installed via Homebrew when missing on macOS/Linux)
-
-### Develop
-
-```sh
-npm install      # rebuilds node-pty for Electron
-npm run dev      # Electron with HMR
-```
-
-If you switch Node versions and node-pty stops loading: `npm run rebuild`.
-
-### Type-check and build
-
-```sh
-npm run typecheck   # tsc on both node + web projects
-npm run build       # bundles main/preload/renderer into out/
-npm run dist        # full mac dmg in release/
-```
-
-### Where state lives
-
-| File / path | Purpose |
-| --- | --- |
-| `~/Library/Application Support/ai-worktrees/` | Typical userData when running `npm run dev` |
-| `~/Library/Application Support/AI Worktrees/` | Typical userData for the packaged `.app` |
-| `sessions.json` | Sessions (worktree path, agent, wizard brief, global flag, labelIds, notes, …) |
-| `settings.json` | Code dir, theme, wizard config, tasks sections, session prompts, session labels, nvim config |
-| `diary.json` | Tasks kanban items |
-| `<codeDir>/<repo>-<session>` | Worktree directory (session name slashes → dashes) |
-
-On first launch, `src/main/migrate.ts` copies `sessions.json`, `settings.json`, and `diary.json` from legacy folders (`Claude Worktrees/`, `claude-worktrees-ui/`) if the new userData directory is empty.
-
-**Wizard defaults:** `DEFAULT_WIZARD_CONFIG` in `src/shared/wizard.ts` applies only when settings have no valid `wizard` key. Existing `settings.json` keeps the user’s wizard until they reset in Settings.
+Nothing in this flow scans the OS for other agent processes. The sidebar lists only sessions in `sessions.json`.
 
 ---
 
-## 3. Code structure
+## 2. Process model
+
+Electron splits the app into three layers:
 
 ```
-src/
-├── main/
-│   ├── index.ts                Window, webPreferences, graceful PTY shutdown
-│   ├── ipc.ts                  All ipcMain handlers
-│   ├── migrate.ts              Legacy userData migration
-│   ├── sessions.ts             Session CRUD + NAME_PATTERN validation
-│   ├── git.ts                  worktree + status/diff/stage (execFile only)
-│   ├── repos.ts                Scans codeDir for git repos
-│   ├── pty-manager.ts          Agent PTY per session + activity tracking
-│   ├── shell-pty-manager.ts    Built-in shell PTY (fish preferred via resolve-shell-path)
-│   ├── nvim-pty-manager.ts     Neovim PTY per session (Flight Deck editor)
-│   ├── nvim-config.ts          Writes managed init.lua + plugin dir under userData
-│   ├── resolve-shell-path.ts   find fish / fall back to login shell
-│   ├── fish-setup.ts           Optional fish install at startup (brew)
-│   ├── agents.ts               Per-agent launch command builder
-│   ├── agent-detection.ts      `command -v` probes in login shell (cached)
-│   ├── agent-data.ts           Instructions I/O + billing/spend per agent
-│   ├── usage.ts                Claude spend via pinned ccusage (npx/bun)
-│   ├── gh-cli.ts               Optional git/gh install + gh auth flow
-│   ├── github-monitor.ts       GitHub Stats via `gh api graphql`
-│   ├── external-sessions.ts    Discover running agent CLIs outside the app
-│   ├── settings.ts             settings.json + import/export
-│   ├── diary.ts                diary.json (tasks)
-│   ├── vscode.ts               `code --reuse-window`
-│   └── store.ts                Serial JSON read/write
-│
-├── preload/
-│   └── index.ts                contextBridge → window.api (typed CWApi)
-│
-├── renderer/
-│   ├── App.tsx                 Views, dock, modals, startup setup bar
-│   ├── components/
-│   │   ├── FlightDeck.tsx            Session grid + filters + GitHub Stats entry
-│   │   ├── FlightDeckSessionModal.tsx  Fullscreen editor / agent / shell workspace
-│   │   ├── NvimEditorPanel.tsx       xterm host for nvim PTY
-│   │   ├── ViewSwitcher.tsx          Flight Deck ↔ Workspace toggle
-│   │   ├── Sidebar.tsx
-│   │   ├── Terminal.tsx              Agent REPL
-│   │   ├── BuiltInTerminalPanel.tsx  Shell REPL
-│   │   ├── BottomDock.tsx            Shell + Git + prompts (Workspace)
-│   │   ├── GitPanel.tsx              Status / diff / file actions
-│   │   ├── SessionNotesButton.tsx    Per-session notes (Flight Deck workspace)
-│   │   ├── GitHubStatsModal.tsx      Cross-repo gh GraphQL stats
-│   │   ├── NewSessionModal.tsx       Create + wizard step
-│   │   ├── SettingsModal.tsx         Tabs: general, editor, labels, prompts, wizard, tasks
-│   │   ├── NvimConfigSettingsEditor.tsx  Editor tab + shortcut reference
-│   │   ├── AgentDataModal.tsx
-│   │   ├── TasksPanel.tsx
-│   │   └── …
-│   └── styles/global.css
-│
-└── shared/
-    ├── agents.ts               AGENTS registry + AgentId
-    ├── app-shortcuts.ts        Shift+L/K/N/J reference + matchers
-    ├── types.ts                Session, Settings, git types, …
-    ├── ipc-channels.ts         IPC name constants
-    ├── nvim-config.ts          Default Neovim config + migrations
-    ├── session-labels.ts       Labels, activity kinds, mute
-    ├── session-notes.ts        Per-session notes helpers
-    ├── github-monitor.ts       GitHub Stats types + bucket helpers
-    ├── wizard.ts               Wizard config + DEFAULT_WIZARD_CONFIG
-    ├── tasks.ts                Tasks kanban defaults
-    └── session-prompts.ts      Quick prompt defaults
+┌─────────────────────────────────────────────────────────┐
+│  Renderer (React + xterm.js)                            │
+│  No Node. No filesystem. No child_process.              │
+└───────────────────────────┬─────────────────────────────┘
+                            │ window.api.*
+┌───────────────────────────▼─────────────────────────────┐
+│  Preload (contextBridge)                                │
+│  Typed façade over ipcRenderer.invoke / on              │
+└───────────────────────────┬─────────────────────────────┘
+                            │ IPC channels (shared/ipc-channels.ts)
+┌───────────────────────────▼─────────────────────────────┐
+│  Main (Node + node-pty)                                 │
+│  git, sessions, settings, diary, agent spawn, dialogs │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Path alias `@shared/*` is set in `electron.vite.config.ts` and the tsconfig projects.
+**Why it matters:** every new capability should land in main, get a channel name in `shared/ipc-channels.ts`, expose one method on `preload/index.ts`, and type it on `CWApi` / `renderer/global.d.ts`. The renderer never imports `electron` or `fs`.
+
+Window creation (`main/index.ts`) uses `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: false` (node-pty requirement). On quit, main sends SIGINT to agent and shell PTYs before exit.
 
 ---
 
-## 4. How a session flows end-to-end
+## 3. UI map
 
-### Worktree session (default)
+The app has a single workspace layout (no view switcher):
+
+| Piece | File(s) | Role |
+| --- | --- | --- |
+| Shell | `renderer/App.tsx` | Session state, shortcuts, dock visibility, modals |
+| Sidebar | `components/Sidebar.tsx` | Session list, labels, mute, context menu |
+| Agent terminal | `components/Terminal.tsx` | xterm + agent PTY |
+| Shell panel | `components/BuiltInTerminalPanel.tsx` | xterm + shell PTY |
+| Git panel | `components/GitPanel.tsx` | Status / diff / file actions |
+| Bottom dock | `components/BottomDock.tsx` | Resizable split between dock panels |
+| New session | `components/NewSessionModal.tsx` | Type → Agent → Details wizard |
+| To Do | `components/TodoModal.tsx` | Global tasks (`diary.json`) |
+| Settings | `components/SettingsModal.tsx` | General, Labels, Shortcuts tabs |
+| Agent Data | `components/AgentDataModal.tsx` | Instructions + spend per agent |
+
+Per-session **panel prefs** (shell/git open or closed) live in renderer `localStorage` (`session-panel-prefs`), not in `settings.json`. Cycling sessions restores each session’s own dock state.
+
+Keyboard shortcuts are defined in `shared/app-shortcuts.ts` and handled in `App.tsx` (capture phase; skipped when modals are open or a form field is focused).
+
+---
+
+## 4. Session lifecycle (detailed)
+
+### Create (repo)
 
 ```
-User clicks + New Session
-    │
-    ▼
-NewSessionModal → detectAgents()          main: agent-detection.ts (cached)
-    │
-    ▼
-User picks { agentId, repoPath, name, useWizardMode? }
-    │
-    ├─ wizard on → getSettings().wizard → WizardSessionStep
-    │       → buildWizardMarkdown() → wizardBriefMarkdown on create
-    │
-    ▼
-createSession({ repoPath, name, agentId, wizardBriefMarkdown? })
-    │
-    ▼
-sessions.ts: NAME_PATTERN, resolveDefaultBranch, optional git fetch,
-             git worktree add -b <name> <baseRef>
-    │
-    ▼
-Sidebar row; user selects session
-    │
-    ▼
-Terminal.tsx → pty.start(sessionId)
-    │
-    ▼
-ipc: getSessionById → startPty({ agentId, cwd: worktreePath, previouslyStarted })
-    │
-    ▼
-agents.buildLaunchCommand() → e.g. "claude --continue"
-pty.spawn($SHELL, ['-lic', shellCommand], { cwd })
-    │
-    ▼
-IPC.PtyData / PtyWrite / PtyActivity ↔ xterm.js
+NewSessionModal
+  → detectAgents()                    agent-detection.ts
+  → createSession({ repoPath, name, agentId, labelIds? })
+       sessions.ts
+         NAME_PATTERN check
+         resolveDefaultBranch, optional fetchBranch
+         addWorktree → git.ts
+         append to sessions.json
 ```
 
-### Global session
+### Create (global)
 
-Same as above, but `createSession({ global: true, name, agentId, … })` sets `worktreePath` and `repoPath` to `settings.codeDir`, skips all git mutations, and uses `repoName: 'Global'`.
+```
+createSession({ global: true, name, agentId, labelIds? })
+  → worktreePath = settings.codeDir
+  → no git calls
+  → repoName = 'Global'
+```
+
+### Open / switch
+
+```
+Sidebar onSelect(id)
+  → setActiveId; add id to openedIds
+  → TerminalView mounts or becomes visible
+  → pty.start → startPty in pty-manager.ts
+       if PTY exists: reattach + backlog replay
+       else: agents.buildLaunchCommand → pty.spawn($SHELL, ['-lic', cmd], { cwd })
+```
+
+### Built-in shell (on demand)
+
+```
+BuiltInTerminalPanel mount
+  → shellPty.start(sessionId)
+       shell-pty-manager.ts: same reattach pattern
+       spawn resolved shell (fish preferred via resolve-shell-path.ts)
+```
+
+Concurrent `shellPty.start` calls for one session are deduplicated with an in-flight lock so cycling panels does not spawn two fish processes.
+
+### Status decoration
+
+```
+listSessions IPC
+  → listSessions() from store
+  → decorate(): running if agent PTY alive; orphaned if worktree path missing
+  → attach activity from pty-manager when running
+```
 
 ### Delete
 
 ```
-DeleteSession → killPty + killShellPty + killNvimPty → (if not global) git worktree remove,
-                optional branch -D → remove from sessions.json
+DeleteSession
+  → killPty + killShellPty
+  → deleteSession: worktree remove + optional branch delete (repo only)
 ```
-
-### Flight Deck session workspace
-
-```
-User clicks session card on Flight Deck grid
-    │
-    ▼
-FlightDeckSessionModal (fullscreen, fixed layout)
-    │
-    ├─ NvimEditorPanel → nvimPty.start(sessionId, theme)
-    │       main: nvim-pty-manager.ts spawns nvim with userData init config
-    │
-    ├─ TerminalView (embedded) → pty.start(sessionId)  [agent REPL]
-    │
-    └─ BuiltInTerminalPanel (embedded) → shellPty.start(sessionId)
-            main: shell-pty-manager.ts uses resolveShellPath() → fish when available
-```
-
-**Shift+K** cycles focus editor → agent → shell. **Shift+N** toggles notes. **Shift+L** (app-wide) opens the next non-muted session. **Escape** closes the workspace.
-
-Startup (renderer `App.tsx`): `ensureGitHubApi()` then `ensureFishShell()` — progress on the status bar; fish cache cleared in main after install so new shell PTYs pick up fish.
 
 ---
 
-## 5. Per-agent extension points
+## 5. Code structure
 
-Each agent appears in the **shared registry** and in **one switch (or helper) per behavior** in main. Adding an agent is mechanical.
+```
+src/
+├── main/
+│   ├── index.ts              Window, theme, graceful PTY shutdown
+│   ├── ipc.ts                All ipcMain handlers
+│   ├── migrate.ts            Legacy userData copy
+│   ├── sessions.ts           CRUD + NAME_PATTERN
+│   ├── git.ts                worktree + status/diff/stage (execFile only)
+│   ├── repos.ts              Scans settings.codeDir
+│   ├── pty-manager.ts        Agent PTY + activity + backlog
+│   ├── shell-pty-manager.ts  Shell PTY + backlog + start dedup
+│   ├── resolve-shell-path.ts fish / login shell
+│   ├── fish-setup.ts         Optional fish install (brew)
+│   ├── gh-cli.ts             Optional git/gh install + gh auth helper
+│   ├── agents.ts             Per-agent launch command builder
+│   ├── agent-detection.ts    `command -v` in login shell (cached)
+│   ├── agent-data.ts         Instructions I/O + billing/spend
+│   ├── usage.ts              Claude spend via pinned ccusage
+│   ├── settings.ts           settings.json normalize/strip legacy keys
+│   ├── diary.ts              diary.json (to-do items)
+│   ├── vscode.ts             `code --reuse-window`
+│   └── store.ts              Serial JSON read/write
+│
+├── preload/
+│   └── index.ts              contextBridge → window.api
+│
+├── renderer/
+│   ├── App.tsx               Layout, shortcuts, panel prefs
+│   ├── modal-layout.ts       Expanded modal sizing (title bar safe area)
+│   ├── components/           Sidebar, Terminal, modals, Git, dock, …
+│   └── styles/global.css
+│
+└── shared/
+    ├── agents.ts             AGENTS registry + AgentId
+    ├── app-shortcuts.ts      Shift+* shortcuts
+    ├── types.ts              Session, Settings, TaskItem, git types
+    ├── ipc-channels.ts       Channel name constants
+    ├── session-labels.ts     Labels, mute, chips
+    ├── session-sidebar-order.ts  Shift+N ordering
+    ├── tasks.ts              To-do sections + filters
+    ├── settings-import-export.ts
+    └── theme.ts
+```
 
-### 5.1 Required: register the agent
+Path alias `@shared/*` is configured in `electron.vite.config.ts` and the tsconfig projects.
+
+---
+
+## 6. Persistence
+
+| File | Contents |
+| --- | --- |
+| `sessions.json` | `{ sessions: Session[] }` |
+| `settings.json` | `codeDir`, `theme`, `sessionLabels` (legacy keys stripped on read) |
+| `diary.json` | To-do items (sections: `todo`, `doing`, `done`) |
+
+userData path: `~/Library/Application Support/ai-worktrees/` (dev) or `~/Library/Application Support/AI Worktrees/` (packaged).
+
+---
+
+## 7. Adding an agent
+
+### 7.1 Register
 
 `src/shared/agents.ts`:
 
@@ -222,187 +210,133 @@ export const AGENTS: AgentDefinition[] = [
   {
     id: 'newAgent',
     name: 'New Agent',
-    description: 'Shown in the picker',
-    binary: 'newagent-cli',                    // probed via command -v
+    description: 'Picker subtitle',
+    binary: 'newagent-cli',
     instructions: { home: '.newagent', filename: 'AGENTS.md' },
   },
 ];
 ```
 
-That alone enables: picker card, Agent Data instructions editor (`~/…/.newagent/AGENTS.md`), session row chip, greyed-out state when binary missing.
+This enables the picker, Agent Data instructions path, and greyed-out state when `binary` is missing.
 
-### 5.2 Required: launch command
+### 7.2 Launch command
 
 `src/main/agents.ts`:
 
 ```ts
 case 'newAgent':
   return buildResumable('newagent-cli', 'resume --last', options);
-  // or: return { shellCommand: 'newagent-cli' };
 ```
 
-`buildResumable(base, resumeArgs, options)` appends resume args when `options.previouslyStarted` is true (`session.lastStartedAt !== null`, read in the PtyStart handler before `markSessionStarted`).
+Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), follow `buildClaudeCommand`.
 
-For history-aware resume (like Claude’s `~/.claude/projects/<encoded-cwd>/*.jsonl`), follow `buildClaudeCommand`.
+### 7.3 Optional: billing
 
-### 5.3 Optional: billing / spend
+`src/main/agent-data.ts` — add a `getAgentSpend` case. Return `{ kind: 'plan' | 'cost' | … }` as documented in existing agents.
 
-`src/main/agent-data.ts` — case in `getAgentSpend`:
-
-```ts
-case 'newAgent':
-  return { kind: 'plan', ...(await detectNewAgentBilling()) };
-```
-
-| `billing` | Meaning |
-| --- | --- |
-| `metered` | API key / per-token |
-| `subscription` | Flat plan |
-| `free` | Free tier / quota |
-| `unknown` | Not signed in or unclear |
-
-Return `{ kind: 'cost', cost, tokens, date, billing, note }` if you integrate a local usage tool (see Claude + `usage.ts` / ccusage).
-
-### 5.4 Optional: chip colour
+### 7.4 Optional: chip colour
 
 `src/renderer/styles/global.css` — `.session-agent-tag.agent-newAgent { … }`
 
-### 5.5 That’s it
-
-Worktree lifecycle, PTY management, Git panel, and persistence are agent-agnostic.
+Worktree lifecycle, PTY plumbing, and Git panel need no agent-specific changes.
 
 ---
 
-## 6. IPC contract
+## 8. IPC conventions
 
-Renderer → main only through `src/preload/index.ts`. Channel names live in `src/shared/ipc-channels.ts`.
+1. Add a constant to `shared/ipc-channels.ts`
+2. Register in `main/ipc.ts` (`handle` for request/response, `on` for PTY stream volume)
+3. Expose on `preload/index.ts` → `window.api`
+4. Extend `CWApi` in `renderer/global.d.ts`
 
-To add a capability:
+**Prefer `invoke` with validated args** for anything sensitive. PTY input/resize uses fire-and-forget `send`.
 
-1. Add a constant to `ipc-channels.ts`
-2. Register `ipcMain.handle` / `ipcMain.on` in `ipc.ts`
-3. Expose on the `api` object in preload
-4. Types flow via `CWApi` and `src/renderer/global.d.ts`
-
-**Prefer `invoke` + validated args** for anything security-sensitive. Fire-and-forget `send` is used for PTY input resize (high volume).
-
-Handlers that accept a **filesystem path** from the renderer today: `RevealInFinder`, `OpenInVSCode`, `OpenInTerminal`, `PickDirectory` (user dialog). Safer pattern for new features: pass `sessionId` only and resolve paths in main from `sessions.json`.
+Handlers that accept a **filesystem path** from the renderer today: `RevealInFinder`, `OpenInVSCode`, `OpenInTerminal`, `OpenInITerm`, `PickDirectory`. Safer pattern for new features: pass `sessionId` only and resolve paths in main from `sessions.json`.
 
 ---
 
-## 7. Security
+## 9. Security
 
-### 7.1 Claims you can stand behind
+### 9.1 Claims
 
-| Claim | True? |
+| Claim | Holds? |
 | --- | --- |
-| No in-repo HTTP client (`fetch`, `http`, `axios`, …) | Yes — grep `src/` |
-| No telemetry / auto-update in this repo | Yes |
-| Renderer isolated from Node (`contextIsolation`, no `nodeIntegration`) | Yes |
-| Git argv via `execFile`, not shell interpolation | Yes — `git.ts` |
-| Session names restricted before path/branch use | Yes — `NAME_PATTERN` in `sessions.ts` |
-| Built-in agent commands are literals, not user-built shell | Yes — `agents.ts` |
-| Zero network ever | **No** — subprocesses may network (see below) |
-| Only touches code dir + userData | **No** — also agent homes, optional brew/gh/fish/npm, tmp GraphQL input files |
+| No in-repo HTTP client | Yes — grep `src/` |
+| No telemetry / auto-update in source | Yes |
+| Renderer isolated from Node | Yes |
+| Git via `execFile` argv, not shell strings | Yes — `git.ts` |
+| Session names gated before path use | Yes — `NAME_PATTERN` |
+| Agent commands are literals | Yes — `agents.ts` |
+| Zero network ever | **No** — subprocesses may network |
+| Sandbox around git/agents | **No** — same as Terminal |
 
-### 7.2 Electron hardening
+### 9.2 Subprocess inventory
 
-```ts
-// src/main/index.ts
-contextIsolation: true,
-nodeIntegration: false,
-sandbox: false,  // node-pty; mitigate with minimal contextBridge only
-```
-
-The renderer never receives `ipcRenderer`. Only methods on `window.api` are callable.
-
-### 7.3 Subprocess inventory
-
-Use this when reviewing PRs:
-
-| Mechanism | Used for | User input in command string? |
+| Mechanism | Purpose | User text in shell string? |
 | --- | --- | --- |
-| `execFile('git', argv, { cwd })` | All git operations | No — paths/refs in argv |
-| `execFile('osascript', argv)` | Terminal.app `cd`, gh auth terminal | Path escaped in AppleScript string |
-| `execFile('which'/'code', …)` | VS Code CLI resolution, fish lookup | Fixed argv |
-| `execFile(shell, ['-lic', cmd])` | Agent detection, gh-cli/fish-setup brew | `cmd` built from literals in our code |
-| `execFile('winget', argv)` | Windows git/gh install | Fixed argv |
-| `execFile(npx\|bun, argv)` | ccusage for Claude spend | Pinned package version in argv |
-| `exec(osascript shell string)` | Legacy OpenInITerm IPC | Worktree path escaped |
-| `pty.spawn(shell, ['-lic', launch.shellCommand])` | Agent REPL | `shellCommand` from `agents.ts` literals |
-| `pty.spawn(resolvedShell, ['-l'])` | Built-in shell (fish preferred) | No user command string |
-| `pty.spawn(nvim, argv, …)` | Flight Deck Neovim | Fixed argv; config path from userData |
-| `runInLoginShell('gh api graphql --input …')` | GitHub Stats | GraphQL query from our code; temp path in `tmpdir` |
-| `shell.openPath(path)` | Finder reveal | Path from IPC (UI: session path) |
+| `execFile('git', argv, { cwd })` | All git ops | No |
+| `execFile('code', …)` | VS Code | Fixed argv |
+| `execFile('osascript', …)` | Terminal.app helper | Path escaped in script |
+| `execFile(shell, ['-lic', cmd])` | Agent detection, brew/gh/fish setup | `cmd` from our literals |
+| `execFile('winget', argv)` | Windows git/gh (if used) | Fixed argv |
+| `execFile(npx\|bun, argv)` | ccusage for Claude spend | Pinned package in argv |
+| `exec(osascript …)` | Legacy OpenInITerm | Path escaped |
+| `pty.spawn(shell, ['-lic', launch.shellCommand])` | Agent REPL | From `agents.ts` only |
+| `pty.spawn(resolvedShell, ['-l'])` | Built-in shell | No user command |
+| `shell.openPath(path)` | Finder | Path from session record via IPC |
 
-### 7.4 Shell injection rules for contributors
+### 9.3 Rules for contributors
 
-1. **Never** pass session names, repo names, wizard answers, or task text into a shell command string.
-2. **Git:** always `execFile('git', [...], { cwd: worktreePath })`.
-3. **New agents:** `binary` and launch args must be string literals in source. If you need dynamic flags, use `execFile` on the CLI binary with an argv array, not `-lic` string concatenation.
-4. **Agent detection:** only registry `binary` strings inside `command -v …`.
-5. **Avoid new `exec(`** — prefer `execFile` with argv. If you must use a shell, document it in README Security and this section.
-6. **Auth files:** parse JSON defensively; never interpolate file contents into shell commands.
-7. **API keys:** read `process.env` in main only; never send keys to the renderer.
+1. Never put session names, task text, or label names into a shell command string.
+2. Git: always `execFile('git', [...], { cwd: worktreePath })`.
+3. New agents: `binary` and launch args are literals; use argv arrays if you need dynamic flags.
+4. Agent detection: only registry `binary` names inside `command -v`.
+5. Avoid new `exec(` — prefer `execFile`. Document exceptions here and in README.
+6. Parse auth JSON defensively; never echo secrets into shell commands.
+7. Do not send API keys to the renderer.
 
-### 7.5 Network (not in TypeScript, but real)
+### 9.4 Network (via subprocesses)
 
-Subprocesses may use the network:
+- `git fetch` / remotes  
+- Agent CLIs → vendor APIs  
+- `gh` install / `gh auth login`  
+- Homebrew / winget when setup runs  
+- `npx ccusage@<pin>` → npm when uncached  
 
-- `git fetch` / remotes
-- Agent CLIs → vendor APIs
-- `gh auth status`, `gh api graphql` (GitHub Stats), `brew install` (git/gh/fish), `winget install`
-- `npx --yes ccusage@<pin>` → npm registry when uncached
+Document new subprocesses that download or phone home in PRs.
 
-Document new subprocesses that can download or phone home. **Neovim** itself is local; only add network-bearing plugins to the managed config deliberately.
-
-### 7.6 Filesystem scope
+### 9.5 Filesystem scope
 
 | Area | Access |
 | --- | --- |
-| `settings.codeDir` | List repos, global session cwd, worktree parent paths |
-| userData JSON | Read/write sessions, settings, tasks |
-| userData nvim config | Generated `init.lua`, plugin tree (`nvim-config.ts`) |
-| `~/agent-home/…` | Instructions read/write per `AgentDefinition` |
-| Agent auth paths | Read-only for billing chips (`agent-data.ts`) |
-| Worktree paths | Git panel + PTY cwd; paths originate from git status inside that worktree |
-| `os.tmpdir()` | Short-lived JSON files for `gh api graphql --input` |
+| `settings.codeDir` | Repo scan, global session cwd, worktree parent |
+| userData JSON | sessions, settings, diary |
+| Agent homes | Instructions read/write per `AgentDefinition` |
+| Agent auth paths | Read-only for billing UI |
+| Worktree paths | Git panel + PTY cwd |
 
-### 7.7 Adding an agent — checklist
+### 9.6 Agent checklist
 
-- [ ] `binary` and `shellCommand` parts are literals
-- [ ] No new `exec(` without security review
-- [ ] Auth/usage file parsing is try/catch; no shell echo of secrets
-- [ ] Billing detection does not exfiltrate file contents to renderer beyond display strings you control
-- [ ] If spawn needs network install, note it in PR / README
-- [ ] Optional: chip CSS class
+- [ ] `binary` and launch parts are literals  
+- [ ] No new `exec(` without review  
+- [ ] Auth parsing is try/catch; no secret leakage to renderer  
+- [ ] Optional chip CSS  
 
-### 7.8 Validation greps
+### 9.7 Validation greps
 
 ```sh
-# No first-party HTTP client
 grep -rE 'fetch\(|http\.|https\.|axios|undici|net\.connect' src
-
-# Subprocess surface (review every match)
 grep -rE 'execFile|exec\(|pty\.spawn' src
-
-# Per-agent switches
 grep -n "case '" src/main/agents.ts src/main/agent-data.ts
-
-# Registry
 grep -n 'AGENTS' src/shared/agents.ts
-
-# Session name gate
 grep -n 'NAME_PATTERN' src/main/sessions.ts
-
-# WebPreferences
 grep -n 'contextIsolation\|nodeIntegration\|sandbox' src/main/index.ts
 ```
 
 ---
 
-## 8. Related docs
+## 10. Related docs
 
-- [README.md](./README.md) — user-facing features, install, and security summary for readers validating trust
-- [src/shared/agents.ts](./src/shared/agents.ts) — current agent list
-- [src/shared/wizard.ts](./src/shared/wizard.ts) — default session wizard
+- [README.md](./README.md) — user guide and trust summary  
+- [src/shared/agents.ts](./src/shared/agents.ts) — current agent list  
+- [src/shared/app-shortcuts.ts](./src/shared/app-shortcuts.ts) — keyboard shortcuts  

@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { SessionLabel, Settings, SessionPromptPreset, TasksConfig, ThemePreference } from '@shared/types';
-import { resolveSessionPrompts } from '@shared/session-prompts';
+import { useCallback, useEffect, useId, useState } from 'react';
+import type { SessionLabel, Settings, ThemePreference } from '@shared/types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
-import { DEFAULT_TASKS_CONFIG, normalizeTasksConfig } from '@shared/tasks';
 import { SessionLabelsEditor } from './SessionLabelsEditor';
-import type { WizardConfig } from '@shared/wizard';
-import { parseWizardConfigJson, wizardConfigToJson } from '@shared/wizard';
-import { SessionPromptsSettingsEditor } from './SessionPromptsSettingsEditor';
-import { TasksSettingsEditor } from './TasksSettingsEditor';
-import { WizardSettingsEditor } from './WizardSettingsEditor';
-import { NvimConfigSettingsEditor } from './NvimConfigSettingsEditor';
-import { DEFAULT_NVIM_CONFIG, normalizeNvimConfig } from '@shared/nvim-config';
+import { KeyboardShortcutsReference } from './KeyboardShortcutsReference';
+import {
+  clampModalSize,
+  maxExpandedModalSize,
+  shouldUseExpandedModalLayout,
+  type ModalSize,
+} from '../modal-layout';
 
 const SETTINGS_SIZE_KEY = 'settings-modal-size';
 
@@ -18,53 +16,29 @@ const DEFAULT_WIDTH = 820;
 const DEFAULT_HEIGHT = 640;
 const MIN_WIDTH = 520;
 const MIN_HEIGHT = 360;
-const VIEWPORT_MARGIN = 24;
-
-type SettingsTab = 'general' | 'editor' | 'labels' | 'prompts' | 'wizard' | 'tasks';
-
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'labels', label: 'Labels' },
-  { id: 'prompts', label: 'Quick Prompts' },
-  { id: 'wizard', label: 'Wizard' },
-  { id: 'tasks', label: 'Tasks' },
-];
-
-type ModalSize = { width: number; height: number };
-
-function maxModalSize(): ModalSize {
-  if (typeof window === 'undefined') {
-    return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
-  }
-  return {
-    width: window.innerWidth - VIEWPORT_MARGIN,
-    height: window.innerHeight - VIEWPORT_MARGIN,
-  };
-}
-
-function clampModalSize(width: number, height: number): ModalSize {
-  const max = maxModalSize();
-  return {
-    width: Math.min(max.width, Math.max(MIN_WIDTH, width)),
-    height: Math.min(max.height, Math.max(MIN_HEIGHT, height)),
-  };
-}
 
 function loadModalSize(): ModalSize {
   try {
     const raw = localStorage.getItem(SETTINGS_SIZE_KEY);
-    if (!raw) return clampModalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    if (!raw) return clampModalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT);
     const parsed = JSON.parse(raw) as { width?: number; height?: number };
-    return clampModalSize(Number(parsed.width), Number(parsed.height));
+    return clampModalSize(Number(parsed.width), Number(parsed.height), MIN_WIDTH, MIN_HEIGHT);
   } catch {
-    return clampModalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    return clampModalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT);
   }
 }
 
 function persistModalSize(size: ModalSize) {
   localStorage.setItem(SETTINGS_SIZE_KEY, JSON.stringify(size));
 }
+
+type SettingsTab = 'general' | 'labels' | 'shortcuts';
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'labels', label: 'Labels' },
+  { id: 'shortcuts', label: 'Shortcuts' },
+];
 
 type Props = {
   current: Settings;
@@ -78,11 +52,7 @@ function applySettingsToForm(settings: Settings) {
   return {
     codeDir: settings.codeDir,
     theme: settings.theme,
-    wizard: settings.wizard,
-    tasks: normalizeTasksConfig(settings.tasks ?? DEFAULT_TASKS_CONFIG),
-    sessionPrompts: resolveSessionPrompts(settings.sessionPrompts),
     sessionLabels: normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
-    nvimConfig: normalizeNvimConfig(settings.nvimConfig ?? DEFAULT_NVIM_CONFIG),
   };
 }
 
@@ -95,18 +65,8 @@ export function SettingsModal({
 }: Props) {
   const [codeDir, setCodeDir] = useState(current.codeDir);
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
-  const [wizard, setWizard] = useState<WizardConfig>(current.wizard);
-  const [tasks, setTasks] = useState<TasksConfig>(
-    () => normalizeTasksConfig(current.tasks ?? DEFAULT_TASKS_CONFIG),
-  );
-  const [sessionPrompts, setSessionPrompts] = useState<SessionPromptPreset[]>(() =>
-    resolveSessionPrompts(current.sessionPrompts),
-  );
   const [sessionLabels, setSessionLabels] = useState<SessionLabel[]>(() =>
     normalizeSessionLabels(current.sessionLabels ?? DEFAULT_SESSION_LABELS),
-  );
-  const [nvimConfig, setNvimConfig] = useState(() =>
-    normalizeNvimConfig(current.nvimConfig ?? DEFAULT_NVIM_CONFIG),
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'general');
   const [busy, setBusy] = useState(false);
@@ -117,24 +77,27 @@ export function SettingsModal({
   const [size, setSize] = useState<ModalSize>(() => loadModalSize());
   const [sizeBeforeExpand, setSizeBeforeExpand] = useState<ModalSize | null>(null);
   const baseId = useId();
-  const initialSectionIdsRef = useRef(
-    new Set((current.tasks ?? DEFAULT_TASKS_CONFIG).sections.map((s) => s.id)),
-  );
 
   useEffect(() => {
     setCodeDir(current.codeDir);
     setTheme(current.theme);
-    setWizard(current.wizard);
-    setTasks(normalizeTasksConfig(current.tasks ?? DEFAULT_TASKS_CONFIG));
-  }, [current.codeDir, current.theme, current.wizard, current.tasks]);
+  }, [current.codeDir, current.theme]);
 
   useEffect(() => {
     const onResize = () => {
-      setSize((prev) => clampModalSize(prev.width, prev.height));
+      setSize((prev) =>
+        expanded
+          ? maxExpandedModalSize()
+          : clampModalSize(prev.width, prev.height, MIN_WIDTH, MIN_HEIGHT),
+      );
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [expanded]);
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab]);
 
   const pick = async () => {
     const next = await window.api.pickDirectory(codeDir);
@@ -145,12 +108,7 @@ export function SettingsModal({
     const form = applySettingsToForm(next);
     setCodeDir(form.codeDir);
     setTheme(form.theme);
-    setWizard(form.wizard);
-    setTasks(form.tasks);
-    setSessionPrompts(form.sessionPrompts);
     setSessionLabels(form.sessionLabels);
-    setNvimConfig(form.nvimConfig);
-    initialSectionIdsRef.current = new Set(form.tasks.sections.map((s) => s.id));
     onSettingsChange?.(next);
   };
 
@@ -199,13 +157,13 @@ export function SettingsModal({
   const toggleExpanded = () => {
     if (expanded) {
       const restore = sizeBeforeExpand ?? loadModalSize();
-      const next = clampModalSize(restore.width, restore.height);
+      const next = clampModalSize(restore.width, restore.height, MIN_WIDTH, MIN_HEIGHT);
       setSize(next);
       setExpanded(false);
       setSizeBeforeExpand(null);
     } else {
       setSizeBeforeExpand(size);
-      setSize(maxModalSize());
+      setSize(maxExpandedModalSize());
       setExpanded(true);
     }
   };
@@ -225,7 +183,7 @@ export function SettingsModal({
       const onMove = (ev: MouseEvent) => {
         const dw = ev.clientX - startX;
         const dh = ev.clientY - startY;
-        setSize(clampModalSize(start.width + dw, start.height + dh));
+        setSize(clampModalSize(start.width + dw, start.height + dh, MIN_WIDTH, MIN_HEIGHT));
       };
 
       const onUp = (ev: MouseEvent) => {
@@ -234,7 +192,7 @@ export function SettingsModal({
         window.removeEventListener('mouseup', onUp);
         const dw = ev.clientX - startX;
         const dh = ev.clientY - startY;
-        const next = clampModalSize(start.width + dw, start.height + dh);
+        const next = clampModalSize(start.width + dw, start.height + dh, MIN_WIDTH, MIN_HEIGHT);
         setSize(next);
         persistModalSize(next);
       };
@@ -246,34 +204,13 @@ export function SettingsModal({
   );
 
   const save = async () => {
-    const wizardParsed = parseWizardConfigJson(wizardConfigToJson(wizard));
-    if (!wizardParsed.ok) {
-      setSaveError(wizardParsed.error);
-      setTab('wizard');
-      return;
-    }
-
     setBusy(true);
     setSaveError(null);
     try {
-      const finalSectionIds = new Set(tasks.sections.map((s) => s.id));
-      const removedSectionIds = [...initialSectionIdsRef.current].filter((id) => !finalSectionIds.has(id));
-      if (removedSectionIds.length > 0) {
-        const items = await window.api.tasks.list();
-        for (const item of items) {
-          if (removedSectionIds.includes(item.sectionId)) {
-            await window.api.tasks.remove(item.id);
-          }
-        }
-      }
       const next = await window.api.updateSettings({
         codeDir,
         theme,
-        wizard: wizardParsed.value,
-        tasks,
-        sessionPrompts: resolveSessionPrompts(sessionPrompts),
         sessionLabels: normalizeSessionLabels(sessionLabels),
-        nvimConfig: normalizeNvimConfig(nvimConfig),
       });
       persistModalSize(size);
       onSaved(next);
@@ -285,12 +222,16 @@ export function SettingsModal({
   };
 
   const panelId = (id: SettingsTab) => `${baseId}-panel-${id}`;
+  const fillWindow = shouldUseExpandedModalLayout(size, expanded);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className={`modal-backdrop${fillWindow ? ' modal-backdrop-expanded' : ''}`}
+      onClick={onClose}
+    >
       <div
-        className={`modal settings-modal${expanded ? ' settings-modal-expanded' : ''}`}
-        style={{ width: size.width, height: size.height }}
+        className={`modal settings-modal${fillWindow ? ' settings-modal-expanded resizable-modal-expanded' : ''}`}
+        style={fillWindow ? undefined : { width: size.width, height: size.height }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header settings-modal-header">
@@ -367,9 +308,8 @@ export function SettingsModal({
                 <h3 className="settings-section-title">Backup</h3>
                 <div className="settings-card">
                   <p className="settings-card-text">
-                    Export all settings as JSON, or import a file from another install. Includes labels,
-                    quick prompts, editor config, wizard, and tasks. Sessions and
-                    task cards are not included.
+                    Export all settings as JSON, or import a file from another install. Includes labels.
+                    Sessions and to-do items are not included.
                   </p>
                   <div className="settings-transfer-actions">
                     <button
@@ -405,16 +345,6 @@ export function SettingsModal({
               </div>
             </div>
           )}
-          {tab === 'editor' && (
-            <div
-              role="tabpanel"
-              id={panelId('editor')}
-              aria-labelledby={`${baseId}-tab-editor`}
-              className="settings-modal-panel"
-            >
-              <NvimConfigSettingsEditor value={nvimConfig} onChange={setNvimConfig} />
-            </div>
-          )}
           {tab === 'labels' && (
             <div
               role="tabpanel"
@@ -425,34 +355,14 @@ export function SettingsModal({
               <SessionLabelsEditor labels={sessionLabels} onChange={setSessionLabels} />
             </div>
           )}
-          {tab === 'prompts' && (
+          {tab === 'shortcuts' && (
             <div
               role="tabpanel"
-              id={panelId('prompts')}
-              aria-labelledby={`${baseId}-tab-prompts`}
+              id={panelId('shortcuts')}
+              aria-labelledby={`${baseId}-tab-shortcuts`}
               className="settings-modal-panel"
             >
-              <SessionPromptsSettingsEditor value={sessionPrompts} onChange={setSessionPrompts} />
-            </div>
-          )}
-          {tab === 'wizard' && (
-            <div
-              role="tabpanel"
-              id={panelId('wizard')}
-              aria-labelledby={`${baseId}-tab-wizard`}
-              className="settings-modal-panel settings-modal-panel-wizard"
-            >
-              <WizardSettingsEditor value={wizard} onChange={setWizard} />
-            </div>
-          )}
-          {tab === 'tasks' && (
-            <div
-              role="tabpanel"
-              id={panelId('tasks')}
-              aria-labelledby={`${baseId}-tab-tasks`}
-              className="settings-modal-panel"
-            >
-              <TasksSettingsEditor value={tasks} onChange={setTasks} />
+              <KeyboardShortcutsReference />
             </div>
           )}
         </div>

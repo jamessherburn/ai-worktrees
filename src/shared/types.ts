@@ -1,5 +1,4 @@
 import type { AgentId } from './agents';
-import type { WizardConfig } from './wizard';
 
 export type SessionLabel = {
   id: string;
@@ -28,20 +27,16 @@ export type Session = {
   lastStartedAt: string | null;
   /** Custom label ids applied to this session. */
   labelIds?: string[];
-  /** When true, the session is visually de-emphasised on the Flight Deck. */
+  /** When true, the session is visually de-emphasised in the sidebar. */
   muted?: boolean;
-  /** Free-form notes for this session (Flight Deck). */
+  /** Free-form notes stored on the session (legacy; no in-app editor). */
   notes?: string;
   /** @deprecated Migrated to notes on read; no longer written. */
   quickNotes?: SessionQuickNote[];
   /** @deprecated Migrated to labelIds on read; no longer written. */
   waitingOnReview?: boolean;
-  /** When set, the session header offers pasting this briefing into the agent terminal. */
-  wizardBriefMarkdown?: string;
   /** Runs the agent at the code directory from settings; no git worktree is created. */
   global?: boolean;
-  /** Agent process running outside this app; not persisted in sessions.json. */
-  external?: boolean;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';
@@ -55,43 +50,11 @@ export type SessionWithStatus = Session & {
 
 export type ThemePreference = 'system' | 'dark' | 'light' | 'monokai';
 
-export type TaskSectionConfig = {
-  id: string;
-  name: string;
-  /** When true, the column is hidden on the board; cards remain stored until the section is shown again. */
-  hidden?: boolean;
-};
-
-export type TasksConfig = {
-  sections: TaskSectionConfig[];
-  /** Board section whose completed cards appear in What Did I Do (default: Done). */
-  whatDidIDoSectionId: string;
-};
-
-/** Leaf prompt nested under a parent; cannot have further children. */
-export type SessionPromptChild = {
-  title: string;
-  text: string;
-};
-
-export type SessionPromptPreset = {
-  title: string;
-  text: string;
-  /** Optional child prompts (max one level; children cannot nest). */
-  children?: SessionPromptChild[];
-};
-
 export type Settings = {
   codeDir: string;
   theme: ThemePreference;
-  wizard: WizardConfig;
-  tasks?: TasksConfig;
-  /** Pre-built prompts shown in each session row (pasted into the terminal with Enter). */
-  sessionPrompts?: SessionPromptPreset[];
-  /** User-defined labels for categorizing sessions. */
+  /** User-defined labels for categorizing sessions and to-do items. */
   sessionLabels?: SessionLabel[];
-  /** Neovim init.lua used by the Flight Deck session editor (not your system config). */
-  nvimConfig?: string;
 };
 
 export type RepoInfo = {
@@ -103,9 +66,10 @@ export type CreateSessionInput = {
   repoPath?: string;
   name: string;
   agentId: AgentId;
-  wizardBriefMarkdown?: string | null;
   /** When true, runs at the code directory from settings without creating a worktree. */
   global?: boolean;
+  /** Optional labels to apply when the session is created. */
+  labelIds?: string[];
 };
 
 export type DeleteSessionInput = {
@@ -151,7 +115,9 @@ export type TaskItem = {
   text: string;
   createdAt: string;
   sectionId: string;
-  /** Set when the card enters the configured "What Did I Do" section (typically Done). */
+  /** Label ids from Settings → Labels. */
+  labelIds?: string[];
+  /** Set when the item is moved to Done. */
   doneAt: string | null;
 };
 
