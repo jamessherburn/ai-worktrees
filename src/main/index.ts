@@ -1,7 +1,8 @@
 import { BrowserWindow, app, nativeTheme } from 'electron';
 import { join } from 'node:path';
-import { nativeThemeSource, windowBackgroundColor } from '@shared/theme';
+import { windowBackgroundColor } from '@shared/theme';
 import type { ThemePreference } from '@shared/types';
+import { applyAppTheme } from './app-theme.js';
 import { registerIpc } from './ipc.js';
 import { migrateLegacyUserData } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
@@ -17,7 +18,7 @@ function createMainWindow(theme: ThemePreference): BrowserWindow {
     minWidth: 880,
     minHeight: 560,
     title: 'AI Worktrees',
-    backgroundColor: windowBackgroundColor(theme),
+    backgroundColor: windowBackgroundColor(theme, !nativeTheme.shouldUseDarkColors),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 18, y: 16 },
     webPreferences: {
@@ -42,9 +43,17 @@ function createMainWindow(theme: ThemePreference): BrowserWindow {
 app.whenReady().then(async () => {
   await migrateLegacyUserData();
   const settings = await getSettings();
-  nativeTheme.themeSource = nativeThemeSource(settings.theme);
+  applyAppTheme(settings.theme);
   registerIpc();
   createMainWindow(settings.theme);
+
+  nativeTheme.on('updated', () => {
+    void getSettings().then((s) => {
+      if (s.theme === 'system') {
+        applyAppTheme(s.theme, { reloadWindows: true });
+      }
+    });
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

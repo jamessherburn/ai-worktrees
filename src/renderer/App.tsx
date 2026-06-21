@@ -14,7 +14,7 @@ import { TodoModal } from './components/TodoModal';
 import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
 import { BottomDock, type BottomDockPanelSpec } from './components/BottomDock';
 import { Logo } from './components/Logo';
-import { useResolvedTheme } from './theme';
+import { useResolvedTheme, type ResolvedTheme } from './theme';
 
 const GIT_PANEL_COLLAPSED_KEY = 'git-panel-collapsed';
 const SIDEBAR_WIDTH_KEY = 'sidebar-width';
@@ -634,7 +634,7 @@ export function App() {
 
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader session={activeSession}>
+          <PaneHeader session={activeSession} theme={resolvedTheme}>
             <PaneToolbar
               activeSession={activeSession}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
@@ -647,7 +647,7 @@ export function App() {
             />
           </PaneHeader>
         ) : (
-          <EmptyHeader>
+          <EmptyHeader theme={resolvedTheme}>
             <PaneToolbar
               activeSession={null}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
@@ -911,9 +911,11 @@ function PaneToolbar({
 
 function PaneHeader({
   session,
+  theme,
   children,
 }: {
   session: SessionWithStatus;
+  theme: ResolvedTheme;
   children: ReactNode;
 }) {
   return (
@@ -935,7 +937,7 @@ function PaneHeader({
       </div>
       <div className="pane-header-trailing">
         {children}
-        <Logo />
+        <Logo theme={theme} />
       </div>
     </header>
   );
@@ -952,7 +954,7 @@ function GitBranchIcon() {
   );
 }
 
-function EmptyHeader({ children }: { children: ReactNode }) {
+function EmptyHeader({ theme, children }: { theme: ResolvedTheme; children: ReactNode }) {
   return (
     <header className="pane-header">
       <div className="header-info">
@@ -961,7 +963,7 @@ function EmptyHeader({ children }: { children: ReactNode }) {
       </div>
       <div className="pane-header-trailing">
         {children}
-        <Logo />
+        <Logo theme={theme} />
       </div>
     </header>
   );

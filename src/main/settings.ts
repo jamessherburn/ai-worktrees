@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Settings } from '@shared/types';
+import type { Settings, ThemePreference } from '@shared/types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
 import { JsonStore } from './store.js';
 
@@ -19,6 +19,12 @@ type StoredSettings = Settings & {
   sessionPrompts?: unknown;
 };
 
+function normalizeTheme(theme: unknown): ThemePreference {
+  if (theme === 'system' || theme === 'dark' || theme === 'light') return theme;
+  if (theme === 'monokai') return 'dark';
+  return 'system';
+}
+
 function normalizeSettings(s: StoredSettings): Settings {
   const {
     recapPrompt: _legacy,
@@ -29,6 +35,7 @@ function normalizeSettings(s: StoredSettings): Settings {
   } = s;
   return {
     ...rest,
+    theme: normalizeTheme(s.theme),
     sessionLabels: normalizeSessionLabels(s.sessionLabels),
   };
 }
