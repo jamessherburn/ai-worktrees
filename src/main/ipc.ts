@@ -239,6 +239,8 @@ export function registerIpc(): void {
       cwd: session.worktreePath,
       cols: args.cols,
       rows: args.rows,
+      global: session.global,
+      lastStartedAt: session.lastStartedAt,
     });
   });
 

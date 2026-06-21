@@ -27,11 +27,16 @@ describe('composeLaunchCommand', () => {
     }
   }
 
-  it('never uses session.lastStartedAt semantics (resume gated by canResume only)', () => {
+  it('explicit canResume overrides cwd probe', () => {
     for (const agentId of AGENT_IDS) {
-      const withoutHistory = composeLaunchCommand(agentId, false).shellCommand;
-      assert.equal(withoutHistory, AGENT_LAUNCH_SPECS[agentId].binary);
-      assert.doesNotMatch(withoutHistory, /resume|continue/);
+      const spec = AGENT_LAUNCH_SPECS[agentId];
+      assert.equal(composeLaunchCommand(agentId, false).shellCommand, spec.binary);
+      if (spec.resumeArgs) {
+        assert.equal(
+          composeLaunchCommand(agentId, true).shellCommand,
+          `${spec.binary} ${spec.resumeArgs}`,
+        );
+      }
     }
   });
 });

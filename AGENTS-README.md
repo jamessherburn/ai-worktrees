@@ -8,9 +8,9 @@ For install, daily use, and a user-facing security summary, see [README.md](./RE
 
 ## 1. The story of a session
 
-When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: the agent’s working directory is the configured code directory from settings.
+When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: the agent’s working directory is the configured code directory from settings. Multiple global sessions can exist at once; they are distinguished by unique `id` and `name` in `sessions.json`, not by separate directories.
 
-Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session, builds a **fixed** launch command for that agent (`claude --continue`, etc.), and spawns a PTY in the session directory. Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
+Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session and builds a launch command in `agents.ts` (`claude --continue`, `cursor-agent resume`, etc. when resuming). **Repo sessions** use a cwd probe: if the agent has saved state for that worktree path, resume args are appended. **Global sessions** share one cwd, so resume is gated on that session’s `lastStartedAt` instead — first open starts fresh; reopening the same session after its PTY exited may resume. The PTY spawns in the session directory. Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
 
 Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the same cwd. Agent and shell are independent processes with independent backlogs.
 
@@ -92,6 +92,7 @@ createSession({ global: true, name, agentId, labelIds? })
   → worktreePath = settings.codeDir
   → no git calls
   → repoName = 'Global'
+  → unique id per row; names must be unique among global sessions
 ```
 
 ### Open / switch
@@ -102,7 +103,11 @@ Sidebar onSelect(id)
   → TerminalView mounts or becomes visible
   → pty.start → startPty in pty-manager.ts
        if PTY exists: reattach + backlog replay
-       else: agents.buildLaunchCommand → pty.spawn($SHELL, ['-lic', cmd], { cwd })
+       else: agents.buildLaunchCommand(cwd, canResume?)
+         repo session: canResume from AGENT_RESUME_PROBES[cwd]
+         global session: canResume = (lastStartedAt != null)
+       → pty.spawn($SHELL, ['-lic', cmd], { cwd })
+       → markSessionStarted on first spawn
 ```
 
 ### Built-in shell (on demand)
@@ -228,7 +233,7 @@ case 'newAgent':
   return buildResumable('newagent-cli', 'resume --last', options);
 ```
 
-Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), follow `buildClaudeCommand`.
+Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass an explicit `canResume` in `LaunchOptions` when cwd alone is ambiguous (global sessions sharing `settings.codeDir`).
 
 ### 7.3 Optional: billing
 
