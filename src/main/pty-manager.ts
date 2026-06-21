@@ -98,6 +98,8 @@ export async function startPty(opts: {
   cwd: string;
   cols: number;
   rows: number;
+  global?: boolean;
+  lastStartedAt?: string | null;
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
   if (ptys.has(opts.sessionId)) {
     const existing = ptys.get(opts.sessionId)!;
@@ -114,6 +116,9 @@ export async function startPty(opts: {
 
   const launch = await buildLaunchCommand(opts.agentId, {
     cwd: opts.cwd,
+    ...(opts.global
+      ? { canResume: opts.lastStartedAt != null }
+      : {}),
   });
 
   const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' };

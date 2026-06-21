@@ -9,6 +9,8 @@ export type LaunchCommand = {
 
 export type LaunchOptions = {
   cwd: string;
+  /** When set, skips the cwd probe (used for global sessions sharing one directory). */
+  canResume?: boolean;
 };
 
 export type AgentLaunchSpec = {
@@ -91,6 +93,7 @@ export async function buildLaunchCommand(
   agentId: AgentId,
   options: LaunchOptions,
 ): Promise<LaunchCommand> {
-  const canResume = await AGENT_RESUME_PROBES[agentId](options.cwd);
+  const canResume =
+    options.canResume ?? (await AGENT_RESUME_PROBES[agentId](options.cwd));
   return composeLaunchCommand(agentId, canResume);
 }
