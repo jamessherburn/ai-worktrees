@@ -47,6 +47,16 @@
       "out/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/icon.icns",
+        "to": "icon.icns"
+      },
+      {
+        "from": "build/icon-light.icns",
+        "to": "icon-light.icns"
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [

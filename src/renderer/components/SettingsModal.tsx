@@ -104,6 +104,20 @@ export function SettingsModal({
     if (next) setCodeDir(next);
   };
 
+  const selectTheme = async (opt: ThemePreference) => {
+    if (opt === theme) return;
+    const previous = theme;
+    setTheme(opt);
+    setSaveError(null);
+    try {
+      const next = await window.api.updateSettings({ theme: opt });
+      onSettingsChange?.(next);
+    } catch (err) {
+      setTheme(previous);
+      setSaveError((err as Error).message);
+    }
+  };
+
   const applyImportedSettings = (next: Settings) => {
     const form = applySettingsToForm(next);
     setCodeDir(form.codeDir);
@@ -292,14 +306,14 @@ export function SettingsModal({
               <div className="field">
                 <span className="field-label">Appearance</span>
                 <div className="theme-toggle">
-                  {(['system', 'light', 'dark', 'monokai'] as ThemePreference[]).map((opt) => (
+                  {(['system', 'light', 'dark'] as ThemePreference[]).map((opt) => (
                     <button
                       key={opt}
                       className={`theme-option${theme === opt ? ' active' : ''}`}
-                      onClick={() => setTheme(opt)}
+                      onClick={() => void selectTheme(opt)}
                       type="button"
                     >
-                      {opt === 'monokai' ? 'Monokai' : opt[0].toUpperCase() + opt.slice(1)}
+                      {opt[0].toUpperCase() + opt.slice(1)}
                     </button>
                   ))}
                 </div>

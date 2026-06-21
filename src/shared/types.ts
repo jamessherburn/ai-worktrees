@@ -48,7 +48,7 @@ export type SessionWithStatus = Session & {
   activity?: ActivityState;
 };
 
-export type ThemePreference = 'system' | 'dark' | 'light' | 'monokai';
+export type ThemePreference = 'system' | 'dark' | 'light';
 
 export type Settings = {
   codeDir: string;

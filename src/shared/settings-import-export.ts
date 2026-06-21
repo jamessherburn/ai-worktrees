@@ -20,7 +20,8 @@ export type SettingsImportResult =
   | { ok: false; cancelled: true }
   | { ok: false; error: string };
 
-const THEME_OPTIONS: ThemePreference[] = ['system', 'dark', 'light', 'monokai'];
+const THEME_OPTIONS: ThemePreference[] = ['system', 'dark', 'light'];
+const LEGACY_THEME_OPTIONS = [...THEME_OPTIONS, 'monokai'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -56,15 +57,18 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
   }
 
   const theme = candidate.theme;
-  if (typeof theme !== 'string' || !THEME_OPTIONS.includes(theme as ThemePreference)) {
-    return { ok: false, error: 'theme must be system, dark, light, or monokai.' };
+  if (typeof theme !== 'string' || !LEGACY_THEME_OPTIONS.includes(theme as (typeof LEGACY_THEME_OPTIONS)[number])) {
+    return { ok: false, error: 'theme must be system, dark, or light.' };
   }
+
+  const normalizedTheme: ThemePreference =
+    theme === 'monokai' ? 'dark' : (theme as ThemePreference);
 
   return {
     ok: true,
     value: {
       codeDir: codeDir.trim(),
-      theme: theme as ThemePreference,
+      theme: normalizedTheme,
       sessionLabels: normalizeSessionLabels(
         (candidate.sessionLabels as SessionLabel[] | undefined) ?? DEFAULT_SESSION_LABELS,
       ),

@@ -1,5 +1,4 @@
-import { dialog, ipcMain, nativeTheme, shell } from 'electron';
-import { nativeThemeSource } from '@shared/theme';
+import { dialog, ipcMain, shell } from 'electron';
 import { exec, execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { AgentId } from '@shared/agents';
@@ -24,6 +23,7 @@ import type {
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
+import { applyAppTheme } from './app-theme.js';
 import { ensureFishShell } from './fish-setup.js';
 import { ensureGitHubCli } from './gh-cli.js';
 import { listRepos } from './repos.js';
@@ -144,8 +144,12 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.UpdateSettings, async (_e, patch: Partial<Settings>) => {
+    const previous = await getSettings();
     const next = await updateSettings(patch);
-    if (patch.theme) nativeTheme.themeSource = nativeThemeSource(patch.theme);
+    if (patch.theme !== undefined) {
+      const themeChanged = patch.theme !== previous.theme;
+      applyAppTheme(next.theme, { reloadWindows: themeChanged });
+    }
     return next;
   });
 
@@ -181,7 +185,7 @@ export function registerIpc(): void {
       const parsed = parseSettingsImportJson(raw);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       const next = await replaceSettings(parsed.value);
-      nativeTheme.themeSource = nativeThemeSource(next.theme);
+      applyAppTheme(next.theme, { reloadWindows: true });
       return { ok: true, settings: next };
     } catch (err) {
       return { ok: false, error: (err as Error).message };

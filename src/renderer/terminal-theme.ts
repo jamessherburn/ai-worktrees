@@ -49,37 +49,6 @@ export const LIGHT_TERMINAL_THEME: ITheme = {
   brightWhite: '#1f2330',
 };
 
-export const MONOKAI_TERMINAL_THEME: ITheme = {
-  background: '#272822',
-  foreground: '#f8f8f2',
-  cursor: '#f8f8f0',
-  cursorAccent: '#272822',
-  selectionBackground: '#49483e',
-  black: '#272822',
-  red: '#f92672',
-  green: '#a6e22e',
-  yellow: '#e6db74',
-  blue: '#66d9ef',
-  magenta: '#ae81ff',
-  cyan: '#66d9ef',
-  white: '#f8f8f2',
-  brightBlack: '#75715e',
-  brightRed: '#f92672',
-  brightGreen: '#a6e22e',
-  brightYellow: '#e6db74',
-  brightBlue: '#66d9ef',
-  brightMagenta: '#ae81ff',
-  brightCyan: '#66d9ef',
-  brightWhite: '#f8f8f2',
-};
-
 export function getTerminalTheme(theme: ResolvedTheme): ITheme {
-  switch (theme) {
-    case 'light':
-      return LIGHT_TERMINAL_THEME;
-    case 'monokai':
-      return MONOKAI_TERMINAL_THEME;
-    default:
-      return DARK_TERMINAL_THEME;
-  }
+  return theme === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME;
 }
