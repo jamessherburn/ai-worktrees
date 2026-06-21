@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { getTerminalTheme } from '../terminal-theme';
+import { applyXtermTheme, getTerminalTheme } from '../terminal-theme';
 import { syncTerminalInteractive, waitForTerminalLayout } from '../terminal-activation';
 import type { ResolvedTheme } from '../theme';
 
@@ -186,7 +186,7 @@ export function BuiltInTerminalPanel({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = getTerminalTheme(themeName);
+    applyXtermTheme(term, themeName);
   }, [themeName]);
 
   useEffect(() => {

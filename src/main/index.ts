@@ -52,7 +52,7 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated', () => {
     void getSettings().then((s) => {
       if (s.theme === 'system') {
-        applyAppTheme(s.theme, { reloadWindows: true });
+        applyAppTheme(s.theme);
       }
     });
   });

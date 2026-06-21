@@ -1,4 +1,4 @@
-import type { ITheme } from '@xterm/xterm';
+import type { ITheme, Terminal as Xterm } from '@xterm/xterm';
 import type { ResolvedTheme } from './theme';
 
 export const DARK_TERMINAL_THEME: ITheme = {
@@ -51,4 +51,23 @@ export const LIGHT_TERMINAL_THEME: ITheme = {
 
 export function getTerminalTheme(theme: ResolvedTheme): ITheme {
   return theme === 'light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME;
+}
+
+export function buildXtermTheme(theme: ResolvedTheme, hideNativeCursor = false): ITheme {
+  const base = getTerminalTheme(theme);
+  if (!hideNativeCursor) return base;
+  return { ...base, cursor: 'rgba(0,0,0,0)', cursorAccent: 'rgba(0,0,0,0)' };
+}
+
+/** Apply a resolved theme to a live xterm instance and repaint existing output. */
+export function applyXtermTheme(
+  term: Xterm,
+  theme: ResolvedTheme,
+  opts?: { hideNativeCursor?: boolean; nudgeRedraw?: () => void },
+): void {
+  term.options.theme = buildXtermTheme(theme, opts?.hideNativeCursor);
+  if (term.rows > 0) {
+    term.refresh(0, term.rows - 1);
+  }
+  opts?.nudgeRedraw?.();
 }

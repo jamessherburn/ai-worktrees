@@ -6,6 +6,7 @@ export function Logo({ size = 28, theme }: { size?: number; theme: ResolvedTheme
   return (
     <img
       className="app-logo"
+      key={theme}
       src={theme === 'light' ? appIconLightUrl : appIconDarkUrl}
       width={size}
       height={size}
