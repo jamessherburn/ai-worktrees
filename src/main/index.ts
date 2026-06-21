@@ -4,6 +4,7 @@ import { windowBackgroundColor } from '@shared/theme';
 import type { ThemePreference } from '@shared/types';
 import { applyAppTheme } from './app-theme.js';
 import { registerIpc } from './ipc.js';
+import { detectAgents } from './agent-detection.js';
 import { migrateLegacyUserData } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
 import { gracefulShellShutdown, registerShellPtyWebContents } from './shell-pty-manager.js';
@@ -45,6 +46,7 @@ app.whenReady().then(async () => {
   const settings = await getSettings();
   applyAppTheme(settings.theme);
   registerIpc();
+  void detectAgents(true);
   createMainWindow(settings.theme);
 
   nativeTheme.on('updated', () => {

@@ -1,5 +1,6 @@
-import type { SessionLabel, Settings, ThemePreference } from './types';
+import type { SessionLabel, Settings, ThemePreference, WorktreesSkill } from './types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from './session-labels';
+import { normalizeWorktreesSkills } from './worktrees-skills';
 
 export const SETTINGS_EXPORT_VERSION = 1;
 
@@ -40,6 +41,12 @@ export function settingsExportToJson(settings: Settings): string {
   return JSON.stringify(settingsToExportDocument(settings), null, 2);
 }
 
+function parseWorktreesSkills(raw: unknown): WorktreesSkill[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  return normalizeWorktreesSkills(raw as WorktreesSkill[]);
+}
+
 export function parseSettingsImport(raw: unknown): { ok: true; value: Settings } | { ok: false; error: string } {
   let candidate: unknown = raw;
 
@@ -72,6 +79,7 @@ export function parseSettingsImport(raw: unknown): { ok: true; value: Settings }
       sessionLabels: normalizeSessionLabels(
         (candidate.sessionLabels as SessionLabel[] | undefined) ?? DEFAULT_SESSION_LABELS,
       ),
+      worktreesSkills: parseWorktreesSkills(candidate.worktreesSkills),
     },
   };
 }

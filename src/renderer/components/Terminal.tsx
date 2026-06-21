@@ -127,15 +127,9 @@ export function TerminalView({
         }, delay);
       },
       scrollToBottom: () => {
-        const buffer = term.buffer.active;
-        const target = buffer.baseY + buffer.length - 1;
-        if (target >= buffer.viewportY) {
-          term.scrollToLine(target);
-        }
         term.scrollToBottom();
         requestAnimationFrame(() => {
           term.scrollToBottom();
-          term.focus();
         });
       },
       focus: () => {

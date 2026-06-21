@@ -807,16 +807,31 @@ body.resizing-sidebar .sidebar-resize {
 
 .bottom-action-bar {
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 12px;
-  min-height: var(--bottom-action-bar-height, 48px);
-  padding: 8px 16px 8px 20px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  display: flex;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 0;
+  min-height: var(--bottom-action-bar-height, 56px);
+  padding: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--bg);
   -webkit-app-region: no-drag;
   overflow: visible;
+}
+
+.bottom-action-bar-leading {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+}
+
+.bottom-action-bar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 6px 12px 6px 10px;
 }
 
 .bottom-action-bar-center {
@@ -2366,6 +2381,12 @@ body.resizing-sidebar .sidebar-resize {
   padding: 20px 28px 12px;
 }
 
+.settings-modal-body:has(.settings-modal-panel--skills) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .settings-modal-panel {
   display: flex;
   flex-direction: column;
@@ -2667,6 +2688,394 @@ body.resizing-sidebar .sidebar-resize {
 }
 
 .session-prompts-settings-reset-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.worktrees-skill-prompter {
+  position: relative;
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.worktrees-skill-prompter-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  width: 100%;
+  min-height: var(--bottom-action-bar-height, 56px);
+  padding: 0 14px 0 12px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg-elev) 92%, var(--bg-elev-2));
+  border: none;
+  border-right: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent);
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.worktrees-skill-prompter-field:focus-within {
+  background: color-mix(in srgb, var(--bg-elev) 96%, var(--accent) 4%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent),
+    inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.worktrees-skill-prompter-field--open {
+  background: color-mix(in srgb, var(--bg-elev) 94%, var(--accent) 3%);
+}
+
+.worktrees-skill-prompter-field--skill {
+  background: color-mix(in srgb, var(--bg-elev) 90%, var(--accent) 5%);
+}
+
+.worktrees-skill-prompter-field--disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.worktrees-skill-prompter-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-elev-2) 80%, transparent);
+}
+
+.worktrees-skill-prompter-field:focus-within .worktrees-skill-prompter-prefix,
+.worktrees-skill-prompter-field--skill .worktrees-skill-prompter-prefix {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
+}
+
+.worktrees-skill-prompter-editor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: var(--bottom-action-bar-height, 56px);
+}
+
+.worktrees-skill-prompter-mirror,
+.worktrees-skill-prompter-input {
+  font: inherit;
+  font-size: 14px;
+  line-height: var(--bottom-action-bar-height, 56px);
+  letter-spacing: 0.01em;
+}
+
+.worktrees-skill-prompter-mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  color: var(--text);
+}
+
+.worktrees-skill-prompter-composed {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: var(--bottom-action-bar-height, 56px);
+  gap: 0;
+}
+
+.worktrees-skill-prompter-token-badge {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+  font-size: 14px;
+  line-height: var(--bottom-action-bar-height, 56px);
+  letter-spacing: 0.01em;
+  white-space: pre;
+}
+
+.worktrees-skill-prompter-suffix-input {
+  flex: 1;
+  min-width: 0;
+  height: var(--bottom-action-bar-height, 56px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: var(--bottom-action-bar-height, 56px);
+  letter-spacing: 0.01em;
+}
+
+.worktrees-skill-prompter-suffix-input:focus {
+  outline: none;
+}
+
+.worktrees-skill-prompter-suffix-input:disabled {
+  cursor: not-allowed;
+}
+
+.worktrees-skill-prompter-token {
+  color: var(--accent-strong);
+}
+
+.worktrees-skill-prompter-slash {
+  color: var(--text-muted);
+}
+
+.worktrees-skill-prompter-query {
+  color: color-mix(in srgb, var(--accent-strong) 82%, var(--text));
+}
+
+.worktrees-skill-prompter-body {
+  color: var(--text);
+}
+
+.worktrees-skill-prompter-input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: var(--bottom-action-bar-height, 56px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  -webkit-text-fill-color: transparent;
+}
+
+.worktrees-skill-prompter-input:focus {
+  outline: none;
+}
+
+.worktrees-skill-prompter-input::placeholder {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+.worktrees-skill-prompter-input:disabled {
+  cursor: not-allowed;
+}
+
+.worktrees-skill-prompter-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  width: auto;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 88%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elev) 94%, var(--bg-elev-2));
+  box-shadow:
+    0 16px 40px color-mix(in srgb, var(--shadow) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, #ffffff 4%, transparent);
+  z-index: 20;
+}
+
+.worktrees-skill-prompter-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.worktrees-skill-prompter-item:hover,
+.worktrees-skill-prompter-item.active {
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg-elev-2));
+}
+
+.worktrees-skill-prompter-item-name {
+  font-weight: 500;
+  color: var(--accent-strong);
+}
+
+.worktrees-skill-prompter-item-description {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.settings-modal-panel--skills {
+  min-height: 0;
+  flex: 1;
+  gap: 0;
+}
+
+.worktrees-skills-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.worktrees-skills-editor-hint {
+  font-size: 11px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.worktrees-skills-editor-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.worktrees-skills-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 8px;
+}
+
+.worktrees-skills-editor-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.worktrees-skills-editor-list-item {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.worktrees-skills-editor-list-item:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.worktrees-skills-editor-list-item.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--text);
+}
+
+.worktrees-skills-editor-add {
+  flex-shrink: 0;
+  justify-content: center;
+}
+
+.worktrees-skills-editor-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 12px;
+}
+
+.worktrees-skills-editor-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  flex-shrink: 0;
+}
+
+.worktrees-skills-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.worktrees-skills-editor-field--grow {
+  flex: 1 1 220px;
+}
+
+.worktrees-skills-editor-field--prompt {
+  flex: 1;
+  min-height: 0;
+}
+
+.worktrees-skills-editor-field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.worktrees-skills-editor-name,
+.worktrees-skills-editor-description {
+  padding: 6px 8px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.worktrees-skills-editor-prompt {
+  flex: 1;
+  min-height: 220px;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.worktrees-skills-editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 220px;
+}
+
+.worktrees-skills-editor-reset {
+  flex-shrink: 0;
+}
+
+.worktrees-skills-editor-reset-confirm {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

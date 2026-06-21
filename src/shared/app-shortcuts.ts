@@ -3,6 +3,7 @@ export type AppShortcutId =
   | 'toggleTerminal'
   | 'toggleGit'
   | 'jumpFocus'
+  | 'scrollToBottom'
   | 'openVSCode'
   | 'openFinder'
   | 'newSession';
@@ -20,7 +21,13 @@ export const APP_KEYBOARD_SHORTCUTS: AppShortcutReference[] = [
   {
     id: 'jumpFocus',
     keys: 'Shift+J',
-    description: 'Focus agent terminal; jump between agent and shell panel when shell is open',
+    description:
+      'Cycle focus: agent terminal, shell panel (when open), and skills prompt (active session)',
+  },
+  {
+    id: 'scrollToBottom',
+    keys: 'Shift+↓',
+    description: 'Scroll to the bottom of the active session agent terminal',
   },
   { id: 'openVSCode', keys: 'Shift+V', description: 'Open session in VS Code (active session)' },
   { id: 'openFinder', keys: 'Shift+F', description: 'Open session in Finder (active session)' },
@@ -39,6 +46,13 @@ function matchesShiftLetter(
   return event.key.toLowerCase() === letter;
 }
 
+function matchesShiftArrowDown(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey'>,
+): boolean {
+  if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+  return event.key === 'ArrowDown' || event.code === 'ArrowDown';
+}
+
 export function matchAppShortcut(
   event: KeyboardEvent,
 ): AppShortcutId | null {
@@ -46,6 +60,7 @@ export function matchAppShortcut(
   if (matchesShiftLetter(event, 't')) return 'toggleTerminal';
   if (matchesShiftLetter(event, 'g')) return 'toggleGit';
   if (matchesShiftLetter(event, 'j')) return 'jumpFocus';
+  if (matchesShiftArrowDown(event)) return 'scrollToBottom';
   if (matchesShiftLetter(event, 'v')) return 'openVSCode';
   if (matchesShiftLetter(event, 'f')) return 'openFinder';
   if (matchesShiftLetter(event, 'c')) return 'newSession';

@@ -44,7 +44,7 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
   }, []);
 
   useEffect(() => {
-    void window.api.detectAgents().then((avail) => {
+    void window.api.detectAgents(true).then((avail) => {
       setAvailability(avail);
       if (!avail[agentId]) {
         const firstAvailable = AGENTS.find((a) => avail[a.id]);

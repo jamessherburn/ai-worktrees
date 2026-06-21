@@ -38,9 +38,12 @@ Each session remembers its own panel layout:
 - **Git** (**Shift+G**) — status, diffs, stage, unstage, discard for that worktree
 
 **5. Move between sessions.**  
-**Shift+N** cycles every non-muted session in sidebar order. **Shift+J** focuses the agent terminal (or jumps between agent and shell when the shell panel is open). Muted sessions are skipped when cycling; mute from the speaker icon on a session card or the context menu.
+**Shift+N** cycles every non-muted session in sidebar order. **Shift+J** cycles focus between the agent terminal, shell panel (when open), and the skills bar. **Shift+↓** jumps to the bottom of the agent terminal. Muted sessions are skipped when cycling; mute from the speaker icon on a session card or the context menu.
 
-That’s the core loop: sidebar for orientation, agent terminal for work, dock for shell and git, keyboard shortcuts for speed.
+**6. Run a skill.**  
+The bottom bar has a slash-command prompt (left side). Type `/` to pick a skill — e.g. `/Summarise Session` — press **Enter** to lock it in, add any extra text, then **Enter** again to send it to the active agent. Manage skills in **Settings → Skills**; they work across Claude, Cursor, Gemini, and Codex sessions.
+
+That’s the core loop: sidebar for orientation, agent terminal for work, dock for shell and git, skills bar for reusable prompts, keyboard shortcuts for speed.
 
 ---
 
@@ -52,12 +55,15 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 │ Labels, mute, delete  │                                    │
 │ Settings, Agent Data  ├─ Bottom dock (optional, per session)│
 │                       │ Shell │ Git                        │
-└───────────────────────┴─ To Do button ──────────────────────┘
+├───────────────────────┴─ Skills bar ──────────── To Do ────┤
+│ Type /skill-name …    (full width, except To Do button)    │
+└────────────────────────────────────────────────────────────┘
 ```
 
 - **Sidebar** — session cards grouped by Working / Idle / Stopped; labels always visible; drag the right edge to resize.
 - **Main pane** — one agent terminal per opened session; only the active session is visible, but PTYs stay alive in the background.
 - **Bottom dock** — resizable; terminal and git visibility are stored per session in local storage.
+- **Skills bar** — slash-command prompt for cross-agent skills; spans the bottom bar except the To Do button.
 - **To Do** — global task list (not tied to git); open from the bottom-right button.
 
 ---
@@ -73,8 +79,9 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 | **Labels** | Color labels on sessions and to-do items; filter to-do by label and date |
 | **Mute** | De-emphasise sessions; skipped by **Shift+N** |
 | **To Do** | To Do / Doing / Done sections; inline editing; drag between sections |
+| **Skills** | Cross-agent slash-command prompts in the bottom bar; edit in Settings → Skills; import/export with other settings |
 | **Agent Data** | Edit each agent’s instructions file; billing / usage hints where supported |
-| **Settings** | Code directory, theme, labels, keyboard shortcut reference, import/export |
+| **Settings** | Code directory, theme, skills, labels, keyboard shortcut reference, import/export |
 | **Persistence** | Sessions, settings, and to-do survive restarts; worktrees remain on disk until you delete |
 | **Cleanup** | Delete removes the session record; repo sessions can remove the worktree and branch |
 
@@ -91,7 +98,8 @@ Full list in **Settings → Shortcuts**. Shortcuts work from the main workspace,
 | **Shift+N** | Next session in sidebar (skips muted) |
 | **Shift+T** | Toggle shell panel for the active session |
 | **Shift+G** | Toggle git panel for the active session |
-| **Shift+J** | Focus agent terminal; jump agent ↔ shell when shell is open |
+| **Shift+J** | Cycle focus: agent terminal → shell (when open) → skills bar |
+| **Shift+↓** | Scroll to bottom of the active session agent terminal |
 | **Shift+V** | Open active session in VS Code |
 | **Shift+F** | Reveal active session in Finder |
 | **Shift+C** | New session |
@@ -138,7 +146,7 @@ npm run dist     # release/AI Worktrees.dmg + .app
 | App data (packaged) | `~/Library/Application Support/AI Worktrees/` |
 | Legacy migration | Older `Claude Worktrees/` or `claude-worktrees-ui/` folders are copied once if the new directory is empty (`src/main/migrate.ts`) |
 | `sessions.json` | Session list — paths, agent, labels, global flag, … |
-| `settings.json` | Code directory, theme, session labels |
+| `settings.json` | Code directory, theme, session labels, worktrees skills |
 | `diary.json` | To-do items |
 | Worktrees | Sibling of the repo: `<parent>/<repo-name>-<session-name>` (slashes in the name become dashes) |
 | Panel prefs | Browser `localStorage` key `session-panel-prefs` (per-session shell/git open state) |

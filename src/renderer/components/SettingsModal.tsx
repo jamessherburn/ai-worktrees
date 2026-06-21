@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import type { SessionLabel, Settings, ThemePreference } from '@shared/types';
+import type { SessionLabel, Settings, ThemePreference, WorktreesSkill } from '@shared/types';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
+import { normalizeWorktreesSkills } from '@shared/worktrees-skills';
 import { SessionLabelsEditor } from './SessionLabelsEditor';
+import { WorktreesSkillsEditor } from './WorktreesSkillsEditor';
 import { KeyboardShortcutsReference } from './KeyboardShortcutsReference';
 import {
   clampModalSize,
@@ -32,10 +34,11 @@ function persistModalSize(size: ModalSize) {
   localStorage.setItem(SETTINGS_SIZE_KEY, JSON.stringify(size));
 }
 
-type SettingsTab = 'general' | 'labels' | 'shortcuts';
+type SettingsTab = 'general' | 'skills' | 'labels' | 'shortcuts';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'skills', label: 'Skills' },
   { id: 'labels', label: 'Labels' },
   { id: 'shortcuts', label: 'Shortcuts' },
 ];
@@ -53,6 +56,7 @@ function applySettingsToForm(settings: Settings) {
     codeDir: settings.codeDir,
     theme: settings.theme,
     sessionLabels: normalizeSessionLabels(settings.sessionLabels ?? DEFAULT_SESSION_LABELS),
+    worktreesSkills: normalizeWorktreesSkills(settings.worktreesSkills),
   };
 }
 
@@ -67,6 +71,9 @@ export function SettingsModal({
   const [theme, setTheme] = useState<ThemePreference>(current.theme);
   const [sessionLabels, setSessionLabels] = useState<SessionLabel[]>(() =>
     normalizeSessionLabels(current.sessionLabels ?? DEFAULT_SESSION_LABELS),
+  );
+  const [worktreesSkills, setWorktreesSkills] = useState<WorktreesSkill[]>(() =>
+    normalizeWorktreesSkills(current.worktreesSkills),
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'general');
   const [busy, setBusy] = useState(false);
@@ -123,6 +130,7 @@ export function SettingsModal({
     setCodeDir(form.codeDir);
     setTheme(form.theme);
     setSessionLabels(form.sessionLabels);
+    setWorktreesSkills(form.worktreesSkills);
     onSettingsChange?.(next);
   };
 
@@ -225,6 +233,7 @@ export function SettingsModal({
         codeDir,
         theme,
         sessionLabels: normalizeSessionLabels(sessionLabels),
+        worktreesSkills: normalizeWorktreesSkills(worktreesSkills),
       });
       persistModalSize(size);
       onSaved(next);
@@ -322,8 +331,8 @@ export function SettingsModal({
                 <h3 className="settings-section-title">Backup</h3>
                 <div className="settings-card">
                   <p className="settings-card-text">
-                    Export all settings as JSON, or import a file from another install. Includes labels.
-                    Sessions and to-do items are not included.
+                    Export all settings as JSON, or import a file from another install. Includes
+                    labels and Worktrees Skills. Sessions and to-do items are not included.
                   </p>
                   <div className="settings-transfer-actions">
                     <button
@@ -357,6 +366,16 @@ export function SettingsModal({
                   )}
                 </div>
               </div>
+            </div>
+          )}
+          {tab === 'skills' && (
+            <div
+              role="tabpanel"
+              id={panelId('skills')}
+              aria-labelledby={`${baseId}-tab-skills`}
+              className="settings-modal-panel settings-modal-panel--skills"
+            >
+              <WorktreesSkillsEditor value={worktreesSkills} onChange={setWorktreesSkills} />
             </div>
           )}
           {tab === 'labels' && (
