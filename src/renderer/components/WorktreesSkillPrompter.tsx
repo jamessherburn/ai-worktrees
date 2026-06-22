@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { WorktreesSkill } from '@shared/types';
 import {
+  findActiveSlashIndex,
   formatSlashSkillDisplay,
+  getSlashSkillTokenDisplayLength,
   isCompleteSlashSkillReference,
   matchWorktreesSkills,
   parseSlashSkillCommand,
-  resolveSlashSkillSubmission,
+  resolvePrompterSubmission,
 } from '@shared/worktrees-skills';
 
 type Props = {
@@ -17,37 +19,61 @@ type Props = {
   onCycleFocus?: () => void;
 };
 
-type PrompterDisplay =
-  | { kind: 'empty' }
-  | { kind: 'skill'; token: string; suffix: string }
-  | { kind: 'query'; text: string };
+function PrompterMirror({
+  value,
+  skills,
+  activeSlashIndex,
+}: {
+  value: string;
+  skills: WorktreesSkill[];
+  activeSlashIndex: number;
+}) {
+  if (!value) return null;
 
-function getPrompterDisplay(value: string, skills: WorktreesSkill[]): PrompterDisplay {
-  if (!value) return { kind: 'empty' };
-  if (!value.startsWith('/')) return { kind: 'query', text: value };
+  const parts: ReactNode[] = [];
+  let i = 0;
+  let key = 0;
 
-  const parsed = parseSlashSkillCommand(value, skills);
-  if (parsed && isCompleteSlashSkillReference(value, skills)) {
-    const token = `/${parsed.skill.name}`;
-    return { kind: 'skill', token, suffix: value.slice(token.length) };
-  }
+  while (i < value.length) {
+    if (value[i] === '/') {
+      const segment = value.slice(i);
+      const tokenLen = getSlashSkillTokenDisplayLength(segment, skills);
+      if (tokenLen !== null) {
+        parts.push(
+          <span key={key++} className="worktrees-skill-prompter-token">
+            {value.slice(i, i + tokenLen)}
+          </span>,
+        );
+        i += tokenLen;
+        continue;
+      }
 
-  return { kind: 'query', text: value };
-}
+      if (i === activeSlashIndex) {
+        parts.push(
+          <span key={key++} className="worktrees-skill-prompter-slash">
+            /
+          </span>,
+        );
+        parts.push(
+          <span key={key++} className="worktrees-skill-prompter-query">
+            {value.slice(i + 1)}
+          </span>,
+        );
+        return parts;
+      }
+    }
 
-function PrompterMirror({ display }: { display: PrompterDisplay }) {
-  if (display.kind === 'empty' || display.kind === 'skill') return null;
-
-  if (display.text.startsWith('/')) {
-    return (
-      <>
-        <span className="worktrees-skill-prompter-slash">/</span>
-        <span className="worktrees-skill-prompter-query">{display.text.slice(1)}</span>
-      </>
+    let next = i;
+    while (next < value.length && value[next] !== '/') next++;
+    parts.push(
+      <span key={key++} className="worktrees-skill-prompter-body">
+        {value.slice(i, next)}
+      </span>,
     );
+    i = next;
   }
 
-  return <span className="worktrees-skill-prompter-body">{display.text}</span>;
+  return parts;
 }
 
 function PrompterPrefixIcon() {
@@ -81,25 +107,37 @@ export function WorktreesSkillPrompter({
   const onRegisterFocusRef = useRef(onRegisterFocus);
   onRegisterFocusRef.current = onRegisterFocus;
 
-  const slashActive = value.startsWith('/');
-  const query = slashActive ? value.slice(1) : '';
-  const skillCommitted = slashActive && isCompleteSlashSkillReference(value, skills);
-  const committed = skillCommitted ? parseSlashSkillCommand(value, skills) : null;
+  const slashIndex = findActiveSlashIndex(value);
+  const slashSegment = slashIndex >= 0 ? value.slice(slashIndex) : '';
+  const slashQueryActive =
+    slashIndex >= 0 && !isCompleteSlashSkillReference(slashSegment, skills);
+  const hasCommittedSkill = useMemo(() => {
+    let i = 0;
+    while (i < value.length) {
+      if (value[i] === '/') {
+        const tokenLen = getSlashSkillTokenDisplayLength(value.slice(i), skills);
+        if (tokenLen !== null) return true;
+      }
+      i++;
+    }
+    return false;
+  }, [value, skills]);
+  const query = slashQueryActive ? slashSegment.slice(1) : '';
 
   const matches = useMemo(() => {
-    if (!slashActive || skills.length === 0 || skillCommitted) return [];
+    if (!slashQueryActive || skills.length === 0) return [];
     return matchWorktreesSkills(query, skills);
-  }, [slashActive, query, skills, skillCommitted]);
+  }, [slashQueryActive, query, skills]);
 
   useEffect(() => {
-    if (!slashActive || skillCommitted) {
+    if (!slashQueryActive) {
       setOpen(false);
       setHighlightIndex(0);
       return;
     }
     setOpen(matches.length > 0);
     setHighlightIndex(0);
-  }, [slashActive, skillCommitted, matches.length]);
+  }, [slashQueryActive, matches.length]);
 
   useEffect(() => {
     onRegisterFocusRef.current?.(() => {
@@ -119,33 +157,33 @@ export function WorktreesSkillPrompter({
   const insertSkill = useCallback(
     (skill: WorktreesSkill, suffix = '') => {
       if (disabled || !skill.prompt.trim()) return;
-      setValue(formatSlashSkillDisplay(skill, suffix));
+      const prefix = slashIndex >= 0 ? value.slice(0, slashIndex) : '';
+      setValue(prefix + formatSlashSkillDisplay(skill, suffix));
       setOpen(false);
       setHighlightIndex(0);
       window.requestAnimationFrame(() => inputRef.current?.focus());
     },
-    [disabled],
+    [disabled, slashIndex, value],
   );
+
+  const commitFromInput = useCallback(() => {
+    if (!slashQueryActive) return false;
+    const highlighted = matches[highlightIndex] ?? matches[0] ?? null;
+    const parsed = parseSlashSkillCommand(slashSegment, skills, highlighted);
+    if (!parsed) return false;
+    insertSkill(parsed.skill, parsed.suffix);
+    return true;
+  }, [slashQueryActive, matches, highlightIndex, slashSegment, skills, insertSkill]);
 
   const submitFromInput = useCallback(() => {
     if (disabled) return false;
-    const highlighted = matches[highlightIndex] ?? matches[0] ?? null;
-    const submission = resolveSlashSkillSubmission(value, skills, highlighted);
+    const submission = resolvePrompterSubmission(value, skills);
     if (!submission) return false;
     onRun(submission);
     clear();
     inputRef.current?.blur();
     return true;
-  }, [disabled, matches, highlightIndex, value, skills, onRun, clear]);
-
-  const commitFromInput = useCallback(() => {
-    if (!slashActive) return false;
-    const highlighted = matches[highlightIndex] ?? matches[0] ?? null;
-    const parsed = parseSlashSkillCommand(value, skills, highlighted);
-    if (!parsed) return false;
-    insertSkill(parsed.skill, parsed.suffix);
-    return true;
-  }, [slashActive, matches, highlightIndex, value, skills, insertSkill]);
+  }, [disabled, value, skills, onRun, clear]);
 
   const handleCycleFocus = (e: React.KeyboardEvent) => {
     if (
@@ -162,25 +200,20 @@ export function WorktreesSkillPrompter({
     return false;
   };
 
-  const handleEnter = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Enter') return false;
-    e.preventDefault();
-    if (slashActive) {
-      if (skillCommitted) {
-        submitFromInput();
-        return true;
-      }
-      commitFromInput();
-      return true;
-    }
-    return true;
-  };
-
-  const onQueryKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (handleCycleFocus(e)) return;
-    if (handleEnter(e)) return;
 
-    if (!slashActive || !open) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (slashQueryActive) {
+        commitFromInput();
+      } else {
+        submitFromInput();
+      }
+      return;
+    }
+
+    if (!slashQueryActive || !open) return;
 
     switch (e.key) {
       case 'ArrowDown':
@@ -199,31 +232,19 @@ export function WorktreesSkillPrompter({
         const resolved = matches[highlightIndex] ?? matches[0];
         if (resolved) {
           e.preventDefault();
-          setValue(`/${resolved.name}`);
+          insertSkill(resolved);
         }
         break;
       }
     }
   };
 
-  const onSuffixKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (handleCycleFocus(e)) return;
-    if (handleEnter(e)) return;
-
-    if (e.key === 'Backspace' && committed && value === formatSlashSkillDisplay(committed.skill)) {
-      e.preventDefault();
-      setValue(`/${committed.skill.name}`);
-      return;
-    }
-  };
-
   if (skills.length === 0) return null;
 
-  const display = getPrompterDisplay(value, skills);
   const fieldClass = [
     'worktrees-skill-prompter-field',
     open ? 'worktrees-skill-prompter-field--open' : '',
-    skillCommitted ? 'worktrees-skill-prompter-field--skill' : '',
+    hasCommittedSkill ? 'worktrees-skill-prompter-field--skill' : '',
     disabled ? 'worktrees-skill-prompter-field--disabled' : '',
   ]
     .filter(Boolean)
@@ -233,57 +254,38 @@ export function WorktreesSkillPrompter({
     <div className={`worktrees-skill-prompter${open ? ' worktrees-skill-prompter--open' : ''}`}>
       <div className={fieldClass}>
         <PrompterPrefixIcon />
-        {skillCommitted && committed ? (
-          <div className="worktrees-skill-prompter-composed">
-            <span className="worktrees-skill-prompter-token-badge">/{committed.skill.name}</span>
-            <input
-              ref={inputRef}
-              type="text"
-              className="worktrees-skill-prompter-suffix-input"
-              value={display.kind === 'skill' ? display.suffix : ''}
-              disabled={disabled}
-              spellCheck={false}
-              autoComplete="off"
-              aria-label="Skill follow-up text"
-              onChange={(e) => setValue(formatSlashSkillDisplay(committed.skill, e.target.value))}
-              onKeyDown={onSuffixKeyDown}
-              onFocus={onFocusPane}
-            />
+        <div className="worktrees-skill-prompter-editor">
+          <div className="worktrees-skill-prompter-mirror" aria-hidden="true">
+            <PrompterMirror value={value} skills={skills} activeSlashIndex={slashIndex} />
           </div>
-        ) : (
-          <div className="worktrees-skill-prompter-editor">
-            <div className="worktrees-skill-prompter-mirror" aria-hidden="true">
-              <PrompterMirror display={display} />
-            </div>
-            <input
-              ref={inputRef}
-              type="text"
-              className="worktrees-skill-prompter-input"
-              value={value}
-              disabled={disabled}
-              placeholder={
-                disabled
-                  ? 'Select a session to run skills'
-                  : 'Type /skill-name, Enter to select, add text, Enter again to send…'
-              }
-              spellCheck={false}
-              autoComplete="off"
-              role="combobox"
-              aria-expanded={open}
-              aria-controls={open ? listId : undefined}
-              aria-autocomplete="list"
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={onQueryKeyDown}
-              onFocus={() => {
-                onFocusPane?.();
-                if (slashActive && matches.length > 0) setOpen(true);
-              }}
-              onBlur={() => {
-                window.setTimeout(() => setOpen(false), 120);
-              }}
-            />
-          </div>
-        )}
+          <input
+            ref={inputRef}
+            type="text"
+            className="worktrees-skill-prompter-input"
+            value={value}
+            disabled={disabled}
+            placeholder={
+              disabled
+                ? 'Select a session to run skills'
+                : 'Message the agent or type / for skills…'
+            }
+            spellCheck={false}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-autocomplete="list"
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={onInputKeyDown}
+            onFocus={() => {
+              onFocusPane?.();
+              if (slashQueryActive && matches.length > 0) setOpen(true);
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setOpen(false), 120);
+            }}
+          />
+        </div>
       </div>
       {open && (
         <ul id={listId} className="worktrees-skill-prompter-menu" role="listbox">

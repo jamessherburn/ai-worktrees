@@ -18,7 +18,10 @@ type Props = {
   layoutRevision?: number;
   /** Delay PTY start so the agent terminal can claim focus and layout first. */
   startDelayMs?: number;
+  /** When true, this terminal takes keyboard focus once ready. */
+  preferFocus?: boolean;
   onRegisterFocus?: (focus: (() => void) | null) => void;
+  onFocusPane?: () => void;
 };
 
 export function BuiltInTerminalPanel({
@@ -30,7 +33,9 @@ export function BuiltInTerminalPanel({
   embedded,
   layoutRevision = 0,
   startDelayMs = 0,
+  preferFocus = false,
   onRegisterFocus,
+  onFocusPane,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
@@ -39,9 +44,13 @@ export function BuiltInTerminalPanel({
   const mountGenerationRef = useRef(0);
   const activationCleanupRef = useRef<(() => void) | null>(null);
   const blurredRef = useRef(blurred);
+  const preferFocusRef = useRef(preferFocus);
   const onRegisterFocusRef = useRef(onRegisterFocus);
+  const onFocusPaneRef = useRef(onFocusPane);
   blurredRef.current = blurred;
+  preferFocusRef.current = preferFocus;
   onRegisterFocusRef.current = onRegisterFocus;
+  onFocusPaneRef.current = onFocusPane;
 
   const clearActivation = () => {
     activationCleanupRef.current?.();
@@ -59,7 +68,7 @@ export function BuiltInTerminalPanel({
       (cols, rows) => window.api.shellPty.resize(sessionId, cols, rows),
       focusDelayMs,
       afterSync,
-      !embedded,
+      preferFocusRef.current,
     );
   };
 
@@ -83,6 +92,10 @@ export function BuiltInTerminalPanel({
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(host);
+
+    const notifyPaneFocus = () => onFocusPaneRef.current?.();
+    const focusTarget = term.textarea ?? host;
+    focusTarget.addEventListener('focus', notifyPaneFocus);
 
     onRegisterFocusRef.current?.(() => term.focus());
 
@@ -176,6 +189,7 @@ export function BuiltInTerminalPanel({
       unsubExit?.();
       resizeObserver?.disconnect();
       onRegisterFocusRef.current?.(null);
+      focusTarget.removeEventListener('focus', notifyPaneFocus);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -194,7 +208,7 @@ export function BuiltInTerminalPanel({
     applyTerminalActivation(50);
     return clearActivation;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- activation tied to session mount refs
-  }, [blurred]);
+  }, [blurred, preferFocus]);
 
   useEffect(() => {
     if (!embedded) return;

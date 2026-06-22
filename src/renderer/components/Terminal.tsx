@@ -30,6 +30,7 @@ type Props = {
   onExit?: (sessionId: string) => void;
   onTerminalApi?: (sessionId: string, api: TerminalApi | null) => void;
   onRegisterFocus?: (focus: (() => void) | null) => void;
+  onFocusPane?: () => void;
 };
 
 export function TerminalView({
@@ -44,6 +45,7 @@ export function TerminalView({
   onExit,
   onTerminalApi,
   onRegisterFocus,
+  onFocusPane,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Xterm | null>(null);
@@ -55,8 +57,10 @@ export function TerminalView({
   const preferFocusRef = useRef(preferFocus);
   const onTerminalApiRef = useRef(onTerminalApi);
   const onRegisterFocusRef = useRef(onRegisterFocus);
+  const onFocusPaneRef = useRef(onFocusPane);
   onTerminalApiRef.current = onTerminalApi;
   onRegisterFocusRef.current = onRegisterFocus;
+  onFocusPaneRef.current = onFocusPane;
   visibleRef.current = visible;
   blurredRef.current = blurred;
   preferFocusRef.current = preferFocus;
@@ -102,6 +106,10 @@ export function TerminalView({
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(host);
+
+    const notifyPaneFocus = () => onFocusPaneRef.current?.();
+    const focusTarget = term.textarea ?? host;
+    focusTarget.addEventListener('focus', notifyPaneFocus);
 
     onRegisterFocusRef.current?.(() => term.focus());
 
@@ -248,6 +256,7 @@ export function TerminalView({
       clearActivation();
       onTerminalApiRef.current?.(sessionId, null);
       onRegisterFocusRef.current?.(null);
+      focusTarget.removeEventListener('focus', notifyPaneFocus);
       if (fitTimer !== undefined) window.clearTimeout(fitTimer);
       unsubData?.();
       unsubExit?.();

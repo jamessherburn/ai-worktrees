@@ -4,9 +4,12 @@ import type { WorktreesSkill } from './types';
 import {
   cloneDefaultWorktreesSkills,
   combineSkillPromptAndSuffix,
+  expandSlashSkillsInText,
   formatSlashSkillDisplay,
+  getSlashSkillTokenDisplayLength,
   isCompleteSlashSkillReference,
   parseSlashSkillCommand,
+  resolvePrompterSubmission,
   resolveSlashSkillSubmission,
   resolveWorktreesSkills,
 } from './worktrees-skills';
@@ -71,6 +74,10 @@ describe('formatSlashSkillDisplay', () => {
       '/my-super-skill and some follow up',
     );
   });
+
+  it('preserves trailing spaces while typing multi-word suffix text', () => {
+    assert.equal(formatSlashSkillDisplay(skills[0], 'hello '), '/my-super-skill hello ');
+  });
 });
 
 describe('isCompleteSlashSkillReference', () => {
@@ -87,12 +94,56 @@ describe('isCompleteSlashSkillReference', () => {
   });
 });
 
+describe('getSlashSkillTokenDisplayLength', () => {
+  it('returns the length of a committed skill token', () => {
+    assert.equal(getSlashSkillTokenDisplayLength('/my-super-skill and more', skills), 15);
+    assert.equal(getSlashSkillTokenDisplayLength('/sess', skills), null);
+  });
+});
+
 describe('resolveSlashSkillSubmission', () => {
   it('expands slash display into prompt plus suffix', () => {
     assert.equal(
       resolveSlashSkillSubmission('/my-super-skill and some follow up', skills),
       'Run the super skill. and some follow up',
     );
+  });
+});
+
+describe('expandSlashSkillsInText', () => {
+  it('expands a slash reference embedded in free-form text', () => {
+    assert.equal(
+      expandSlashSkillsInText('please /my-super-skill and follow up', skills),
+      'please Run the super skill. and follow up',
+    );
+  });
+
+  it('returns plain text unchanged when there are no slash references', () => {
+    assert.equal(expandSlashSkillsInText('hello world', skills), 'hello world');
+  });
+});
+
+describe('resolvePrompterSubmission', () => {
+  it('submits plain text as-is', () => {
+    assert.equal(resolvePrompterSubmission('hello world', skills), 'hello world');
+  });
+
+  it('submits a complete slash command immediately', () => {
+    assert.equal(
+      resolvePrompterSubmission('/my-super-skill and some follow up', skills),
+      'Run the super skill. and some follow up',
+    );
+  });
+
+  it('expands embedded slash references in mixed text', () => {
+    assert.equal(
+      resolvePrompterSubmission('start /my-super-skill extra end', skills),
+      'start Run the super skill. extra end',
+    );
+  });
+
+  it('does not resolve partial slash references on submit', () => {
+    assert.equal(resolvePrompterSubmission('before /sess', skills), 'before /sess');
   });
 });
 
