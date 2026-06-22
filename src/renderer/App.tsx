@@ -31,7 +31,7 @@ const BOTTOM_DOCK_HEIGHT_KEY = 'bottom-dock-height';
 const BOTTOM_DOCK_DEFAULT_HEIGHT = 280;
 const BOTTOM_DOCK_MIN_HEIGHT = 160;
 const MAIN_PANE_MIN_HEIGHT = 120;
-const BOTTOM_ACTION_BAR_HEIGHT = 56;
+const BOTTOM_ACTION_BAR_HEIGHT = 64;
 const BOTTOM_TERMINAL_MIN_WIDTH = 220;
 const BOTTOM_GIT_MIN_WIDTH = 280;
 
@@ -445,22 +445,46 @@ export function App() {
     openSession(ordered[nextIndex].id);
   }, [sessions, activeId, openSession]);
 
+  const focusSkillsPrompter = useCallback(() => {
+    if (!activeId || worktreesSkills.length === 0) {
+      focusPaneRef.current = 'agent';
+      if (!activeId) return;
+      const focusAgent = () => terminalApisRef.current.get(activeId)?.focus();
+      focusAgent();
+      let attempts = 0;
+      const retry = () => {
+        if (terminalApisRef.current.get(activeId)) {
+          focusAgent();
+          return;
+        }
+        attempts += 1;
+        if (attempts < 20) window.setTimeout(retry, 50);
+      };
+      window.setTimeout(retry, 50);
+      return;
+    }
+
+    focusPaneRef.current = 'skills';
+    const focusSkills = () => skillPrompterFocusRef.current?.();
+    focusSkills();
+    let attempts = 0;
+    const retry = () => {
+      if (skillPrompterFocusRef.current) {
+        skillPrompterFocusRef.current();
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) window.setTimeout(retry, 50);
+    };
+    window.setTimeout(retry, 50);
+  }, [activeId, worktreesSkills.length]);
+
   const jumpFocusBetweenPanes = useCallback(() => {
     if (!activeId) return;
 
-    const focusSkills = () => {
-      if (!activeSession || worktreesSkills.length === 0) {
-        terminalApisRef.current.get(activeId)?.focus();
-        focusPaneRef.current = 'agent';
-        return;
-      }
-      skillPrompterFocusRef.current?.();
-      focusPaneRef.current = 'skills';
-    };
-
     if (builtInTerminalCollapsed) {
       if (focusPaneRef.current === 'agent') {
-        focusSkills();
+        focusSkillsPrompter();
         return;
       }
       terminalApisRef.current.get(activeId)?.focus();
@@ -474,22 +498,12 @@ export function App() {
       return;
     }
     if (focusPaneRef.current === 'shell') {
-      focusSkills();
+      focusSkillsPrompter();
       return;
     }
     terminalApisRef.current.get(activeId)?.focus();
     focusPaneRef.current = 'agent';
-  }, [activeId, activeSession, builtInTerminalCollapsed, worktreesSkills.length]);
-
-  useEffect(() => {
-    focusPaneRef.current = 'agent';
-  }, [activeId]);
-
-  useEffect(() => {
-    if (builtInTerminalCollapsed) {
-      focusPaneRef.current = 'agent';
-    }
-  }, [builtInTerminalCollapsed]);
+  }, [activeId, builtInTerminalCollapsed, focusSkillsPrompter]);
 
   const goToNextOpenSessionRef = useRef(goToNextOpenSession);
   goToNextOpenSessionRef.current = goToNextOpenSession;
@@ -612,6 +626,9 @@ export function App() {
             onHide={toggleBuiltInTerminal}
             onRegisterFocus={(focus) => {
               shellFocusRef.current = focus;
+            }}
+            onFocusPane={() => {
+              focusPaneRef.current = 'shell';
             }}
           />
         ) : (
@@ -747,6 +764,9 @@ export function App() {
                     themeName={resolvedTheme}
                     onExit={() => closeSessionTerminal(id)}
                     onTerminalApi={handleTerminalApi}
+                    onFocusPane={() => {
+                      focusPaneRef.current = 'agent';
+                    }}
                   />
                 </div>
               );

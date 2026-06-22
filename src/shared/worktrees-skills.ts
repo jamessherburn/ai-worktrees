@@ -126,9 +126,8 @@ export function combineSkillPromptAndSuffix(prompt: string, suffix: string): str
 }
 
 export function formatSlashSkillDisplay(skill: WorktreesSkill, suffix = ''): string {
-  const trimmedSuffix = suffix.trim();
-  if (!trimmedSuffix) return `/${skill.name} `;
-  return `/${skill.name} ${trimmedSuffix}`;
+  if (suffix === '') return `/${skill.name} `;
+  return `/${skill.name} ${suffix}`;
 }
 
 /** Parse `/skill-name` with optional trailing text on the same line. */
@@ -182,6 +181,46 @@ export function isCompleteSlashSkillReference(input: string, skills: WorktreesSk
   return restLower === nameLower || restLower.startsWith(`${nameLower} `);
 }
 
+export function findActiveSlashIndex(input: string): number {
+  return input.lastIndexOf('/');
+}
+
+function slashReferenceLength(segment: string, skills: WorktreesSkill[]): number | null {
+  const parsed = parseSlashSkillCommand(segment, skills);
+  if (!parsed || !isCompleteSlashSkillReference(segment, skills)) return null;
+  const namePart = 1 + parsed.skill.name.length;
+  if (!parsed.suffix) return namePart;
+  return namePart + 1 + parsed.suffix.length;
+}
+
+/** Character length of a committed `/skill-name` token within a slash segment. */
+export function getSlashSkillTokenDisplayLength(segment: string, skills: WorktreesSkill[]): number | null {
+  const parsed = parseSlashSkillCommand(segment, skills);
+  if (!parsed || !isCompleteSlashSkillReference(segment, skills)) return null;
+  return 1 + parsed.skill.name.length;
+}
+
+/** Expand every complete `/skill` reference embedded in free-form text. */
+export function expandSlashSkillsInText(input: string, skills: WorktreesSkill[]): string {
+  let result = '';
+  let i = 0;
+  while (i < input.length) {
+    if (input[i] === '/') {
+      const segment = input.slice(i);
+      const len = slashReferenceLength(segment, skills);
+      if (len !== null) {
+        const parsed = parseSlashSkillCommand(segment, skills)!;
+        result += combineSkillPromptAndSuffix(parsed.skill.prompt, parsed.suffix);
+        i += len;
+        continue;
+      }
+    }
+    result += input[i];
+    i++;
+  }
+  return result;
+}
+
 export function resolveSlashSkillSubmission(
   input: string,
   skills: WorktreesSkill[],
@@ -190,4 +229,10 @@ export function resolveSlashSkillSubmission(
   const parsed = parseSlashSkillCommand(input, skills, highlightedSkill);
   if (!parsed || !isCompleteSlashSkillReference(input, skills)) return null;
   return combineSkillPromptAndSuffix(parsed.skill.prompt, parsed.suffix);
+}
+
+/** Resolve bottom-bar input into the prompt sent to the active session. */
+export function resolvePrompterSubmission(input: string, skills: WorktreesSkill[]): string | null {
+  if (!input.trim()) return null;
+  return expandSlashSkillsInText(input, skills);
 }
