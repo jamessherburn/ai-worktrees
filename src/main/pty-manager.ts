@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { IPC } from '@shared/ipc-channels';
 import type { AgentId } from '@shared/agents';
 import type { ActivityState } from '@shared/types';
-import { buildLaunchCommand } from './agents.js';
+import { buildLaunchCommand, type AgentStorageRoots } from './agents.js';
 import { detectAgents } from './agent-detection.js';
 import { markSessionStarted } from './sessions.js';
 import { enrichedPath, probeShellPath } from './resolve-shell-path.js';
@@ -104,6 +104,8 @@ export async function startPty(opts: {
   cwd: string;
   cols: number;
   rows: number;
+  storageRoots?: AgentStorageRoots;
+  agentEnv?: NodeJS.ProcessEnv;
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
   if (ptys.has(opts.sessionId)) {
     const existing = ptys.get(opts.sessionId)!;
@@ -118,9 +120,12 @@ export async function startPty(opts: {
     return { ok: false, error: `Worktree path no longer exists: ${opts.cwd}` };
   }
 
-  const launch = await buildLaunchCommand(opts.agentId, { cwd: opts.cwd });
+  const launch = await buildLaunchCommand(opts.agentId, {
+    cwd: opts.cwd,
+    storageRoots: opts.storageRoots,
+  });
 
-  const env = agentShellEnv();
+  const env = { ...agentShellEnv(), ...opts.agentEnv };
   const shell = probeShellPath();
 
   let proc: pty.IPty;

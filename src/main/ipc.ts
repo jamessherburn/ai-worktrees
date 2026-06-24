@@ -39,7 +39,11 @@ import {
 } from './git.js';
 import { deleteCleanupItems, listCleanupItems } from './cleanup.js';
 import { openWorktreeInVSCode } from './vscode.js';
-import { resolveAgentCwd } from './global-session-cwd.js';
+import {
+  globalAgentEnv,
+  globalAgentStoragePaths,
+  resolveAgentCwd,
+} from './global-session-cwd.js';
 import { detectAgents } from './agent-detection.js';
 import {
   getAgentSpend,
@@ -248,6 +252,12 @@ export function registerIpc(): void {
       cwd,
       cols: args.cols,
       rows: args.rows,
+      ...(session.global
+        ? {
+            storageRoots: globalAgentStoragePaths(session.id),
+            agentEnv: globalAgentEnv(session.id),
+          }
+        : {}),
     });
   });
 

@@ -3,8 +3,19 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { AgentId } from '@shared/agents';
 import type { CleanupGroupKind, LeftoverAgentSession } from '@shared/types';
-import { encodeClaudeProjectPath, encodeCursorProjectPath } from './agents.js';
-import { globalSessionCwdPath, userDataRootForCleanup } from './global-session-cwd.js';
+import {
+  claudeHasSavedConversation,
+  codexHasSavedSession,
+  cursorHasSavedSession,
+  encodeClaudeProjectPath,
+  encodeCursorProjectPath,
+} from './agents.js';
+import {
+  globalAgentCleanupId,
+  globalAgentStoragePaths,
+  globalSessionCwdPath,
+  userDataRootForCleanup,
+} from './global-session-cwd.js';
 import { compareByCreatedAtDesc, createdAtIso, statCreatedAtMs } from './path-created-at.js';
 import type { RepoInfo } from '@shared/types';
 
@@ -244,6 +255,62 @@ export function displayPathForAgentSession(cwd: string, groupKind: CleanupGroupK
   return cwd;
 }
 
+export async function listGlobalAgentStorageSessions(opts: {
+  codeDir: string;
+  sessions: { id: string; name: string; global?: boolean }[];
+}): Promise<LeftoverAgentSession[]> {
+  const root = join(userDataRootForCleanup(), 'global-agent-data');
+  let entries: string[];
+  try {
+    entries = await fs.readdir(root);
+  } catch {
+    return [];
+  }
+
+  const registeredGlobalIds = new Set(
+    opts.sessions.filter((session) => session.global).map((session) => session.id),
+  );
+  const sessionsById = new Map(opts.sessions.map((session) => [session.id, session]));
+  const results: LeftoverAgentSession[] = [];
+
+  for (const sessionId of entries) {
+    if (sessionId.startsWith('.')) continue;
+    const dataRoot = join(root, sessionId);
+    let createdAtMs = 0;
+    try {
+      const stat = await fs.stat(dataRoot);
+      if (!stat.isDirectory()) continue;
+      createdAtMs = statCreatedAtMs(stat);
+    } catch {
+      continue;
+    }
+
+    const storageRoots = globalAgentStoragePaths(sessionId);
+    const agents: AgentId[] = [];
+    if (await claudeHasSavedConversation(opts.codeDir, storageRoots)) agents.push('claude');
+    if (await cursorHasSavedSession(opts.codeDir, storageRoots)) agents.push('cursor');
+    if (await codexHasSavedSession(opts.codeDir, storageRoots)) agents.push('codex');
+    if (agents.length === 0) continue;
+
+    const session = sessionsById.get(sessionId);
+    const isActive = registeredGlobalIds.has(sessionId);
+    results.push({
+      id: globalAgentCleanupId(sessionId),
+      cwd: dataRoot,
+      groupName: 'Global',
+      groupKind: 'global',
+      repoPath: '',
+      agents: agents.sort() as AgentId[],
+      status: isActive ? 'active' : 'orphaned',
+      displayPath: session ? `Global · ${session.name}` : displayPathForAgentSession(dataRoot, 'global'),
+      createdAt: createdAtIso(createdAtMs),
+    });
+  }
+
+  results.sort(compareByCreatedAtDesc);
+  return results;
+}
+
 export async function listLeftoverAgentSessions(opts: {
   codeDir: string;
   repos: RepoInfo[];
@@ -271,11 +338,21 @@ export async function listLeftoverAgentSessions(opts: {
     opts.codeDir,
   );
 
-  const sessions: LeftoverAgentSession[] = [];
+  const globalStorageSessions = await listGlobalAgentStorageSessions({
+    codeDir: opts.codeDir,
+    sessions: opts.sessions ?? [],
+  });
+  const globalStorageIds = new Set(globalStorageSessions.map((session) => session.id));
+
+  const sessions: LeftoverAgentSession[] = [...globalStorageSessions];
   for (const [rawCwd, merged] of mergedEntries) {
     const recovered = tryRecoverWorktreePath(rawCwd, opts.repos, opts.codeDir);
     const cwd = recovered ?? rawCwd;
     const group = resolveCleanupGroup(cwd, opts.codeDir, opts.repos, globalSessionRoot);
+    if (group.groupKind === 'global') {
+      const legacySessionId = basename(cwd);
+      if (globalStorageIds.has(globalAgentCleanupId(legacySessionId))) continue;
+    }
     const agents = Array.from(merged.agents).sort() as AgentId[];
     sessions.push({
       id: agentSessionId(cwd),

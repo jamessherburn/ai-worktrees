@@ -20,9 +20,10 @@ import {
 } from './git.js';
 import { clearAgentSessionData } from './agents.js';
 import {
-  ensureGlobalSessionCwd,
+  ensureGlobalAgentStorage,
+  globalAgentStoragePaths,
   globalSessionCwdPath,
-  removeGlobalSessionCwd,
+  removeGlobalAgentStorage,
 } from './global-session-cwd.js';
 import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
@@ -51,7 +52,7 @@ export async function listSessions(): Promise<Session[]> {
   const sessions = data.sessions.map((s) => normalizeSessionRecord(s));
   for (const session of sessions) {
     if (session.global) {
-      await ensureGlobalSessionCwd(session.id, session.repoPath);
+      await ensureGlobalAgentStorage(session.id);
     }
   }
   return sessions;
@@ -113,8 +114,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     };
 
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
-    await ensureGlobalSessionCwd(session.id, codeDir);
-    await clearAgentSessionData(globalSessionCwdPath(session.id));
+    await ensureGlobalAgentStorage(session.id);
+    await clearAgentSessionData(codeDir, { storageRoots: globalAgentStoragePaths(session.id) });
     return { ok: true, session };
   }
 
@@ -247,12 +248,14 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
   const session = sessions.find((s) => s.id === input.id);
   if (!session) return { ok: false, error: 'Session not found.' };
 
-  const agentCwd = session.global ? globalSessionCwdPath(session.id) : session.worktreePath;
-  await clearAgentSessionData(agentCwd, { includeLocalAgentDirs: !session.global });
-
   if (session.global) {
-    await removeGlobalSessionCwd(session.id);
+    await clearAgentSessionData(session.repoPath, {
+      storageRoots: globalAgentStoragePaths(session.id),
+    });
+    await clearAgentSessionData(globalSessionCwdPath(session.id));
+    await removeGlobalAgentStorage(session.id);
   } else {
+    await clearAgentSessionData(session.worktreePath, { includeLocalAgentDirs: true });
     if (await pathExists(session.worktreePath)) {
       try {
         await removeWorktree(session.repoPath, session.worktreePath, input.force);

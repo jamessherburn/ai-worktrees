@@ -86,4 +86,17 @@ describe('agentSessionDataPaths', () => {
     assert.ok(!paths.some((p) => p.endsWith('/.cursor')));
     assert.ok(!paths.some((p) => p.endsWith('/.codex')));
   });
+
+  it('uses per-session storage roots for global sessions', () => {
+    const roots = {
+      claudeConfigDir: '/tmp/global/claude',
+      cursorConfigDir: '/tmp/global/cursor',
+      codexHome: '/tmp/global/codex',
+    };
+    const paths = agentSessionDataPaths(cwd, { storageRoots: roots });
+    assert.ok(paths.some((p) => p.startsWith('/tmp/global/claude/projects/')));
+    assert.ok(paths.some((p) => p.startsWith('/tmp/global/cursor/chats/')));
+    assert.ok(paths.some((p) => p.startsWith('/tmp/global/codex/sessions/')));
+    assert.ok(!paths.some((p) => p.includes('/.claude/projects/')));
+  });
 });
