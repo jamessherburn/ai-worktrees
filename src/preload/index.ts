@@ -6,6 +6,9 @@ import type {
   CreateSessionInput,
   CreateSessionResult,
   DeleteSessionInput,
+  CleanupDeleteInput,
+  CleanupDeleteResult,
+  CleanupSnapshot,
   TaskItem,
   FishSetupResult,
   GhSetupResult,
@@ -51,6 +54,9 @@ const api = {
   createSession: (input: CreateSessionInput): Promise<CreateSessionResult> =>
     ipcRenderer.invoke(IPC.CreateSession, input),
   deleteSession: (input: DeleteSessionInput) => ipcRenderer.invoke(IPC.DeleteSession, input),
+  listCleanupItems: (): Promise<CleanupSnapshot> => ipcRenderer.invoke(IPC.CleanupList),
+  deleteCleanupItems: (input: CleanupDeleteInput): Promise<CleanupDeleteResult> =>
+    ipcRenderer.invoke(IPC.CleanupDelete, input),
   listRepos: (): Promise<RepoInfo[]> => ipcRenderer.invoke(IPC.ListRepos),
   getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.GetSettings),
   updateSettings: (patch: Partial<Settings>): Promise<Settings> =>

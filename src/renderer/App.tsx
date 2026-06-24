@@ -10,6 +10,7 @@ import { NewSessionModal } from './components/NewSessionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AgentDataModal } from './components/AgentDataModal';
+import { CleanupModal } from './components/CleanupModal';
 import { GitPanel } from './components/GitPanel';
 import { TodoModal } from './components/TodoModal';
 import { BuiltInTerminalPanel } from './components/BuiltInTerminalPanel';
@@ -122,6 +123,7 @@ export function App() {
   const [showNew, setShowNew] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentData, setShowAgentData] = useState(false);
+  const [showCleanup, setShowCleanup] = useState(false);
   const [showTodoModal, setShowTodoModal] = useState(false);
   const [panelPrefsBySession, setPanelPrefsBySession] = useState<SessionPanelPrefsMap>(() =>
     readSessionPanelPrefsMap(),
@@ -214,6 +216,7 @@ export function App() {
     showNew ||
     showSettings ||
     showAgentData ||
+    showCleanup ||
     showTodoModal ||
     pendingDelete !== null ||
     vscodeMissing;
@@ -715,6 +718,7 @@ export function App() {
           setShowSettings(true);
         }}
         onOpenAgentData={() => setShowAgentData(true)}
+        onOpenCleanup={() => setShowCleanup(true)}
         onSetSessionLabels={(s, labelIds) => void setSessionLabels(s.id, labelIds)}
         onToggleMuted={(s, muted) => void setSessionMuted(s.id, muted)}
         onManageLabels={openManageLabels}
@@ -872,6 +876,8 @@ export function App() {
       )}
 
       {showAgentData && <AgentDataModal onClose={() => setShowAgentData(false)} />}
+
+      {showCleanup && <CleanupModal onClose={() => setShowCleanup(false)} />}
 
       {vscodeMissing && (
         <VSCodeMissingModal onClose={() => setVscodeMissing(false)} />

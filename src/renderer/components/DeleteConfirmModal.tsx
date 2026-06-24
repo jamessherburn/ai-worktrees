@@ -33,10 +33,14 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
           <div className="modal-title">Delete session "{session.name}"?</div>
           <div className="modal-subtitle">
             {isGlobal ? (
-              <>This will remove the global session record. Your code directory is not modified.</>
+              <>
+                This will remove the global session record and clear saved agent conversations for
+                this session. Your code directory is not modified.
+              </>
             ) : (
               <>
-                This will remove the worktree at <span className="kbd">{session.worktreePath}</span>.
+                This will remove the worktree at <span className="kbd">{session.worktreePath}</span>{' '}
+                and clear saved agent conversations (Claude, Cursor, Codex, etc.) for this path.
               </>
             )}
           </div>

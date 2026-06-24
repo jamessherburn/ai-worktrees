@@ -89,6 +89,58 @@ export type DeleteSessionInput = {
   deleteBranch: boolean;
 };
 
+export type CleanupGroupKind = 'repo' | 'global' | 'external';
+
+export type LeftoverWorktree = {
+  id: string;
+  repoPath: string;
+  repoName: string;
+  groupName: string;
+  groupKind: 'repo';
+  worktreePath: string;
+  branchName: string;
+  /** False when the directory exists on disk but is not registered with git worktree. */
+  registered: boolean;
+  createdAt: string;
+};
+
+export type LeftoverBranch = {
+  id: string;
+  repoPath: string;
+  repoName: string;
+  groupName: string;
+  groupKind: 'repo';
+  branchName: string;
+  createdAt: string;
+};
+
+export type LeftoverAgentSession = {
+  id: string;
+  cwd: string;
+  groupName: string;
+  groupKind: CleanupGroupKind;
+  repoPath: string;
+  agents: AgentId[];
+  status: 'active' | 'orphaned' | 'external';
+  displayPath: string;
+  createdAt: string;
+};
+
+export type CleanupSnapshot = {
+  worktrees: LeftoverWorktree[];
+  branches: LeftoverBranch[];
+  agentSessions: LeftoverAgentSession[];
+};
+
+export type CleanupDeleteInput = {
+  worktreeIds: string[];
+  branchIds: string[];
+  agentSessionIds: string[];
+  force: boolean;
+};
+
+export type CleanupDeleteResult = { ok: true } | { ok: false; error: string };
+
 export type CreateSessionResult =
   | { ok: true; session: Session }
   | { ok: false; error: string };

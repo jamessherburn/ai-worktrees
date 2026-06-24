@@ -19,6 +19,9 @@ import type {
   Session,
   Settings,
   SessionWithStatus,
+  CleanupDeleteInput,
+  CleanupDeleteResult,
+  CleanupSnapshot,
 } from '@shared/types';
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
@@ -34,6 +37,7 @@ import {
   stageFile,
   unstageFile,
 } from './git.js';
+import { deleteCleanupItems, listCleanupItems } from './cleanup.js';
 import { openWorktreeInVSCode } from './vscode.js';
 import { resolveAgentCwd } from './global-session-cwd.js';
 import { detectAgents } from './agent-detection.js';
@@ -381,6 +385,12 @@ export function registerIpc(): void {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  });
+
+  ipcMain.handle(IPC.CleanupList, async (): Promise<CleanupSnapshot> => listCleanupItems());
+
+  ipcMain.handle(IPC.CleanupDelete, async (_e, input: CleanupDeleteInput): Promise<CleanupDeleteResult> => {
+    return deleteCleanupItems(input);
   });
 
   ipcMain.handle(IPC.OpenInVSCode, async (_e, path: string): Promise<OpenInVSCodeResult> => {
