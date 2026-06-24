@@ -97,6 +97,48 @@ export const AGENT_RESUME_PROBES: Record<AgentId, AgentResumeProbe> = {
   gemini: async () => false,
 };
 
+export type ClearAgentSessionDataOptions = {
+  /** When true, also remove agent dirs inside the session cwd (safe for dedicated worktrees). */
+  includeLocalAgentDirs?: boolean;
+};
+
+/** Paths where agents store per-project session data for a given cwd. */
+export function agentSessionDataPaths(
+  cwd: string,
+  options: ClearAgentSessionDataOptions = {},
+): string[] {
+  const encodedClaude = encodeClaudeProjectPath(cwd);
+  const encodedCursor = encodeCursorProjectPath(cwd);
+  const paths = [
+    join(homedir(), '.claude', 'projects', encodedClaude),
+    join(homedir(), '.cursor', 'projects', encodedCursor),
+    join(homedir(), '.cursor', 'chats', encodedCursor),
+    join(homedir(), '.cursor', 'projects', encodedClaude),
+    join(homedir(), '.cursor', 'chats', encodedClaude),
+    join(homedir(), '.codex', 'sessions', encodedClaude),
+    join(homedir(), '.codex', 'projects', encodedClaude),
+  ];
+  if (options.includeLocalAgentDirs) {
+    paths.push(join(cwd, '.cursor'), join(cwd, '.codex'));
+  }
+  return paths;
+}
+
+/** Remove saved agent conversations for a session cwd so a new session does not resume. */
+export async function clearAgentSessionData(
+  cwd: string,
+  options: ClearAgentSessionDataOptions = {},
+): Promise<void> {
+  for (const path of agentSessionDataPaths(cwd, options)) {
+    try {
+      await fs.rm(path, { recursive: true, force: true });
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+  }
+}
+
 /** Pure launch decision: only resume when a probe confirms saved state exists. */
 export function composeLaunchCommand(agentId: AgentId, canResume: boolean): LaunchCommand {
   const spec = AGENT_LAUNCH_SPECS[agentId];

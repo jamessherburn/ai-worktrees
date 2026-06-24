@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import type { AgentId } from '@shared/agents';
 import {
   AGENT_LAUNCH_SPECS,
+  agentSessionDataPaths,
   composeLaunchCommand,
   encodeClaudeProjectPath,
   encodeCursorProjectPath,
@@ -65,5 +66,24 @@ describe('composeLaunchCommand', () => {
         );
       }
     }
+  });
+});
+
+describe('agentSessionDataPaths', () => {
+  const cwd = '/Users/jamessherburn/code/myrepo-feature';
+
+  it('includes Claude, Cursor, and Codex home dirs for a worktree cwd', () => {
+    const paths = agentSessionDataPaths(cwd, { includeLocalAgentDirs: true });
+    assert.ok(paths.some((p) => p.includes('.claude/projects/-Users-jamessherburn-code-myrepo-feature')));
+    assert.ok(paths.some((p) => p.includes('.cursor/projects/Users-jamessherburn-code-myrepo-feature')));
+    assert.ok(paths.some((p) => p.includes('.codex/sessions/-Users-jamessherburn-code-myrepo-feature')));
+    assert.ok(paths.includes(`${cwd}/.cursor`));
+    assert.ok(paths.includes(`${cwd}/.codex`));
+  });
+
+  it('omits local agent dirs for global session cwds', () => {
+    const paths = agentSessionDataPaths(cwd);
+    assert.ok(!paths.some((p) => p.endsWith('/.cursor')));
+    assert.ok(!paths.some((p) => p.endsWith('/.codex')));
   });
 });

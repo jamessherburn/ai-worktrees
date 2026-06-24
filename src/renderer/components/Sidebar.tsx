@@ -24,6 +24,7 @@ type Props = {
   onNewSession: () => void;
   onOpenSettings: () => void;
   onOpenAgentData: () => void;
+  onOpenCleanup: () => void;
   onSetSessionLabels: (session: SessionWithStatus, labelIds: string[]) => void;
   onToggleMuted: (session: SessionWithStatus, muted: boolean) => void;
   onManageLabels: () => void;
@@ -58,6 +59,7 @@ export function Sidebar({
   onNewSession,
   onOpenSettings,
   onOpenAgentData,
+  onOpenCleanup,
   onSetSessionLabels,
   onToggleMuted,
   onManageLabels,
@@ -134,6 +136,14 @@ export function Sidebar({
             aria-label="Agent Data"
           >
             <DocIcon />
+          </button>
+          <button
+            className="icon-btn"
+            title="Cleanup"
+            onClick={onOpenCleanup}
+            aria-label="Cleanup leftover worktrees and branches"
+          >
+            <CleanupIcon />
           </button>
           <button
             className="icon-btn"
@@ -284,6 +294,18 @@ function DocIcon() {
       <polyline points="14 2 14 8 20 8" />
       <line x1="8" y1="13" x2="16" y2="13" />
       <line x1="8" y1="17" x2="13" y2="17" />
+    </svg>
+  );
+}
+
+function CleanupIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </svg>
   );
 }

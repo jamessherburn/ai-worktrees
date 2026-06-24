@@ -47,6 +47,8 @@ export const IPC = {
   GhSetupProgress: 'gh-setup:progress',
   FishSetupEnsure: 'fish-setup:ensure',
   FishSetupProgress: 'fish-setup:progress',
+  CleanupList: 'cleanup:list',
+  CleanupDelete: 'cleanup:delete',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

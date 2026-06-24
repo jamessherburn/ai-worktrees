@@ -18,7 +18,12 @@ import {
   removeWorktree,
   resolveDefaultBranch,
 } from './git.js';
-import { ensureGlobalSessionCwd, removeGlobalSessionCwd } from './global-session-cwd.js';
+import { clearAgentSessionData } from './agents.js';
+import {
+  ensureGlobalSessionCwd,
+  globalSessionCwdPath,
+  removeGlobalSessionCwd,
+} from './global-session-cwd.js';
 import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
@@ -109,6 +114,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
     await ensureGlobalSessionCwd(session.id, codeDir);
+    await clearAgentSessionData(globalSessionCwdPath(session.id));
     return { ok: true, session };
   }
 
@@ -154,6 +160,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
   } catch (err) {
     return { ok: false, error: `git worktree add failed: ${(err as Error).message}` };
   }
+
+  await clearAgentSessionData(worktreePath, { includeLocalAgentDirs: true });
 
   const labelIds = normalizeSessionLabelIds(input.labelIds);
 
@@ -238,6 +246,9 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
   const sessions = await listSessions();
   const session = sessions.find((s) => s.id === input.id);
   if (!session) return { ok: false, error: 'Session not found.' };
+
+  const agentCwd = session.global ? globalSessionCwdPath(session.id) : session.worktreePath;
+  await clearAgentSessionData(agentCwd, { includeLocalAgentDirs: !session.global });
 
   if (session.global) {
     await removeGlobalSessionCwd(session.id);

@@ -169,6 +169,75 @@ export async function hasOrigin(repoPath: string): Promise<boolean> {
   }
 }
 
+export type GitWorktreeEntry = {
+  path: string;
+  branchName: string;
+  isMain: boolean;
+};
+
+export async function listGitWorktrees(repoPath: string): Promise<GitWorktreeEntry[]> {
+  const out = await git(repoPath, ['worktree', 'list', '--porcelain']);
+  if (!out) return [];
+
+  const entries: GitWorktreeEntry[] = [];
+  const blocks = out.split('\n\n').filter(Boolean);
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    let path = '';
+    let branchName = '';
+    for (const line of lines) {
+      if (line.startsWith('worktree ')) path = line.slice('worktree '.length);
+      else if (line.startsWith('branch ')) {
+        branchName = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+      }
+    }
+    if (!path) continue;
+    entries.push({
+      path,
+      branchName,
+      isMain: path === repoPath,
+    });
+  }
+  return entries;
+}
+
+export async function listLocalBranches(repoPath: string): Promise<string[]> {
+  const out = await git(repoPath, ['branch', '--format=%(refname:short)']);
+  if (!out) return [];
+  return out.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+export type LocalBranchInfo = {
+  name: string;
+  createdAtMs: number;
+};
+
+export async function listLocalBranchesWithCreatorDates(repoPath: string): Promise<LocalBranchInfo[]> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    'refs/heads/',
+    '--format=%(creatordate:iso8601-strict)|%(refname:short)',
+  ]);
+  if (!out) return [];
+
+  const branches: LocalBranchInfo[] = [];
+  for (const line of out.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const sep = trimmed.indexOf('|');
+    if (sep === -1) continue;
+    const dateRaw = trimmed.slice(0, sep);
+    const name = trimmed.slice(sep + 1);
+    if (!name) continue;
+    const createdAtMs = Date.parse(dateRaw);
+    branches.push({
+      name,
+      createdAtMs: Number.isFinite(createdAtMs) ? createdAtMs : 0,
+    });
+  }
+  return branches;
+}
+
 function kindFromCode(code: string): GitFileChangeKind {
   switch (code) {
     case 'M': return 'modified';

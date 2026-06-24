@@ -12,6 +12,11 @@ export function setUserDataRootForTests(root: string | undefined): void {
   userDataRootOverride = root;
 }
 
+/** Used by cleanup to detect global-session agent data paths without loading Electron when testing. */
+export function userDataRootForCleanup(): string {
+  return userDataRoot();
+}
+
 function userDataRoot(): string {
   if (userDataRootOverride) return userDataRootOverride;
   const { app } = requireElectron('electron') as typeof import('electron');
