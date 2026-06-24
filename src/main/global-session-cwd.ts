@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Session } from '@shared/types';
+import type { AgentStorageRoots } from './agents.js';
 
 const requireElectron = createRequire(import.meta.url);
 
@@ -23,11 +24,53 @@ function userDataRoot(): string {
   return app.getPath('userData');
 }
 
-/** Per-global-session directory under userData; symlinked to the code directory for agent cwd isolation. */
+/** Legacy per-global-session symlink path (pre–config-dir isolation). */
 export function globalSessionCwdPath(sessionId: string): string {
   return join(userDataRoot(), 'global-sessions', sessionId);
 }
 
+/** Per-global-session agent config roots under userData. */
+export function globalAgentDataRoot(sessionId: string): string {
+  return join(userDataRoot(), 'global-agent-data', sessionId);
+}
+
+export function globalAgentStoragePaths(sessionId: string): AgentStorageRoots {
+  const root = globalAgentDataRoot(sessionId);
+  return {
+    claudeConfigDir: join(root, 'claude'),
+    cursorConfigDir: join(root, 'cursor'),
+    codexHome: join(root, 'codex'),
+  };
+}
+
+export function globalAgentEnv(sessionId: string): NodeJS.ProcessEnv {
+  const { claudeConfigDir, cursorConfigDir, codexHome } = globalAgentStoragePaths(sessionId);
+  return {
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+    CURSOR_CONFIG_DIR: cursorConfigDir,
+    CODEX_HOME: codexHome,
+  };
+}
+
+export function globalAgentCleanupId(sessionId: string): string {
+  return `agent::global::${sessionId}`;
+}
+
+export async function ensureGlobalAgentStorage(sessionId: string): Promise<void> {
+  const { claudeConfigDir, cursorConfigDir, codexHome } = globalAgentStoragePaths(sessionId);
+  await Promise.all([
+    fs.mkdir(claudeConfigDir, { recursive: true }),
+    fs.mkdir(cursorConfigDir, { recursive: true }),
+    fs.mkdir(codexHome, { recursive: true }),
+  ]);
+}
+
+export async function removeGlobalAgentStorage(sessionId: string): Promise<void> {
+  await fs.rm(globalAgentDataRoot(sessionId), { recursive: true, force: true });
+  await removeGlobalSessionCwd(sessionId);
+}
+
+/** @deprecated Legacy symlink cwd; kept for cleaning up older agent data keyed by symlink path. */
 export async function ensureGlobalSessionCwd(sessionId: string, codeDir: string): Promise<string> {
   const linkPath = globalSessionCwdPath(sessionId);
   await fs.mkdir(dirname(linkPath), { recursive: true });
@@ -39,7 +82,6 @@ export async function ensureGlobalSessionCwd(sessionId: string, codeDir: string)
       if (target === codeDir) return linkPath;
       await fs.unlink(linkPath);
     } else {
-      // Unexpected file type; leave it alone so we do not destroy user data.
       return linkPath;
     }
   } catch (err: unknown) {
@@ -58,10 +100,11 @@ export async function removeGlobalSessionCwd(sessionId: string): Promise<void> {
   }
 }
 
-/** Agent PTY cwd: unique per global session; worktree path for repo sessions. */
+/** Agent PTY cwd: code directory for global sessions; worktree path for repo sessions. */
 export async function resolveAgentCwd(session: Session): Promise<string> {
   if (session.global) {
-    return ensureGlobalSessionCwd(session.id, session.repoPath);
+    await ensureGlobalAgentStorage(session.id);
+    return session.repoPath;
   }
   return session.worktreePath;
 }

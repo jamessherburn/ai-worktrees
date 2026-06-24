@@ -10,7 +10,12 @@ import type {
 } from '@shared/types';
 import { listLeftoverAgentSessions } from './agent-session-scan.js';
 import { clearAgentSessionData } from './agents.js';
-import { globalSessionCwdPath } from './global-session-cwd.js';
+import {
+  ensureGlobalAgentStorage,
+  globalAgentStoragePaths,
+  globalSessionCwdPath,
+  removeGlobalAgentStorage,
+} from './global-session-cwd.js';
 import {
   deleteBranch,
   listGitWorktrees,
@@ -51,6 +56,7 @@ function activeAgentCwds(sessions: Session[]): Set<string> {
   const cwds = new Set<string>();
   for (const session of sessions) {
     if (session.global) {
+      cwds.add(session.repoPath);
       cwds.add(globalSessionCwdPath(session.id));
     } else {
       cwds.add(session.worktreePath);
@@ -236,6 +242,30 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
   }
 
   for (const id of input.agentSessionIds) {
+    if (id.startsWith('agent::global::')) {
+      const sessionId = id.slice('agent::global::'.length);
+      const item = agentSessionById.get(id);
+      if (!item) {
+        errors.push(`Agent session not found: ${id}`);
+        continue;
+      }
+      try {
+        const settings = await getSettings();
+        await clearAgentSessionData(settings.codeDir, {
+          storageRoots: globalAgentStoragePaths(sessionId),
+        });
+        await clearAgentSessionData(globalSessionCwdPath(sessionId));
+        if (item.status === 'orphaned') {
+          await removeGlobalAgentStorage(sessionId);
+        } else {
+          await ensureGlobalAgentStorage(sessionId);
+        }
+      } catch (err) {
+        errors.push(`${item.displayPath}: ${(err as Error).message}`);
+      }
+      continue;
+    }
+
     const item = agentSessionById.get(id);
     if (!item) {
       errors.push(`Agent session not found: ${id}`);

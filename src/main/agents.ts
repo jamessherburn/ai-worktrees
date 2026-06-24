@@ -8,10 +8,17 @@ export type LaunchCommand = {
   shellCommand: string;
 };
 
+export type AgentStorageRoots = {
+  claudeConfigDir?: string;
+  cursorConfigDir?: string;
+  codexHome?: string;
+};
+
 export type LaunchOptions = {
   cwd: string;
   /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
+  storageRoots?: AgentStorageRoots;
 };
 
 export type AgentLaunchSpec = {
@@ -19,7 +26,10 @@ export type AgentLaunchSpec = {
   resumeArgs: string | null;
 };
 
-export type AgentResumeProbe = (cwd: string) => Promise<boolean>;
+export type AgentResumeProbe = (
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+) => Promise<boolean>;
 
 export const AGENT_LAUNCH_SPECS: Record<AgentId, AgentLaunchSpec> = {
   claude: { binary: 'claude', resumeArgs: '--continue' },
@@ -45,6 +55,18 @@ export function encodeProjectPath(absPath: string): string {
 
 export { encodeClaudeProjectPath, encodeCursorProjectPath };
 
+function claudeConfigRoot(storageRoots?: AgentStorageRoots): string {
+  return storageRoots?.claudeConfigDir ?? join(homedir(), '.claude');
+}
+
+function cursorConfigRoot(storageRoots?: AgentStorageRoots): string {
+  return storageRoots?.cursorConfigDir ?? join(homedir(), '.cursor');
+}
+
+function codexConfigRoot(storageRoots?: AgentStorageRoots): string {
+  return storageRoots?.codexHome ?? join(homedir(), '.codex');
+}
+
 async function dirHasEntries(path: string, predicate?: (name: string) => boolean): Promise<boolean> {
   try {
     const entries = await fs.readdir(path);
@@ -55,19 +77,30 @@ async function dirHasEntries(path: string, predicate?: (name: string) => boolean
   }
 }
 
-export async function claudeHasSavedConversation(cwd: string): Promise<boolean> {
-  const projectDir = join(homedir(), '.claude', 'projects', encodeClaudeProjectPath(cwd));
+export async function claudeHasSavedConversation(
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+): Promise<boolean> {
+  const projectDir = join(
+    claudeConfigRoot(storageRoots),
+    'projects',
+    encodeClaudeProjectPath(cwd),
+  );
   return dirHasEntries(projectDir, (e) => e.endsWith('.jsonl'));
 }
 
-export async function cursorHasSavedSession(cwd: string): Promise<boolean> {
+export async function cursorHasSavedSession(
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+): Promise<boolean> {
   const encoded = encodeCursorProjectPath(cwd);
   const legacyEncoded = encodeClaudeProjectPath(cwd);
+  const cursorRoot = cursorConfigRoot(storageRoots);
   const candidates = [
-    join(homedir(), '.cursor', 'projects', encoded),
-    join(homedir(), '.cursor', 'chats', encoded),
-    join(homedir(), '.cursor', 'projects', legacyEncoded),
-    join(homedir(), '.cursor', 'chats', legacyEncoded),
+    join(cursorRoot, 'projects', encoded),
+    join(cursorRoot, 'chats', encoded),
+    join(cursorRoot, 'projects', legacyEncoded),
+    join(cursorRoot, 'chats', legacyEncoded),
     join(cwd, '.cursor'),
   ];
   for (const path of candidates) {
@@ -76,14 +109,22 @@ export async function cursorHasSavedSession(cwd: string): Promise<boolean> {
   return false;
 }
 
-export async function codexHasSavedSession(cwd: string): Promise<boolean> {
+export async function codexHasSavedSession(
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+): Promise<boolean> {
   const encoded = encodeClaudeProjectPath(cwd);
+  const codexRoot = codexConfigRoot(storageRoots);
   const candidates = [
-    join(homedir(), '.codex', 'sessions', encoded),
-    join(homedir(), '.codex', 'projects', encoded),
-    join(homedir(), '.codex', 'history'),
+    join(codexRoot, 'sessions', encoded),
+    join(codexRoot, 'projects', encoded),
+    join(codexRoot, 'history'),
+    join(codexRoot, 'history.jsonl'),
     join(cwd, '.codex'),
   ];
+  if (!storageRoots?.codexHome) {
+    candidates.push(join(homedir(), '.codex', 'history'));
+  }
   for (const path of candidates) {
     if (await dirHasEntries(path)) return true;
   }
@@ -100,6 +141,7 @@ export const AGENT_RESUME_PROBES: Record<AgentId, AgentResumeProbe> = {
 export type ClearAgentSessionDataOptions = {
   /** When true, also remove agent dirs inside the session cwd (safe for dedicated worktrees). */
   includeLocalAgentDirs?: boolean;
+  storageRoots?: AgentStorageRoots;
 };
 
 /** Paths where agents store per-project session data for a given cwd. */
@@ -107,17 +149,26 @@ export function agentSessionDataPaths(
   cwd: string,
   options: ClearAgentSessionDataOptions = {},
 ): string[] {
+  const storageRoots = options.storageRoots;
   const encodedClaude = encodeClaudeProjectPath(cwd);
   const encodedCursor = encodeCursorProjectPath(cwd);
+  const claudeRoot = claudeConfigRoot(storageRoots);
+  const cursorRoot = cursorConfigRoot(storageRoots);
+  const codexRoot = codexConfigRoot(storageRoots);
   const paths = [
-    join(homedir(), '.claude', 'projects', encodedClaude),
-    join(homedir(), '.cursor', 'projects', encodedCursor),
-    join(homedir(), '.cursor', 'chats', encodedCursor),
-    join(homedir(), '.cursor', 'projects', encodedClaude),
-    join(homedir(), '.cursor', 'chats', encodedClaude),
-    join(homedir(), '.codex', 'sessions', encodedClaude),
-    join(homedir(), '.codex', 'projects', encodedClaude),
+    join(claudeRoot, 'projects', encodedClaude),
+    join(cursorRoot, 'projects', encodedCursor),
+    join(cursorRoot, 'chats', encodedCursor),
+    join(cursorRoot, 'projects', encodedClaude),
+    join(cursorRoot, 'chats', encodedClaude),
+    join(codexRoot, 'sessions', encodedClaude),
+    join(codexRoot, 'projects', encodedClaude),
+    join(codexRoot, 'history'),
+    join(codexRoot, 'history.jsonl'),
   ];
+  if (!storageRoots?.codexHome) {
+    paths.push(join(homedir(), '.codex', 'history'));
+  }
   if (options.includeLocalAgentDirs) {
     paths.push(join(cwd, '.cursor'), join(cwd, '.codex'));
   }
@@ -154,6 +205,7 @@ export async function buildLaunchCommand(
   options: LaunchOptions,
 ): Promise<LaunchCommand> {
   const canResume =
-    options.canResume ?? (await AGENT_RESUME_PROBES[agentId](options.cwd));
+    options.canResume ??
+    (await AGENT_RESUME_PROBES[agentId](options.cwd, options.storageRoots));
   return composeLaunchCommand(agentId, canResume);
 }
