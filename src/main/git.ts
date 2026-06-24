@@ -175,6 +175,10 @@ export type GitWorktreeEntry = {
   isMain: boolean;
 };
 
+function normalizeWorktreePath(path: string): string {
+  return path.replace(/\/+$/, '');
+}
+
 export async function listGitWorktrees(repoPath: string): Promise<GitWorktreeEntry[]> {
   const out = await git(repoPath, ['worktree', 'list', '--porcelain']);
   if (!out) return [];
@@ -195,7 +199,7 @@ export async function listGitWorktrees(repoPath: string): Promise<GitWorktreeEnt
     entries.push({
       path,
       branchName,
-      isMain: path === repoPath,
+      isMain: normalizeWorktreePath(path) === normalizeWorktreePath(repoPath),
     });
   }
   return entries;
