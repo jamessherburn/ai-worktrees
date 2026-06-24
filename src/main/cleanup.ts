@@ -131,6 +131,7 @@ export async function listCleanupItems(): Promise<CleanupSnapshot> {
 
     for (const entry of registered) {
       if (entry.isMain) continue;
+      if (entry.branchName === defaultBranch) continue;
       if (activeWorktreePaths.has(entry.path)) continue;
       extraCwds.push(entry.path);
       worktrees.push({
@@ -147,8 +148,11 @@ export async function listCleanupItems(): Promise<CleanupSnapshot> {
     }
 
     const unregistered = await scanUnregisteredWorktreeDirs(repo.path, registeredPaths);
-    for (const item of unregistered) extraCwds.push(item.worktreePath);
-    worktrees.push(...unregistered);
+    for (const item of unregistered) {
+      if (item.branchName === defaultBranch) continue;
+      extraCwds.push(item.worktreePath);
+      worktrees.push(item);
+    }
 
     const checkedOutBranches = new Set(
       registered.map((w) => w.branchName).filter(Boolean),
@@ -180,13 +184,15 @@ export async function listCleanupItems(): Promise<CleanupSnapshot> {
   worktrees.sort(compareByCreatedAtDesc);
   branches.sort(compareByCreatedAtDesc);
 
-  const agentSessions = await listLeftoverAgentSessions({
-    codeDir: settings.codeDir,
-    repos,
-    activeAgentCwds: agentCwds,
-    sessions,
-    extraCwds: [...worktrees.map((w) => w.worktreePath), ...extraCwds],
-  });
+  const agentSessions = (
+    await listLeftoverAgentSessions({
+      codeDir: settings.codeDir,
+      repos,
+      activeAgentCwds: agentCwds,
+      sessions,
+      extraCwds: [...worktrees.map((w) => w.worktreePath), ...extraCwds],
+    })
+  ).filter((session) => session.groupKind !== 'external');
 
   return { worktrees, branches, agentSessions };
 }
@@ -235,6 +241,7 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
       errors.push(`Agent session not found: ${id}`);
       continue;
     }
+    if (item.groupKind === 'external') continue;
     try {
       await clearAgentSessionData(item.cwd, {
         includeLocalAgentDirs: item.groupKind !== 'global',

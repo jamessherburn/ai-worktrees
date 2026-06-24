@@ -102,6 +102,28 @@ export function CleanupModal({ onClose }: Props) {
   const selectAllInTab = () => selectIds(tabItems);
   const clearTabSelection = () => deselectIds(tabItems);
 
+  const removeDeletedFromSnapshot = useCallback((ids: Set<string>) => {
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+      switch (tab) {
+        case 'branches':
+          return { ...prev, branches: prev.branches.filter((b) => !ids.has(b.id)) };
+        case 'worktrees':
+          return { ...prev, worktrees: prev.worktrees.filter((w) => !ids.has(w.id)) };
+        case 'agentSessions':
+          return {
+            ...prev,
+            agentSessions: prev.agentSessions.filter((a) => !ids.has(a.id)),
+          };
+      }
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+  }, [tab]);
+
   const deleteIds = async (ids: string[]) => {
     if (ids.length === 0) return;
     setBusy(true);
@@ -122,8 +144,9 @@ export function CleanupModal({ onClose }: Props) {
       setBusy(false);
       return;
     }
+    removeDeletedFromSnapshot(new Set(ids));
     setBusy(false);
-    await refresh();
+    void refresh();
   };
 
   const deleteSelectedInTab = () => {
@@ -145,7 +168,7 @@ export function CleanupModal({ onClose }: Props) {
           <div className="modal-title">Cleanup</div>
           <div className="modal-subtitle">
             Remove leftover branches, worktrees, and agent session data. Items are grouped by
-            repository, Global sessions, or External projects.
+            repository or Global sessions.
           </div>
           <div className="cleanup-modal-tabs" role="tablist" aria-label="Cleanup categories">
             {TABS.map((t) => {

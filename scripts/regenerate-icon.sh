@@ -2,8 +2,8 @@
 # Recolor the tree icon to dark blue and rebuild icon.icns (macOS).
 #
 # The source icon has a solid (opaque) black background; we must not recolor
-# that background or the result becomes a flat blue square. A light variant
-# swaps the black background for white.
+# that background or the result becomes a flat blue square. The light dock icon
+# uses a transparent background so macOS can apply the standard squircle mask.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/build/icon-source-1024.png"
@@ -57,7 +57,7 @@ def make_light_variant(dark_path: str, light_path: str) -> None:
             if not a:
                 continue
             if rr < 40 and gg < 40 and bb < 40:
-                px[x, y] = (255, 255, 255, a)
+                px[x, y] = (0, 0, 0, 0)
     img.save(light_path)
 
 recolor_tree(dark_path)
