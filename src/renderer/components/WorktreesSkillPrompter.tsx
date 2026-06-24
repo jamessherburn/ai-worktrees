@@ -61,9 +61,17 @@ function PrompterMirror({
         );
         return parts;
       }
+
+      parts.push(
+        <span key={key++} className="worktrees-skill-prompter-body">
+          /
+        </span>,
+      );
+      i++;
+      continue;
     }
 
-    let next = i;
+    let next = i + 1;
     while (next < value.length && value[next] !== '/') next++;
     parts.push(
       <span key={key++} className="worktrees-skill-prompter-body">
@@ -213,6 +221,12 @@ export function WorktreesSkillPrompter({
       return;
     }
 
+    if (e.key === 'Escape' && value) {
+      e.preventDefault();
+      clear();
+      return;
+    }
+
     if (!slashQueryActive || !open) return;
 
     switch (e.key) {
@@ -223,10 +237,6 @@ export function WorktreesSkillPrompter({
       case 'ArrowUp':
         e.preventDefault();
         setHighlightIndex((i) => Math.max(0, i - 1));
-        break;
-      case 'Escape':
-        e.preventDefault();
-        clear();
         break;
       case 'Tab': {
         const resolved = matches[highlightIndex] ?? matches[0];
@@ -254,7 +264,9 @@ export function WorktreesSkillPrompter({
     <div className={`worktrees-skill-prompter${open ? ' worktrees-skill-prompter--open' : ''}`}>
       <div className={fieldClass}>
         <PrompterPrefixIcon />
-        <div className="worktrees-skill-prompter-editor">
+        <div
+          className={`worktrees-skill-prompter-editor${value && !disabled ? ' worktrees-skill-prompter-editor--has-value' : ''}`}
+        >
           <div className="worktrees-skill-prompter-mirror" aria-hidden="true">
             <PrompterMirror value={value} skills={skills} activeSlashIndex={slashIndex} />
           </div>
@@ -285,6 +297,21 @@ export function WorktreesSkillPrompter({
               window.setTimeout(() => setOpen(false), 120);
             }}
           />
+          {value && !disabled ? (
+            <button
+              type="button"
+              className="worktrees-skill-prompter-clear"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                clear();
+                inputRef.current?.focus();
+              }}
+              aria-label="Clear input"
+              title="Clear (Esc)"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       </div>
       {open && (

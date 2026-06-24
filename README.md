@@ -41,7 +41,7 @@ Each session remembers its own panel layout:
 **Shift+N** cycles every non-muted session in sidebar order. **Shift+J** cycles focus between the agent terminal, shell panel (when open), and the skills bar. **Shift+↓** jumps to the bottom of the agent terminal. Muted sessions are skipped when cycling; mute from the speaker icon on a session card or the context menu.
 
 **6. Run a skill.**  
-The bottom bar has a slash-command prompt (left side). Type `/` to pick a skill — e.g. `/Summarise Session` — press **Enter** to lock it in, add any extra text, then **Enter** again to send it to the active agent. Manage skills in **Settings → Skills**; they work across Claude, Cursor, Gemini, and Codex sessions.
+The bottom bar has a slash-command prompt (left side). Type `/` to pick a skill — e.g. `/Summarise Session` — press **Enter** to lock it in, add any extra text, then **Enter** again to send it to the active agent. Press **Esc** or click **×** to clear the field. Manage skills in **Settings → Skills**; they work across Claude, Cursor, Gemini, and Codex sessions.
 
 That’s the core loop: sidebar for orientation, agent terminal for work, dock for shell and git, skills bar for reusable prompts, keyboard shortcuts for speed.
 
