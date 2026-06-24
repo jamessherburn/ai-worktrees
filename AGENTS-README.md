@@ -8,13 +8,13 @@ For install, daily use, and a user-facing security summary, see [README.md](./RE
 
 ## 1. The story of a session
 
-When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: the agent’s working directory is the configured code directory from settings. Multiple global sessions can exist at once; they are distinguished by unique `id` and `name` in `sessions.json`, not by separate directories.
+When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: shell and git panels use the configured code directory from settings, but the agent PTY runs in a per-session symlink under `userData/global-sessions/<sessionId>` (see `global-session-cwd.ts`). Multiple global sessions can exist at once; they are distinguished by unique `id` and `name` in `sessions.json` and by separate agent cwd paths.
 
-Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session and builds a launch command in `agents.ts` (`claude --continue`, `cursor-agent resume`, etc. when resuming). **Repo sessions** use a cwd probe: if the agent has saved state for that worktree path, resume args are appended. **Global sessions** share one cwd, so resume is gated on that session’s `lastStartedAt` instead — first open starts fresh; reopening the same session after its PTY exited may resume. The PTY spawns in the session directory. Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
+Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session and builds a launch command in `agents.ts` (`claude --continue`, `cursor-agent resume`, etc. when resuming). **Repo sessions** use a cwd probe: if the agent has saved state for that worktree path, resume args are appended. **Global sessions** use the same cwd probe against their per-session symlink path — first open starts fresh; reopening after the PTY exited resumes that session’s own conversation. The PTY spawns in the resolved agent cwd (`resolveAgentCwd` in `ipc.ts`). Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
 
-Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the same cwd. Agent and shell are independent processes with independent backlogs.
+Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the session’s `worktreePath` (the real code directory for global sessions). Agent and shell are independent processes with independent backlogs.
 
-Deleting a session kills both PTYs, removes the JSON entry, and — for repo sessions — removes the worktree and optionally the branch. Global sessions only drop the record; your code directory is untouched.
+Deleting a session kills both PTYs, removes the JSON entry, and — for repo sessions — removes the worktree and optionally the branch. Global sessions drop the record and remove their symlink; your code directory is untouched.
 
 Nothing in this flow scans the OS for other agent processes. The sidebar lists only sessions in `sessions.json`.
 
@@ -103,11 +103,14 @@ NewSessionModal
 
 ```
 createSession({ global: true, name, agentId, labelIds? })
-  → worktreePath = settings.codeDir
+  → worktreePath = settings.codeDir (display, shell, git)
+  → ensureGlobalSessionCwd(id, codeDir) → userData/global-sessions/<id> symlink
   → no git calls
   → repoName = 'Global'
   → unique id per row; names must be unique among global sessions
 ```
+
+Existing global sessions get symlinks ensured on `listSessions()` (app startup).
 
 ### Open / switch
 
@@ -117,9 +120,10 @@ Sidebar onSelect(id)
   → TerminalView mounts or becomes visible
   → pty.start → startPty in pty-manager.ts
        if PTY exists: reattach + backlog replay
-       else: agents.buildLaunchCommand(cwd, canResume?)
-         repo session: canResume from AGENT_RESUME_PROBES[cwd]
-         global session: canResume = (lastStartedAt != null)
+       else: resolveAgentCwd(session) in ipc.ts
+         repo: session.worktreePath
+         global: userData/global-sessions/<sessionId> symlink → codeDir
+       agents.buildLaunchCommand(cwd) — canResume from AGENT_RESUME_PROBES[cwd]
        → pty.spawn($SHELL, ['-lic', cmd], { cwd })
        → markSessionStarted on first spawn
 ```
@@ -150,6 +154,7 @@ listSessions IPC
 DeleteSession
   → killPty + killShellPty
   → deleteSession: worktree remove + optional branch delete (repo only)
+  → global: removeGlobalSessionCwd (symlink only; code directory untouched)
 ```
 
 ---
@@ -163,6 +168,7 @@ src/
 │   ├── ipc.ts                All ipcMain handlers
 │   ├── migrate.ts            Legacy userData copy
 │   ├── sessions.ts           CRUD + NAME_PATTERN
+│   ├── global-session-cwd.ts Per-global-session agent cwd symlinks
 │   ├── git.ts                worktree + status/diff/stage (execFile only)
 │   ├── repos.ts              Scans settings.codeDir
 │   ├── pty-manager.ts        Agent PTY + activity + backlog
@@ -248,7 +254,7 @@ case 'newAgent':
   return buildResumable('newagent-cli', 'resume --last', options);
 ```
 
-Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass an explicit `canResume` in `LaunchOptions` when cwd alone is ambiguous (global sessions sharing `settings.codeDir`).
+Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass an explicit `canResume` in `LaunchOptions` only when resume eligibility is known out-of-band (not needed for global sessions — each has a unique symlink cwd).
 
 ### 7.3 Optional: billing
 
@@ -329,11 +335,12 @@ Document new subprocesses that download or phone home in PRs.
 
 | Area | Access |
 | --- | --- |
-| `settings.codeDir` | Repo scan, global session cwd, worktree parent |
+| `settings.codeDir` | Repo scan, global session code directory, worktree parent |
+| `userData/global-sessions/` | Per-global-session symlinks (agent PTY cwd) |
 | userData JSON | sessions, settings, diary |
 | Agent homes | Instructions read/write per `AgentDefinition` |
 | Agent auth paths | Read-only for billing UI |
-| Worktree paths | Git panel + PTY cwd |
+| Worktree paths | Git panel + shell PTY cwd (repo sessions; global sessions use `worktreePath` = codeDir) |
 
 ### 9.6 Agent checklist
 
