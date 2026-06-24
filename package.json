@@ -49,8 +49,12 @@
     ],
     "extraResources": [
       {
-        "from": "build/icon-light.icns",
-        "to": "icon-light.icns"
+        "from": "build/icon-source-1024.png",
+        "to": "icon-source-1024.png"
+      },
+      {
+        "from": "build/icon-source-1024-light.png",
+        "to": "icon-source-1024-light.png"
       }
     ],
     "mac": {

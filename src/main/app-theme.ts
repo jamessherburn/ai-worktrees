@@ -12,8 +12,9 @@ function resolveTheme(pref: ThemePreference): ResolvedTheme {
   return resolveThemePreference(pref, !nativeTheme.shouldUseDarkColors);
 }
 
+/** PNG sources — Electron cannot load .icns at runtime (see electron/electron#46514). */
 function iconFileName(resolved: ResolvedTheme): string {
-  return resolved === 'light' ? 'icon-light.icns' : 'icon.icns';
+  return resolved === 'light' ? 'icon-source-1024-light.png' : 'icon-source-1024.png';
 }
 
 function resolveIconPath(resolved: ResolvedTheme): string {
@@ -21,7 +22,7 @@ function resolveIconPath(resolved: ResolvedTheme): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, fileName);
   }
-  return join(app.getAppPath(), 'build', fileName);
+  return join(import.meta.dirname, '../../build', fileName);
 }
 
 function applyDockIcon(resolved: ResolvedTheme): void {
