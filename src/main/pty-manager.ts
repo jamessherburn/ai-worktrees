@@ -104,8 +104,6 @@ export async function startPty(opts: {
   cwd: string;
   cols: number;
   rows: number;
-  global?: boolean;
-  lastStartedAt?: string | null;
 }): Promise<{ ok: true; reattached: boolean } | { ok: false; error: string }> {
   if (ptys.has(opts.sessionId)) {
     const existing = ptys.get(opts.sessionId)!;
@@ -120,12 +118,7 @@ export async function startPty(opts: {
     return { ok: false, error: `Worktree path no longer exists: ${opts.cwd}` };
   }
 
-  const launch = await buildLaunchCommand(opts.agentId, {
-    cwd: opts.cwd,
-    ...(opts.global
-      ? { canResume: opts.lastStartedAt != null }
-      : {}),
-  });
+  const launch = await buildLaunchCommand(opts.agentId, { cwd: opts.cwd });
 
   const env = agentShellEnv();
   const shell = probeShellPath();

@@ -29,7 +29,7 @@ Click **+ New Session** in the sidebar (or press **Shift+C**). The wizard has th
 - **Details** — session name (also the branch name for repo sessions), optional labels
 
 **3. Start the agent.**  
-Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s directory. Agent history stays on disk in the agent’s own config. **Repo sessions** resume when saved state exists for that session’s worktree path. **Global sessions** share the code directory, so a new global session always starts fresh; resume flags apply only when you reopen that same global session after it has been started before.
+Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s directory. Agent history stays on disk in the agent’s own config. **Repo sessions** resume when saved state exists for that session’s worktree path. **Global sessions** run at your code directory (shell and git use that path directly); each global session gets its own agent working directory via a symlink under app data so conversations stay separate across relaunches.
 
 **4. Open the bottom dock when you need more.**  
 Each session remembers its own panel layout:
@@ -148,6 +148,7 @@ npm run dist     # release/AI Worktrees.dmg + .app
 | `sessions.json` | Session list — paths, agent, labels, global flag, … |
 | `settings.json` | Code directory, theme, session labels, worktrees skills |
 | `diary.json` | To-do items |
+| Global session symlinks | `userData/global-sessions/<session-id>` → symlink to the code directory (agent PTY cwd only) |
 | Worktrees | Sibling of the repo: `<parent>/<repo-name>-<session-name>` (slashes in the name become dashes) |
 | Panel prefs | Browser `localStorage` key `session-panel-prefs` (per-session shell/git open state) |
 
@@ -192,8 +193,8 @@ flowchart LR
 | --- | --- |
 | List repos | Directories under your code directory; `git rev-parse` per candidate |
 | Create repo session | Optional `git fetch`; `git worktree add` with a new branch |
-| Create global session | No git mutation; cwd is the code directory; each session has a unique id/name |
-| Agent terminal | `pty.spawn` login shell with launch command from `agents.ts` (repo: cwd probe; global: resume only if `lastStartedAt` is set) |
+| Create global session | No git mutation; `ensureGlobalSessionCwd` creates a per-session symlink to the code directory; each session has a unique id/name |
+| Agent terminal | `pty.spawn` login shell with launch command from `agents.ts`; cwd probe decides resume (repo: worktree path; global: per-session symlink path) |
 | Built-in shell | Separate `pty.spawn` per session; fish preferred when installed |
 | Git panel | `git status` / `diff` / `add` / `restore` via `execFile` in the worktree |
 | Persist state | `sessions.json`, `settings.json`, `diary.json` in userData |

@@ -15,7 +15,7 @@
     "dist": "electron-vite build && electron-builder --mac",
     "dist:ci": "electron-vite build && electron-builder --mac --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "npx tsx --test src/main/agents.test.ts src/shared/worktrees-skills.test.ts src/shared/settings-import-export.test.ts"
+    "test": "npx tsx --test src/main/agents.test.ts src/main/global-session-cwd.test.ts src/shared/worktrees-skills.test.ts src/shared/settings-import-export.test.ts"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

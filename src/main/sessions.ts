@@ -18,6 +18,7 @@ import {
   removeWorktree,
   resolveDefaultBranch,
 } from './git.js';
+import { ensureGlobalSessionCwd, removeGlobalSessionCwd } from './global-session-cwd.js';
 import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
@@ -42,7 +43,13 @@ function normalizeSessionRecord(s: Session): Session {
 
 export async function listSessions(): Promise<Session[]> {
   const data = await store.read();
-  return data.sessions.map((s) => normalizeSessionRecord(s));
+  const sessions = data.sessions.map((s) => normalizeSessionRecord(s));
+  for (const session of sessions) {
+    if (session.global) {
+      await ensureGlobalSessionCwd(session.id, session.repoPath);
+    }
+  }
+  return sessions;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -101,6 +108,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     };
 
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
+    await ensureGlobalSessionCwd(session.id, codeDir);
     return { ok: true, session };
   }
 
@@ -231,7 +239,9 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
   const session = sessions.find((s) => s.id === input.id);
   if (!session) return { ok: false, error: 'Session not found.' };
 
-  if (!session.global) {
+  if (session.global) {
+    await removeGlobalSessionCwd(session.id);
+  } else {
     if (await pathExists(session.worktreePath)) {
       try {
         await removeWorktree(session.repoPath, session.worktreePath, input.force);

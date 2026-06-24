@@ -35,6 +35,7 @@ import {
   unstageFile,
 } from './git.js';
 import { openWorktreeInVSCode } from './vscode.js';
+import { resolveAgentCwd } from './global-session-cwd.js';
 import { detectAgents } from './agent-detection.js';
 import {
   getAgentSpend,
@@ -236,14 +237,13 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.PtyStart, async (_e, args: { sessionId: string; cols: number; rows: number }) => {
     const session = await getSessionById(args.sessionId);
     if (!session) return { ok: false, error: 'Session not found.' };
+    const cwd = await resolveAgentCwd(session);
     return startPty({
       sessionId: session.id,
       agentId: session.agentId,
-      cwd: session.worktreePath,
+      cwd,
       cols: args.cols,
       rows: args.rows,
-      global: session.global,
-      lastStartedAt: session.lastStartedAt,
     });
   });
 

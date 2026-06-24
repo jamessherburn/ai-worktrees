@@ -10,7 +10,7 @@ export type LaunchCommand = {
 
 export type LaunchOptions = {
   cwd: string;
-  /** When set, skips the cwd probe (used for global sessions sharing one directory). */
+  /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
 };
 
