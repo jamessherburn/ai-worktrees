@@ -75,8 +75,9 @@ Keyboard shortcuts are defined in `shared/app-shortcuts.ts` and handled in `App.
 Cross-agent reusable prompts live in `settings.json` as `worktreesSkills` (see `shared/worktrees-skills.ts`). They are **not** migrated from the legacy `sessionPrompts` quick-prompt setting.
 
 - **Settings → Skills** — `WorktreesSkillsEditor.tsx` edits name, description, and prompt body.
-- **Bottom bar** — `WorktreesSkillPrompter.tsx` provides `/skill-name` autocomplete; first **Enter** commits the slash display, second **Enter** expands the prompt (plus any trailing text) and submits via `Terminal.submitPrompt` (`shared/session-prompt-submit.ts`).
+- **Bottom bar** — `WorktreesSkillPrompter.tsx` provides `/skill-name` autocomplete; first **Enter** commits the slash display, second **Enter** expands the prompt (plus any trailing text) and submits via `Terminal.submitPrompt` (`shared/session-prompt-submit.ts`). **Esc** or the **×** button clears the field.
 - **Focus** — **Shift+J** includes the skills bar in the agent ↔ shell ↔ skills cycle (`skillPrompterFocusRef` in `App.tsx`).
+- **Mirror rendering** — `PrompterMirror` highlights committed `/skill` tokens and the active slash query. Slashes that are not skill references (e.g. in URLs or file paths) must be treated as plain text so the scan always advances; otherwise pasted text with multiple `/` characters can hang the renderer.
 
 Default skills: **Summarise Session**, **Create Pull Request** (`DEFAULT_WORKTREES_SKILLS`).
 

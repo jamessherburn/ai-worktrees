@@ -2779,6 +2779,8 @@ body.resizing-sidebar .sidebar-resize {
 
 .worktrees-skill-prompter-editor {
   position: relative;
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
   min-height: var(--prompter-field-height, 48px);
@@ -2852,9 +2854,16 @@ body.resizing-sidebar .sidebar-resize {
   font-weight: 500;
 }
 
+.worktrees-skill-prompter-editor--has-value .worktrees-skill-prompter-mirror,
+.worktrees-skill-prompter-editor--has-value .worktrees-skill-prompter-input {
+  padding-right: 4px;
+}
+
 .worktrees-skill-prompter-input {
   position: relative;
   z-index: 1;
+  flex: 1;
+  min-width: 0;
   width: 100%;
   height: var(--prompter-field-height, 48px);
   padding: 0;
@@ -2863,6 +2872,38 @@ body.resizing-sidebar .sidebar-resize {
   color: transparent;
   caret-color: var(--accent-strong);
   -webkit-text-fill-color: transparent;
+}
+
+.worktrees-skill-prompter-clear {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: -4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.worktrees-skill-prompter-clear:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-elev-2) 70%, transparent);
+}
+
+.worktrees-skill-prompter-clear:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
 }
 
 .worktrees-skill-prompter-input:focus {
