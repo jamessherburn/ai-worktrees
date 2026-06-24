@@ -14,7 +14,9 @@ Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The ren
 
 Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the session’s `worktreePath` (the real code directory for global sessions). Agent and shell are independent processes with independent backlogs.
 
-Deleting a session kills both PTYs, removes the JSON entry, and — for repo sessions — removes the worktree and optionally the branch. Global sessions drop the record and remove their symlink; your code directory is untouched.
+Deleting a session kills both PTYs, removes the JSON entry, clears saved agent conversations for that session’s agent cwd (`clearAgentSessionData` in `agents.ts` — Claude, Cursor, Codex home dirs and local `.cursor`/`.codex` where safe), and — for repo sessions — removes the worktree and optionally the branch. Global sessions drop the record, remove their symlink, and clear agent data keyed to that symlink path; your code directory is untouched. Creating a session also clears stale agent data at the new path so a reused name does not resume an old chat.
+
+The **Cleanup** modal (sidebar icon, next to Agent Data) scans for leftover branches, worktrees, and agent session folders not tied to active sessions — including external projects you ran agents in outside the app — and lets you delete them in bulk or selectively.
 
 Nothing in this flow scans the OS for other agent processes. The sidebar lists only sessions in `sessions.json`.
 
@@ -65,6 +67,7 @@ The app has a single workspace layout (no view switcher):
 | Skills editor | `components/WorktreesSkillsEditor.tsx` | Settings → Skills tab |
 | Settings | `components/SettingsModal.tsx` | General, Skills, Labels, Shortcuts tabs |
 | Agent Data | `components/AgentDataModal.tsx` | Instructions + spend per agent |
+| Cleanup | `components/CleanupModal.tsx` | Leftover branches, worktrees, agent sessions |
 
 Per-session **panel prefs** (shell/git open or closed) live in renderer `localStorage` (`session-panel-prefs`), not in `settings.json`. Cycling sessions restores each session’s own dock state.
 
@@ -97,6 +100,7 @@ NewSessionModal
          NAME_PATTERN check
          resolveDefaultBranch, optional fetchBranch
          addWorktree → git.ts
+         clearAgentSessionData(worktreePath)
          append to sessions.json
 ```
 
@@ -106,6 +110,7 @@ NewSessionModal
 createSession({ global: true, name, agentId, labelIds? })
   → worktreePath = settings.codeDir (display, shell, git)
   → ensureGlobalSessionCwd(id, codeDir) → userData/global-sessions/<id> symlink
+  → clearAgentSessionData(symlink path)
   → no git calls
   → repoName = 'Global'
   → unique id per row; names must be unique among global sessions
@@ -154,8 +159,18 @@ listSessions IPC
 ```
 DeleteSession
   → killPty + killShellPty
-  → deleteSession: worktree remove + optional branch delete (repo only)
-  → global: removeGlobalSessionCwd (symlink only; code directory untouched)
+  → deleteSession:
+       clearAgentSessionData(agent cwd)   agents.ts
+       worktree remove + optional branch delete (repo only)
+       global: removeGlobalSessionCwd (symlink only; code directory untouched)
+  → store removes JSON entry
+
+createSession (after worktree add or global symlink)
+  → clearAgentSessionData(path)          stale agent data safety net
+
+CleanupList / CleanupDelete
+  → cleanup.ts + agent-session-scan.ts
+       list/delete leftover branches, worktrees, agent session folders
 ```
 
 ---
@@ -177,7 +192,10 @@ src/
 │   ├── resolve-shell-path.ts fish / login shell
 │   ├── fish-setup.ts         Optional fish install (brew)
 │   ├── gh-cli.ts             Optional git/gh install + gh auth helper
-│   ├── agents.ts             Per-agent launch command builder
+│   ├── agents.ts             Per-agent launch command builder + clearAgentSessionData
+│   ├── agent-session-scan.ts Scan ~/.claude, ~/.cursor, ~/.codex; resolve encoded paths
+│   ├── cleanup.ts            Leftover branches/worktrees/agent sessions
+│   ├── path-created-at.ts    Created-at timestamps for cleanup list sorting
 │   ├── agent-detection.ts    `command -v` in login shell (cached)
 │   ├── agent-data.ts         Instructions I/O + billing/spend
 │   ├── usage.ts              Claude spend via pinned ccusage
@@ -257,6 +275,8 @@ case 'newAgent':
 
 Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass an explicit `canResume` in `LaunchOptions` only when resume eligibility is known out-of-band (not needed for global sessions — each has a unique symlink cwd).
 
+If the agent stores per-project session data under its home directory, add paths to `agentSessionDataPaths` in `agents.ts` so delete, create, and cleanup can clear them.
+
 ### 7.3 Optional: billing
 
 `src/main/agent-data.ts` — add a `getAgentSpend` case. Return `{ kind: 'plan' | 'cost' | … }` as documented in existing agents.
@@ -279,6 +299,8 @@ Worktree lifecycle, PTY plumbing, and Git panel need no agent-specific changes.
 **Prefer `invoke` with validated args** for anything sensitive. PTY input/resize uses fire-and-forget `send`.
 
 Handlers that accept a **filesystem path** from the renderer today: `RevealInFinder`, `OpenInVSCode`, `OpenInTerminal`, `OpenInITerm`, `PickDirectory`. Safer pattern for new features: pass `sessionId` only and resolve paths in main from `sessions.json`.
+
+**Cleanup** (`CleanupList`, `CleanupDelete`): main resolves delete targets from a fresh scan snapshot; renderer sends item ids only.
 
 ---
 
@@ -339,9 +361,10 @@ Document new subprocesses that download or phone home in PRs.
 | `settings.codeDir` | Repo scan, global session code directory, worktree parent |
 | `userData/global-sessions/` | Per-global-session symlinks (agent PTY cwd) |
 | userData JSON | sessions, settings, diary |
-| Agent homes | Instructions read/write per `AgentDefinition` |
+| Agent homes | Instructions read/write per `AgentDefinition`; per-project session dirs scanned/deleted by cleanup |
 | Agent auth paths | Read-only for billing UI |
 | Worktree paths | Git panel + shell PTY cwd (repo sessions; global sessions use `worktreePath` = codeDir) |
+| Agent session scan | Read (and delete on cleanup) under `~/.claude/projects`, `~/.cursor/projects`, `~/.cursor/chats`, `~/.codex/sessions`, `~/.codex/projects`, and local `.cursor`/`.codex` in worktrees |
 
 ### 9.6 Agent checklist
 

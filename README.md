@@ -29,7 +29,7 @@ Click **+ New Session** in the sidebar (or press **Shift+C**). The wizard has th
 - **Details** — session name (also the branch name for repo sessions), optional labels
 
 **3. Start the agent.**  
-Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s directory. Agent history stays on disk in the agent’s own config. **Repo sessions** resume when saved state exists for that session’s worktree path. **Global sessions** run at your code directory (shell and git use that path directly); each global session gets its own agent working directory via a symlink under app data so conversations stay separate across relaunches.
+Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s directory. Agent history stays on disk in the agent’s own config. **Repo sessions** resume when saved state exists for that session’s worktree path. **Global sessions** run at your code directory (shell and git use that path directly); each global session gets its own agent working directory via a symlink under app data so conversations stay separate across relaunches. **Deleting** a session (or recreating one with the same name) clears that session’s saved agent conversations so the agent starts fresh.
 
 **4. Open the bottom dock when you need more.**  
 Each session remembers its own panel layout:
@@ -53,7 +53,7 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 ┌ Sidebar ──────────────┬─ Main pane ────────────────────────┐
 │ Sessions by activity  │ Agent terminal (xterm.js)          │
 │ Labels, mute, delete  │                                    │
-│ Settings, Agent Data  ├─ Bottom dock (optional, per session)│
+│ Settings, Agent Data, Cleanup ├─ Bottom dock (optional, per session)│
 │                       │ Shell │ Git                        │
 ├───────────────────────┴─ Skills bar ──────────── To Do ────┤
 │ Type /skill-name …    (full width, except To Do button)    │
@@ -81,9 +81,10 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 | **To Do** | To Do / Doing / Done sections; inline editing; drag between sections |
 | **Skills** | Cross-agent slash-command prompts in the bottom bar; edit in Settings → Skills; import/export with other settings |
 | **Agent Data** | Edit each agent’s instructions file; billing / usage hints where supported |
+| **Cleanup** | Sidebar modal to list and remove leftover branches, worktrees, and agent session data (grouped by repo, Global, or External) |
 | **Settings** | Code directory, theme, skills, labels, keyboard shortcut reference, import/export |
 | **Persistence** | Sessions, settings, and to-do survive restarts; worktrees remain on disk until you delete |
-| **Cleanup** | Delete removes the session record; repo sessions can remove the worktree and branch |
+| **Session delete** | Removes the session record; repo sessions can remove the worktree and branch; clears saved agent conversations (Claude, Cursor, Codex) for that path |
 
 On first launch the app may install **Git**, **GitHub CLI** (`gh`), and **fish** via Homebrew when missing, and can open Terminal for `gh auth login`. These are optional conveniences for your environment — the app does not call the GitHub API for features inside the UI today.
 
@@ -150,6 +151,7 @@ npm run dist     # release/AI Worktrees.dmg + .app
 | `diary.json` | To-do items |
 | Global session symlinks | `userData/global-sessions/<session-id>` → symlink to the code directory (agent PTY cwd only) |
 | Worktrees | Sibling of the repo: `<parent>/<repo-name>-<session-name>` (slashes in the name become dashes) |
+| Agent session data | Per-project dirs under each agent’s home (e.g. `~/.claude/projects/…`, `~/.cursor/projects/…`, `~/.codex/sessions/…`); cleared on session delete/create and via **Cleanup → Agent Sessions** |
 | Panel prefs | Browser `localStorage` key `session-panel-prefs` (per-session shell/git open state) |
 
 Only sessions you create in the app appear in the sidebar. The app does not import or discover agent processes running outside it.
@@ -198,7 +200,9 @@ flowchart LR
 | Built-in shell | Separate `pty.spawn` per session; fish preferred when installed |
 | Git panel | `git status` / `diff` / `add` / `restore` via `execFile` in the worktree |
 | Persist state | `sessions.json`, `settings.json`, `diary.json` in userData |
-| Delete repo session | `git worktree remove`; optional branch delete |
+| Delete repo session | `git worktree remove`; optional branch delete; clears agent session data for that worktree |
+| Delete global session | Removes symlink under `global-sessions/`; clears agent session data for that session cwd |
+| Cleanup modal | Lists leftover branches, worktrees, and agent session folders; selective or bulk delete |
 | Agent instructions | Read/write under each agent’s home (e.g. `~/.claude/CLAUDE.md`) |
 | Claude usage chip | May run pinned `ccusage` via `npx` / `bun x` (local usage files; npm when uncached) |
 | Startup setup | May install `git`, `gh`, or fish via Homebrew; may launch Terminal for `gh auth login` |
@@ -259,7 +263,9 @@ src/
 │   ├── repos.ts          Code-directory scan
 │   ├── pty-manager.ts    Agent PTY per session
 │   ├── shell-pty-manager.ts  Built-in shell PTY (fish preferred)
-│   ├── agents.ts         Per-agent launch commands
+│   ├── agents.ts         Per-agent launch commands + agent session data cleanup
+│   ├── cleanup.ts        Leftover branches/worktrees/agent sessions scan + delete
+│   ├── agent-session-scan.ts  Scan agent homes; resolve encoded project paths
 │   ├── agent-detection.ts, agent-data.ts, usage.ts
 │   ├── gh-cli.ts, fish-setup.ts   Optional dependency setup
 │   ├── settings.ts, diary.ts, migrate.ts, store.ts
