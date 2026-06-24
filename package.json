@@ -47,16 +47,6 @@
       "out/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "build/icon-source-1024.png",
-        "to": "icon-source-1024.png"
-      },
-      {
-        "from": "build/icon-source-1024-light.png",
-        "to": "icon-source-1024-light.png"
-      }
-    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
