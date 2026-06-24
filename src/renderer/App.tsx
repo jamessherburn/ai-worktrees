@@ -726,7 +726,7 @@ export function App() {
 
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader session={activeSession} theme={resolvedTheme}>
+          <PaneHeader session={activeSession}>
             <PaneToolbar
               activeSession={activeSession}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
@@ -739,7 +739,7 @@ export function App() {
             />
           </PaneHeader>
         ) : (
-          <EmptyHeader theme={resolvedTheme}>
+          <EmptyHeader>
             <PaneToolbar
               activeSession={null}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
@@ -1023,11 +1023,9 @@ function PaneToolbar({
 
 function PaneHeader({
   session,
-  theme,
   children,
 }: {
   session: SessionWithStatus;
-  theme: ResolvedTheme;
   children: ReactNode;
 }) {
   return (
@@ -1049,7 +1047,7 @@ function PaneHeader({
       </div>
       <div className="pane-header-trailing">
         {children}
-        <Logo theme={theme} />
+        <Logo />
       </div>
     </header>
   );
@@ -1066,7 +1064,7 @@ function GitBranchIcon() {
   );
 }
 
-function EmptyHeader({ theme, children }: { theme: ResolvedTheme; children: ReactNode }) {
+function EmptyHeader({ children }: { children: ReactNode }) {
   return (
     <header className="pane-header">
       <div className="header-info">
@@ -1075,7 +1073,7 @@ function EmptyHeader({ theme, children }: { theme: ResolvedTheme; children: Reac
       </div>
       <div className="pane-header-trailing">
         {children}
-        <Logo theme={theme} />
+        <Logo />
       </div>
     </header>
   );

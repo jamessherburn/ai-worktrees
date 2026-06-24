@@ -1,13 +1,10 @@
-import appIconDarkUrl from '../../../build/icon-source-1024.png';
-import appIconLightUrl from '../../../build/icon-source-1024-light.png';
-import type { ResolvedTheme } from '../theme';
+import appIconUrl from '../../../build/icon-source-1024.png';
 
-export function Logo({ size = 28, theme }: { size?: number; theme: ResolvedTheme }) {
+export function Logo({ size = 28 }: { size?: number }) {
   return (
     <img
       className="app-logo"
-      key={theme}
-      src={theme === 'light' ? appIconLightUrl : appIconDarkUrl}
+      src={appIconUrl}
       width={size}
       height={size}
       alt="AI Worktrees"
