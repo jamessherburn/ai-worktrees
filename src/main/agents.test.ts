@@ -235,6 +235,11 @@ describe('cursorHasSavedSession', () => {
     });
 
     await writeFile(join(projectDir, 'chat.json'), '{}');
+    assert.equal(await cursorHasSavedSession(cwd, { cursorConfigDir: cursorRoot }), false);
+
+    const transcriptDir = join(projectDir, 'agent-transcripts', 'chat-1');
+    await mkdir(transcriptDir, { recursive: true });
+    await writeFile(join(transcriptDir, 'chat-1.jsonl'), '{"role":"user"}');
     assert.equal(await cursorHasSavedSession(cwd, { cursorConfigDir: cursorRoot }), true);
 
     await rm(root, { recursive: true, force: true });
@@ -245,8 +250,9 @@ describe('cursorHasSavedSession', () => {
     const cwd = join(root, 'workspace');
     const isolatedCursorRoot = join(root, 'isolated-cursor');
     const projectDir = join(root, 'default-cursor', 'projects', encodeCursorProjectPath(cwd));
-    await mkdir(projectDir, { recursive: true });
-    await writeFile(join(projectDir, 'chat.json'), '{}');
+    const transcriptDir = join(projectDir, 'agent-transcripts', 'chat-1');
+    await mkdir(transcriptDir, { recursive: true });
+    await writeFile(join(transcriptDir, 'chat-1.jsonl'), '{"role":"user"}');
 
     const fakeHome = join(root, 'home');
     await mkdir(fakeHome, { recursive: true });

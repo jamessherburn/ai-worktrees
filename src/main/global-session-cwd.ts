@@ -8,8 +8,10 @@ import {
   codexHasSavedSession,
   copyAgentSessionDataBetweenRoots,
   cursorHasSavedSession,
+  encodeCursorProjectPath,
   type AgentStorageRoots,
 } from './agents.js';
+import { homedir } from 'node:os';
 
 const requireElectron = createRequire(import.meta.url);
 
@@ -100,12 +102,31 @@ async function ensureSymlinkToTarget(linkPath: string, target: string): Promise<
       if (current === target) return;
       await fs.unlink(linkPath);
     } else {
-      return;
+      await fs.rm(linkPath, { recursive: true, force: true });
     }
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
   await fs.symlink(target, linkPath);
+}
+
+/** Pre-trust global workspaces so Cursor does not block on an interactive trust prompt. */
+async function ensureCursorWorkspaceTrusted(workspacePath: string): Promise<void> {
+  const projectDir = join(homedir(), '.cursor', 'projects', encodeCursorProjectPath(workspacePath));
+  await fs.mkdir(projectDir, { recursive: true });
+  const trustedPath = join(projectDir, '.workspace-trusted');
+  try {
+    await fs.stat(trustedPath);
+  } catch {
+    await fs.writeFile(
+      trustedPath,
+      `${JSON.stringify({
+        trustedAt: new Date().toISOString(),
+        workspacePath,
+        trustMethod: 'ai-worktrees',
+      })}\n`,
+    );
+  }
 }
 
 /**
@@ -116,6 +137,7 @@ export async function ensureGlobalWorkspace(sessionId: string, codeDir: string):
   const workspace = globalWorkspacePath(sessionId);
   await fs.mkdir(workspace, { recursive: true });
   await ensureSymlinkToTarget(globalWorktreePath(sessionId), codeDir);
+  await ensureCursorWorkspaceTrusted(workspace);
   return workspace;
 }
 
@@ -198,11 +220,6 @@ export async function clearGlobalSessionAgentData(sessionId: string, codeDir: st
   await clearAgentSessionData(workspace);
   await clearAgentSessionData(workCwd);
   await clearAgentSessionData(workCwd, { storageRoots });
-  const canonicalCodeDir = await canonicalAgentCwd(codeDir);
-  if (canonicalCodeDir !== workCwd) {
-    await clearAgentSessionData(canonicalCodeDir);
-    await clearAgentSessionData(canonicalCodeDir, { storageRoots });
-  }
   await clearAgentSessionData(globalSessionCwdPath(sessionId));
 }
 
