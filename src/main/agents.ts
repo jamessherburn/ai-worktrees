@@ -18,6 +18,8 @@ export type LaunchOptions = {
   cwd: string;
   /** Cursor --workspace path when it differs from the PTY cwd (global sessions). */
   workspaceCwd?: string;
+  /** Pass --trust for fresh global workspace roots (no .workspace-trusted yet). */
+  cursorTrustWorkspace?: boolean;
   /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
   storageRoots?: AgentStorageRoots;
@@ -27,6 +29,7 @@ export type LaunchOptions = {
 
 export type ComposeLaunchOptions = {
   cwd?: string;
+  cursorTrustWorkspace?: boolean;
 };
 
 export type AgentLaunchSpec = {
@@ -51,9 +54,9 @@ function encodeClaudeProjectPath(absPath: string): string {
   return absPath.replace(/[/.]/g, '-');
 }
 
-/** Cursor CLI: leading `/` is dropped, then remaining `/` and `.` become `-`. */
+/** Cursor CLI: leading `/` is dropped; `/`, `.`, and spaces become `-`. */
 function encodeCursorProjectPath(absPath: string): string {
-  return absPath.replace(/^\//, '').replace(/[/.]/g, '-');
+  return absPath.replace(/^\//, '').replace(/[/. ]/g, '-');
 }
 
 /** Exported for tests. */
@@ -248,9 +251,10 @@ export function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function cursorWorkspaceArgs(cwd: string | undefined): string {
+function cursorWorkspaceArgs(cwd: string | undefined, trustWorkspace?: boolean): string {
   if (!cwd) return '';
-  return ` --workspace ${shellSingleQuote(cwd)}`;
+  const trust = trustWorkspace ? ' --trust' : '';
+  return ` --workspace ${shellSingleQuote(cwd)}${trust}`;
 }
 
 /** Pure launch decision: only resume when a probe confirms saved state exists. */
@@ -261,7 +265,8 @@ export function composeLaunchCommand(
 ): LaunchCommand {
   const spec = AGENT_LAUNCH_SPECS[agentId];
   const binary = agentId === 'cursor' ? getCursorLaunchBinary() : spec.binary;
-  const workspace = agentId === 'cursor' ? cursorWorkspaceArgs(options.cwd) : '';
+  const workspace =
+    agentId === 'cursor' ? cursorWorkspaceArgs(options.cwd, options.cursorTrustWorkspace) : '';
   if (canResume && spec.resumeArgs) {
     return { shellCommand: `${binary}${workspace} ${spec.resumeArgs}`.trim() };
   }
@@ -323,6 +328,9 @@ export async function buildLaunchCommand(
     (await AGENT_RESUME_PROBES[agentId](probeCwd, options.storageRoots));
   const launch = composeLaunchCommand(agentId, canResume, {
     cwd: agentId === 'cursor' ? probeCwd : options.cwd,
+    cursorTrustWorkspace:
+      options.cursorTrustWorkspace ??
+      (agentId === 'cursor' && options.workspaceCwd !== undefined),
   });
   return {
     shellCommand: formatPtyShellCommand(launch.shellCommand, options.agentEnv),
