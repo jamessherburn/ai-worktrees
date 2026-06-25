@@ -35,13 +35,6 @@ export type Session = {
   quickNotes?: SessionQuickNote[];
   /** @deprecated Migrated to labelIds on read; no longer written. */
   waitingOnReview?: boolean;
-  /** Runs the agent at the code directory from settings; no git worktree is created. */
-  global?: boolean;
-  /**
-   * When true, skip importing agent data from the default agent config dirs into this
-   * session's per-session storage (set on newly created global sessions).
-   */
-  agentStorageIsolated?: boolean;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';
@@ -79,11 +72,9 @@ export type RepoInfo = {
 };
 
 export type CreateSessionInput = {
-  repoPath?: string;
+  repoPath: string;
   name: string;
   agentId: AgentId;
-  /** When true, runs at the code directory from settings without creating a worktree. */
-  global?: boolean;
   /** Optional labels to apply when the session is created. */
   labelIds?: string[];
 };
@@ -94,7 +85,7 @@ export type DeleteSessionInput = {
   deleteBranch: boolean;
 };
 
-export type CleanupGroupKind = 'repo' | 'global' | 'external';
+export type CleanupGroupKind = 'repo' | 'external';
 
 export type LeftoverWorktree = {
   id: string;

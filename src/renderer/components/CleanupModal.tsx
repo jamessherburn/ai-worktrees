@@ -172,7 +172,7 @@ export function CleanupModal({ onClose }: Props) {
           <div className="modal-title">Cleanup</div>
           <div className="modal-subtitle">
             Remove leftover branches, worktrees, and agent session data. Items are grouped by
-            repository or Global sessions.
+            repository worktrees.
           </div>
           <div className="cleanup-modal-tabs" role="tablist" aria-label="Cleanup categories">
             {TABS.map((t) => {
@@ -561,7 +561,7 @@ function groupByName<T extends { groupName: string; createdAt: string }>(items: 
 }
 
 function sortGroupNames(a: string, b: string): number {
-  const order = (name: string) => (name === 'Global' ? 0 : name === 'External' ? 2 : 1);
+  const order = (name: string) => (name === 'External' ? 1 : 0);
   const o = order(a) - order(b);
   if (o !== 0) return o;
   return a.localeCompare(b);

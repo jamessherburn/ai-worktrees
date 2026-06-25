@@ -1030,18 +1030,9 @@ function PaneHeader({
   return (
     <header className="pane-header">
       <div className="header-info">
-        <div className="pane-title">
-          {session.name}
-          {session.global ? (
-            <span className="pane-global-label" title="Global session">
-              Global
-            </span>
-          ) : null}
-        </div>
+        <div className="pane-title">{session.name}</div>
         <div className="pane-subtitle">
-          {session.global
-            ? session.worktreePath
-            : `${session.repoName} · ${session.branchName} · ${session.worktreePath}`}
+          {`${session.repoName} · ${session.branchName} · ${session.worktreePath}`}
         </div>
       </div>
       <div className="pane-header-trailing">

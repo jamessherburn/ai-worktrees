@@ -7,6 +7,8 @@ const FILES_TO_MIGRATE = ['sessions.json', 'settings.json', 'diary.json'];
 
 const LEGACY_USER_DATA_DIRS = ['Claude Worktrees', 'claude-worktrees-ui'];
 
+const REMOVED_GLOBAL_DATA_DIRS = ['global-sessions', 'global-workspaces', 'global-agent-data'];
+
 async function pathExists(p: string): Promise<boolean> {
   try {
     await fs.stat(p);
@@ -48,5 +50,38 @@ export async function migrateLegacyUserData(): Promise<void> {
     if (!(await pathExists(src))) continue;
     await fs.copyFile(src, join(newDir, file));
     console.log(`[migrate] copied ${file} from ${legacyDir}`);
+  }
+}
+
+/** Remove deprecated global sessions and their on-disk storage. */
+export async function purgeRemovedGlobalSessions(): Promise<void> {
+  const userData = app.getPath('userData');
+  const sessionsPath = join(userData, 'sessions.json');
+
+  if (await pathExists(sessionsPath)) {
+    try {
+      const raw = await fs.readFile(sessionsPath, 'utf8');
+      const parsed = JSON.parse(raw) as { sessions?: Array<Record<string, unknown>> };
+      const sessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+      const kept = sessions.filter((session) => !session.global);
+      if (kept.length !== sessions.length) {
+        await fs.writeFile(
+          sessionsPath,
+          `${JSON.stringify({ sessions: kept }, null, 2)}\n`,
+        );
+        console.log(`[migrate] removed ${sessions.length - kept.length} global session(s)`);
+      }
+    } catch (err) {
+      console.warn('[migrate] failed to strip global sessions:', (err as Error).message);
+    }
+  }
+
+  for (const dir of REMOVED_GLOBAL_DATA_DIRS) {
+    const path = join(userData, dir);
+    try {
+      await fs.rm(path, { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`[migrate] failed to remove ${dir}:`, (err as Error).message);
+    }
   }
 }

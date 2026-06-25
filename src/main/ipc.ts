@@ -39,12 +39,6 @@ import {
 } from './git.js';
 import { deleteCleanupItems, listCleanupItems } from './cleanup.js';
 import { openWorktreeInVSCode } from './vscode.js';
-import {
-  globalAgentEnv,
-  globalAgentStoragePaths,
-  resolveAgentCwd,
-  resolveAgentWorkspace,
-} from './global-session-cwd.js';
 import { detectAgents } from './agent-detection.js';
 import {
   getAgentSpend,
@@ -246,21 +240,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.PtyStart, async (_e, args: { sessionId: string; cols: number; rows: number }) => {
     const session = await getSessionById(args.sessionId);
     if (!session) return { ok: false, error: 'Session not found.' };
-    const cwd = await resolveAgentCwd(session);
-    const workspaceCwd = session.global ? await resolveAgentWorkspace(session) : undefined;
     return startPty({
       sessionId: session.id,
       agentId: session.agentId,
-      cwd,
-      workspaceCwd,
+      cwd: session.worktreePath,
       cols: args.cols,
       rows: args.rows,
-      ...(session.global
-        ? {
-            storageRoots: globalAgentStoragePaths(session.id),
-            agentEnv: globalAgentEnv(session.id),
-          }
-        : {}),
     });
   });
 

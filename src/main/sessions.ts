@@ -19,13 +19,6 @@ import {
   resolveDefaultBranch,
 } from './git.js';
 import { clearAgentSessionData } from './agents.js';
-import {
-  clearGlobalSessionAgentData,
-  ensureGlobalAgentStorage,
-  migrateGlobalAgentDataIfNeeded,
-  removeGlobalAgentStorage,
-} from './global-session-cwd.js';
-import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
 type SessionsFile = { sessions: Session[] };
@@ -53,21 +46,7 @@ async function readSessionRecords(): Promise<Session[]> {
 }
 
 export async function listSessions(): Promise<Session[]> {
-  const sessions = await readSessionRecords();
-  for (const session of sessions) {
-    if (!session.global) continue;
-    try {
-      await migrateGlobalAgentDataIfNeeded(session.id, session.repoPath, {
-        agentStorageIsolated: session.agentStorageIsolated,
-      });
-    } catch (err) {
-      console.warn(
-        `Failed to migrate global agent data for session ${session.id}:`,
-        (err as Error).message,
-      );
-    }
-  }
-  return sessions;
+  return readSessionRecords();
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -93,57 +72,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     return { ok: false, error: 'Name may only contain letters, numbers, dot, underscore, slash, and dash.' };
   }
 
-  if (input.global) {
-    const settings = await getSettings();
-    const codeDir = settings.codeDir;
-    if (!codeDir) {
-      return { ok: false, error: 'Code directory is not configured. Set it in Settings.' };
-    }
-    if (!(await pathExists(codeDir))) {
-      return { ok: false, error: `Code directory does not exist: ${codeDir}` };
-    }
-
-    const existing = await readSessionRecords();
-    if (existing.some((s) => s.global && s.name === name)) {
-      return {
-        ok: false,
-        error: `A global session named "${name}" already exists in the sidebar. Delete it there first — Cleanup only lists leftover agent data, not session records.`,
-      };
-    }
-
-    const labelIds = normalizeSessionLabelIds(input.labelIds);
-
-    const session: Session = {
-      id: randomUUID(),
-      name,
-      repoPath: codeDir,
-      repoName: 'Global',
-      worktreePath: codeDir,
-      branchName: '',
-      baseBranch: '',
-      agentId: input.agentId ?? DEFAULT_AGENT_ID,
-      createdAt: new Date().toISOString(),
-      lastStartedAt: null,
-      global: true,
-      agentStorageIsolated: true,
-      labelIds: labelIds.length ? labelIds : undefined,
-    };
-
-    await store.update((current) => ({ sessions: [...current.sessions, session] }));
-    try {
-      await ensureGlobalAgentStorage(session.id);
-      await clearGlobalSessionAgentData(session.id, codeDir);
-    } catch (err) {
-      await store.update((current) => ({
-        sessions: current.sessions.filter((s) => s.id !== session.id),
-      }));
-      return { ok: false, error: (err as Error).message };
-    }
-    return { ok: true, session };
-  }
-
   if (!input.repoPath) {
-    return { ok: false, error: 'Repository is required for worktree sessions.' };
+    return { ok: false, error: 'Repository is required.' };
   }
 
   const existing = await readSessionRecords();
@@ -271,22 +201,17 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
   const session = sessions.find((s) => s.id === input.id);
   if (!session) return { ok: false, error: 'Session not found.' };
 
-  if (session.global) {
-    await clearGlobalSessionAgentData(session.id, session.repoPath);
-    await removeGlobalAgentStorage(session.id);
-  } else {
-    await clearAgentSessionData(session.worktreePath, { includeLocalAgentDirs: true });
-    if (await pathExists(session.worktreePath)) {
-      try {
-        await removeWorktree(session.repoPath, session.worktreePath, input.force);
-      } catch (err) {
-        return { ok: false, error: `git worktree remove failed: ${(err as Error).message}` };
-      }
+  await clearAgentSessionData(session.worktreePath, { includeLocalAgentDirs: true });
+  if (await pathExists(session.worktreePath)) {
+    try {
+      await removeWorktree(session.repoPath, session.worktreePath, input.force);
+    } catch (err) {
+      return { ok: false, error: `git worktree remove failed: ${(err as Error).message}` };
     }
+  }
 
-    if (input.deleteBranch) {
-      await deleteBranch(session.repoPath, session.branchName);
-    }
+  if (input.deleteBranch) {
+    await deleteBranch(session.repoPath, session.branchName);
   }
 
   await store.update((current) => ({ sessions: current.sessions.filter((s) => s.id !== input.id) }));

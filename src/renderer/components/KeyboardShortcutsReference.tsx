@@ -19,8 +19,7 @@ export function KeyboardShortcutsReference() {
     <>
       <p className="muted keyboard-shortcuts-settings-hint">
         Fixed shortcuts for quick navigation. They work from the main workspace, including while
-        focus is in a terminal. Shift+N cycles every non-muted session in the sidebar — global and
-        repo worktrees are treated the same.
+        focus is in a terminal. Shift+N cycles every non-muted session in the sidebar.
       </p>
       <div className="app-shortcuts-reference">
         <ul className="app-shortcuts-reference-list">

@@ -10,10 +10,8 @@ type Props = {
   onCreated: (result: Extract<CreateSessionResult, { ok: true }>) => void;
 };
 
-type ScopeKind = 'repo' | 'global';
-
 const STEPS = [
-  { id: 'scope', label: 'Type' },
+  { id: 'repo', label: 'Repository' },
   { id: 'agent', label: 'Agent' },
   { id: 'details', label: 'Details' },
 ] as const;
@@ -22,19 +20,13 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
   const [step, setStep] = useState(0);
   const [repos, setRepos] = useState<RepoInfo[] | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
-  const [scope, setScope] = useState<ScopeKind>('repo');
   const [agentId, setAgentId] = useState<AgentId>(DEFAULT_AGENT_ID);
   const [repoPath, setRepoPath] = useState('');
   const [name, setName] = useState('');
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [codeDir, setCodeDir] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    void window.api.getSettings().then((s) => setCodeDir(s.codeDir));
-  }, []);
 
   useEffect(() => {
     void window.api.listRepos().then((items) => {
@@ -57,19 +49,17 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
     if (step === 2) nameInputRef.current?.focus();
   }, [step]);
 
-  const isGlobalSession = scope === 'global';
   const selectedAvailable = availability ? availability[agentId] : true;
   const anyAvailable = availability ? AGENTS.some((a) => availability[a.id]) : true;
 
   const selectedLabels = sessionLabels.filter((l) => labelIds.includes(l.id));
 
-  const canAdvanceFromScope =
-    scope === 'global' || (repos !== null && repos.length > 0 && repoPath.length > 0);
+  const canAdvanceFromRepo = repos !== null && repos.length > 0 && repoPath.length > 0;
   const canAdvanceFromAgent = selectedAvailable;
   const canSubmit = name.trim().length > 0 && !busy && canAdvanceFromAgent;
 
   const canGoNext =
-    step === 0 ? canAdvanceFromScope : step === 1 ? canAdvanceFromAgent : canSubmit;
+    step === 0 ? canAdvanceFromRepo : step === 1 ? canAdvanceFromAgent : canSubmit;
 
   const createSession = async () => {
     if (!canSubmit) return;
@@ -77,7 +67,7 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
     setError(null);
     try {
       const result = await window.api.createSession({
-        ...(isGlobalSession ? { global: true } : { repoPath }),
+        repoPath,
         name: name.trim(),
         agentId,
         labelIds: labelIds.length ? labelIds : undefined,
@@ -160,68 +150,32 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
           {step === 0 && (
             <div className="new-session-panel">
               <p className="new-session-intro muted">
-                Choose where this session runs. Repository sessions get an isolated git worktree;
-                global sessions run directly in your code directory.
+                Choose the repository for this session. A new git worktree and branch will be created.
               </p>
-              <div className="new-session-scope-grid">
-                <button
-                  type="button"
-                  className={`new-session-scope-card${scope === 'repo' ? ' selected' : ''}`}
-                  onClick={() => setScope('repo')}
-                >
-                  <span className="new-session-scope-icon" aria-hidden>
-                    ⎇
-                  </span>
-                  <span className="new-session-scope-title">Repository</span>
-                  <span className="new-session-scope-desc">
-                    New worktree branched from origin/main in a selected repo.
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`new-session-scope-card${scope === 'global' ? ' selected' : ''}`}
-                  onClick={() => setScope('global')}
-                >
-                  <span className="new-session-scope-icon" aria-hidden>
-                    ◉
-                  </span>
-                  <span className="new-session-scope-title">Global</span>
-                  <span className="new-session-scope-desc">
-                    Run at your code directory — no worktree or branch is created.
-                  </span>
-                </button>
+              <div className="field new-session-repo-field">
+                <label className="field-label" htmlFor="new-session-repo">
+                  Repository
+                </label>
+                {repos === null ? (
+                  <div className="muted">Scanning repos…</div>
+                ) : repos.length === 0 ? (
+                  <div className="modal-warn">
+                    No git repos found in your code directory. Update the code directory in Settings.
+                  </div>
+                ) : (
+                  <select
+                    id="new-session-repo"
+                    value={repoPath}
+                    onChange={(e) => setRepoPath(e.target.value)}
+                  >
+                    {repos.map((r) => (
+                      <option key={r.path} value={r.path}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-              {scope === 'repo' ? (
-                <div className="field new-session-repo-field">
-                  <label className="field-label" htmlFor="new-session-repo">
-                    Repository
-                  </label>
-                  {repos === null ? (
-                    <div className="muted">Scanning repos…</div>
-                  ) : repos.length === 0 ? (
-                    <div className="modal-warn">
-                      No git repos found in your code directory. Update the code directory in Settings.
-                    </div>
-                  ) : (
-                    <select
-                      id="new-session-repo"
-                      value={repoPath}
-                      onChange={(e) => setRepoPath(e.target.value)}
-                    >
-                      {repos.map((r) => (
-                        <option key={r.path} value={r.path}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ) : (
-                <div className="new-session-code-dir muted">
-                  Code directory
-                  {codeDir ? `: ${codeDir}` : ' — set in Settings'}
-                </div>
-              )}
             </div>
           )}
 
@@ -283,9 +237,7 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
                   spellCheck={false}
                 />
                 <div className="muted new-session-name-hint">
-                  {isGlobalSession
-                    ? 'Letters, numbers, dot, underscore, slash, dash. Spaces become dashes.'
-                    : 'Also used as the branch name. Spaces become dashes as you type.'}
+                  Also used as the branch name. Spaces become dashes as you type.
                 </div>
               </div>
               {sessionLabels.length > 0 && (
@@ -319,15 +271,9 @@ export function NewSessionModal({ sessionLabels, onClose, onCreated }: Props) {
               )}
               <div className="new-session-summary">
                 <div className="new-session-summary-row">
-                  <span className="new-session-summary-key">Type</span>
-                  <span>{isGlobalSession ? 'Global' : 'Repository worktree'}</span>
+                  <span className="new-session-summary-key">Repo</span>
+                  <span>{repos?.find((r) => r.path === repoPath)?.name ?? repoPath}</span>
                 </div>
-                {!isGlobalSession && repoPath && (
-                  <div className="new-session-summary-row">
-                    <span className="new-session-summary-key">Repo</span>
-                    <span>{repos?.find((r) => r.path === repoPath)?.name ?? repoPath}</span>
-                  </div>
-                )}
                 <div className="new-session-summary-row">
                   <span className="new-session-summary-key">Agent</span>
                   <span>{AGENTS.find((a) => a.id === agentId)?.name ?? agentId}</span>

@@ -29,10 +29,8 @@ describe('encodeProjectPath', () => {
       'Users-jamessherburn-code-ai-worktrees-skills-tray',
     );
     assert.equal(
-      encodeCursorProjectPath(
-        '/Users/jamessherburn/Library/Application Support/ai-worktrees/global-workspaces/abc-123',
-      ),
-      'Users-jamessherburn-Library-Application-Support-ai-worktrees-global-workspaces-abc-123',
+      encodeCursorProjectPath('/Users/jamessherburn/Library/Application Support/ai-worktrees/foo'),
+      'Users-jamessherburn-Library-Application-Support-ai-worktrees-foo',
     );
   });
 
@@ -84,17 +82,6 @@ describe('composeLaunchCommand', () => {
     );
   });
 
-  it('cursor includes --trust for fresh global workspace roots', () => {
-    assert.equal(
-      composeLaunchCommand('cursor', false, { cwd, cursorTrustWorkspace: true }).shellCommand,
-      `cursor-agent --workspace ${shellSingleQuote(cwd)} --trust`,
-    );
-    assert.equal(
-      composeLaunchCommand('cursor', true, { cwd, cursorTrustWorkspace: true }).shellCommand,
-      `cursor-agent --workspace ${shellSingleQuote(cwd)} --trust resume`,
-    );
-  });
-
   it('formatPtyShellCommand prefixes per-session agent env vars', () => {
     assert.equal(
       formatPtyShellCommand('cursor-agent resume', {
@@ -131,13 +118,13 @@ describe('agentSessionDataPaths', () => {
     assert.ok(paths.includes(`${cwd}/.codex`));
   });
 
-  it('omits local agent dirs for global session cwds', () => {
+  it('omits local agent dirs by default', () => {
     const paths = agentSessionDataPaths(cwd);
     assert.ok(!paths.some((p) => p.endsWith('/.cursor')));
     assert.ok(!paths.some((p) => p.endsWith('/.codex')));
   });
 
-  it('uses per-session storage roots for global sessions', () => {
+  it('uses custom storage roots when provided', () => {
     const roots = {
       claudeConfigDir: '/tmp/global/claude',
       cursorConfigDir: '/tmp/global/cursor',
@@ -275,9 +262,9 @@ describe('cursorHasSavedSession', () => {
     }
   });
 
-  it('finds agent-transcripts under Application Support global workspace paths', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'ai-worktrees-cursor-global-ws-'));
-    const workspace = join(root, 'Library', 'Application Support', 'ai-worktrees', 'global-workspaces', 'sess-1');
+  it('finds agent-transcripts under Application Support paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-worktrees-cursor-app-support-'));
+    const workspace = join(root, 'Library', 'Application Support', 'ai-worktrees', 'myrepo-feature');
     const encoded = encodeCursorProjectPath(workspace);
     const transcriptDir = join(root, 'cursor-home', 'projects', encoded, 'agent-transcripts', 'chat-uuid');
     await mkdir(transcriptDir, { recursive: true });
