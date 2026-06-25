@@ -89,12 +89,12 @@ export async function migrateGlobalAgentDataIfNeeded(
   const storageRoots = globalAgentStoragePaths(sessionId);
   const canonicalCwd = await canonicalAgentCwd(cwd);
   if (await agentHasSavedSession(canonicalCwd, storageRoots)) return;
+  if (canonicalCwd !== cwd && (await agentHasSavedSession(cwd, storageRoots))) return;
 
   const legacyCwd = globalSessionCwdPath(sessionId);
   const sources: { fromCwd: string; fromRoots?: AgentStorageRoots }[] = [
     { fromCwd: canonicalCwd },
     { fromCwd: legacyCwd },
-    { fromCwd: canonicalCwd, fromRoots: storageRoots },
     { fromCwd: legacyCwd, fromRoots: storageRoots },
   ];
 

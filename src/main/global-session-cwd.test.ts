@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:net';
 import { mkdtemp, mkdir, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,19 @@ import {
   setUserDataRootForTests,
 } from './global-session-cwd.js';
 import { encodeCursorProjectPath } from './agents.js';
+
+async function withUnixSocket(path: string, run: () => Promise<void>): Promise<void> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.on('error', reject);
+    server.listen(path, () => resolve());
+  });
+  try {
+    await run();
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
 
 describe('global-session-cwd', () => {
   let userDataDir: string;
@@ -135,6 +149,32 @@ describe('global-session-cwd', () => {
       encodeCursorProjectPath(canonicalCwd),
     );
     await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
+  });
+
+  it('migrateGlobalAgentDataIfNeeded tolerates cursor worker.sock in per-session storage', async () => {
+    const shortUserData = await mkdtemp('/tmp/u');
+    setUserDataRootForTests(shortUserData);
+    try {
+      const codeDir = '/tmp/gcode';
+      await mkdir(codeDir, { recursive: true });
+      const sessionId = 'session-socket';
+      const storageRoots = globalAgentStoragePaths(sessionId);
+      const projectDir = join(
+        storageRoots.cursorConfigDir!,
+        'projects',
+        encodeCursorProjectPath(codeDir),
+      );
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(join(projectDir, 'chat.json'), '{}');
+
+      const socketPath = join(projectDir, 'worker.sock');
+      await withUnixSocket(socketPath, async () => {
+        await migrateGlobalAgentDataIfNeeded(sessionId, codeDir);
+      });
+    } finally {
+      setUserDataRootForTests(userDataDir);
+      await rm(shortUserData, { recursive: true, force: true });
+    }
   });
 
   it('removeGlobalAgentStorage deletes per-session agent data and legacy symlinks', async () => {

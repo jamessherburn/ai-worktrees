@@ -52,8 +52,14 @@ export async function listSessions(): Promise<Session[]> {
   const data = await store.read();
   const sessions = data.sessions.map((s) => normalizeSessionRecord(s));
   for (const session of sessions) {
-    if (session.global) {
+    if (!session.global) continue;
+    try {
       await migrateGlobalAgentDataIfNeeded(session.id, session.repoPath);
+    } catch (err) {
+      console.warn(
+        `Failed to migrate global agent data for session ${session.id}:`,
+        (err as Error).message,
+      );
     }
   }
   return sessions;
