@@ -302,7 +302,7 @@ export async function listGlobalAgentStorageSessions(opts: {
 
     const storageRoots = globalAgentStoragePaths(sessionId);
     const session = sessionsById.get(sessionId);
-    const probeCwd = session?.global ? session.repoPath : opts.codeDir;
+    const probeCwd = session?.global ? globalSessionCwdPath(sessionId) : opts.codeDir;
     const agents: AgentId[] = [];
     if (await claudeHasSavedConversation(probeCwd, storageRoots)) agents.push('claude');
     if (await cursorHasSavedSession(probeCwd, storageRoots)) agents.push('cursor');

@@ -73,11 +73,12 @@ describe('global-session-cwd', () => {
     });
   });
 
-  it('resolveAgentCwd uses the code directory for global sessions', async () => {
+  it('resolveAgentCwd uses a per-session symlink for global sessions', async () => {
     const codeDir = join(userDataDir, 'code');
     await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-agent';
     const cwd = await resolveAgentCwd({
-      id: 'session-agent',
+      id: sessionId,
       name: 'global-a',
       repoPath: codeDir,
       repoName: 'Global',
@@ -89,7 +90,8 @@ describe('global-session-cwd', () => {
       lastStartedAt: null,
       global: true,
     });
-    assert.equal(cwd, await realpath(codeDir));
+    assert.equal(cwd, globalSessionCwdPath(sessionId));
+    assert.equal(await readlink(cwd), codeDir);
   });
 
   it('ensureGlobalSessionCwd creates a symlink to the code directory', async () => {
@@ -125,56 +127,73 @@ describe('global-session-cwd', () => {
     await writeFile(join(codeDir, 'still-here.txt'), 'ok');
   });
 
-  it('migrateGlobalAgentDataIfNeeded copies legacy symlink data into canonical cwd storage', async () => {
+  it('migrateGlobalAgentDataIfNeeded copies legacy code-dir keys into symlink storage', async () => {
     const codeDir = join(userDataDir, 'code');
     await mkdir(codeDir, { recursive: true });
     const sessionId = 'session-migrate';
-    const legacyCwd = globalSessionCwdPath(sessionId);
-    await ensureGlobalSessionCwd(sessionId, codeDir);
     const storageRoots = globalAgentStoragePaths(sessionId);
+    const canonicalCodeDir = await realpath(codeDir);
     const legacyChat = join(
       storageRoots.cursorConfigDir!,
       'chats',
-      encodeCursorProjectPath(legacyCwd),
+      encodeCursorProjectPath(canonicalCodeDir),
     );
     await mkdir(legacyChat, { recursive: true });
     await writeFile(join(legacyChat, 'chat.json'), '{}');
 
     await migrateGlobalAgentDataIfNeeded(sessionId, codeDir);
 
-    const canonicalCwd = await realpath(codeDir);
-    const canonicalChat = join(
+    const agentCwd = globalSessionCwdPath(sessionId);
+    const migratedChat = join(
       storageRoots.cursorConfigDir!,
       'chats',
-      encodeCursorProjectPath(canonicalCwd),
+      encodeCursorProjectPath(agentCwd),
     );
-    await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
+    await writeFile(join(migratedChat, 'verify.txt'), 'ok');
   });
 
-  it('migrateGlobalAgentDataIfNeeded still migrates legacy symlink data for isolated sessions', async () => {
-    const codeDir = join(userDataDir, 'code-isolated-legacy');
+  it('migrateGlobalAgentDataIfNeeded skips code-dir keys for isolated sessions', async () => {
+    const codeDir = join(userDataDir, 'code-isolated-skip');
     await mkdir(codeDir, { recursive: true });
-    const sessionId = 'session-isolated-legacy';
-    const legacyCwd = globalSessionCwdPath(sessionId);
-    await ensureGlobalSessionCwd(sessionId, codeDir);
+    const sessionId = 'session-isolated-skip';
     const storageRoots = globalAgentStoragePaths(sessionId);
+    const canonicalCodeDir = await realpath(codeDir);
     const legacyChat = join(
       storageRoots.cursorConfigDir!,
       'chats',
-      encodeCursorProjectPath(legacyCwd),
+      encodeCursorProjectPath(canonicalCodeDir),
     );
     await mkdir(legacyChat, { recursive: true });
     await writeFile(join(legacyChat, 'chat.json'), '{}');
 
     await migrateGlobalAgentDataIfNeeded(sessionId, codeDir, { agentStorageIsolated: true });
 
-    const canonicalCwd = await realpath(codeDir);
-    const canonicalChat = join(
+    const agentCwd = globalSessionCwdPath(sessionId);
+    const migratedChat = join(
       storageRoots.cursorConfigDir!,
       'chats',
-      encodeCursorProjectPath(canonicalCwd),
+      encodeCursorProjectPath(agentCwd),
     );
-    await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
+    await assert.rejects(() => writeFile(join(migratedChat, 'nope.txt'), 'x'));
+  });
+
+  it('migrateGlobalAgentDataIfNeeded still migrates legacy symlink data for isolated sessions', async () => {
+    const codeDir = join(userDataDir, 'code-isolated-legacy');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-isolated-legacy';
+    const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
+    const storageRoots = globalAgentStoragePaths(sessionId);
+    const legacyChat = join(
+      storageRoots.cursorConfigDir!,
+      'chats',
+      encodeCursorProjectPath(agentCwd),
+    );
+    await mkdir(legacyChat, { recursive: true });
+    await writeFile(join(legacyChat, 'chat.json'), '{}');
+
+    await migrateGlobalAgentDataIfNeeded(sessionId, codeDir, { agentStorageIsolated: true });
+
+    await writeFile(join(legacyChat, 'verify.txt'), 'ok');
   });
 
   it('migrateGlobalAgentDataIfNeeded tolerates cursor worker.sock in per-session storage', async () => {

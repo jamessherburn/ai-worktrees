@@ -125,14 +125,20 @@ export async function cursorHasSavedSession(
 ): Promise<boolean> {
   const encoded = encodeCursorProjectPath(cwd);
   const legacyEncoded = encodeClaudeProjectPath(cwd);
-  const cursorRoot = cursorConfigRoot(storageRoots);
-  const candidates = [
-    join(cursorRoot, 'projects', encoded),
-    join(cursorRoot, 'chats', encoded),
-    join(cursorRoot, 'projects', legacyEncoded),
-    join(cursorRoot, 'chats', legacyEncoded),
-    join(cwd, '.cursor'),
-  ];
+  const cursorRoots = new Set<string>([cursorConfigRoot(storageRoots)]);
+  // CURSOR_CONFIG_DIR only relocates cli-config.json; chats still land in ~/.cursor.
+  if (storageRoots?.cursorConfigDir) {
+    cursorRoots.add(join(homedir(), '.cursor'));
+  }
+  const candidates: string[] = [join(cwd, '.cursor')];
+  for (const cursorRoot of cursorRoots) {
+    candidates.push(
+      join(cursorRoot, 'projects', encoded),
+      join(cursorRoot, 'chats', encoded),
+      join(cursorRoot, 'projects', legacyEncoded),
+      join(cursorRoot, 'chats', legacyEncoded),
+    );
+  }
   for (const path of candidates) {
     if (await dirHasEntries(path, isCursorSessionEntry)) return true;
   }
