@@ -307,9 +307,25 @@ export async function listGlobalAgentStorageSessions(opts: {
     if (await claudeHasSavedConversation(probeCwd, storageRoots)) agents.push('claude');
     if (await cursorHasSavedSession(probeCwd, storageRoots)) agents.push('cursor');
     if (await codexHasSavedSession(probeCwd, storageRoots)) agents.push('codex');
-    if (agents.length === 0) continue;
 
     const isActive = registeredGlobalIds.has(sessionId);
+    if (agents.length === 0) {
+      if (isActive) continue;
+      results.push({
+        id: globalAgentCleanupId(sessionId),
+        cwd: dataRoot,
+        dataPaths: [],
+        groupName: 'Global',
+        groupKind: 'global',
+        repoPath: '',
+        agents: [],
+        status: 'orphaned',
+        displayPath: displayPathForAgentSession(dataRoot, 'global'),
+        createdAt: createdAtIso(createdAtMs),
+      });
+      continue;
+    }
+
     const dataPaths = await existingAgentDataPaths(probeCwd, storageRoots);
     results.push({
       id: globalAgentCleanupId(sessionId),

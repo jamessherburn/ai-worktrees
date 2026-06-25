@@ -828,8 +828,7 @@ export function App() {
           onCreated={async ({ session }) => {
             setShowNew(false);
             const list = await refresh();
-            const created = list.find((s) => s.id === session.id);
-            if (!created) return;
+            const created = list.find((s) => s.id === session.id) ?? session;
             openSession(created.id);
           }}
         />
