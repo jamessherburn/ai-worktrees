@@ -123,6 +123,7 @@ export async function startPty(opts: {
   const launch = await buildLaunchCommand(opts.agentId, {
     cwd: opts.cwd,
     storageRoots: opts.storageRoots,
+    agentEnv: opts.agentEnv,
   });
 
   const env = { ...agentShellEnv(), ...opts.agentEnv };

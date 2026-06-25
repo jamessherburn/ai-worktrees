@@ -23,6 +23,7 @@ import {
   ensureGlobalAgentStorage,
   globalAgentStoragePaths,
   globalSessionCwdPath,
+  migrateGlobalAgentDataIfNeeded,
   removeGlobalAgentStorage,
 } from './global-session-cwd.js';
 import { getSettings } from './settings.js';
@@ -52,7 +53,7 @@ export async function listSessions(): Promise<Session[]> {
   const sessions = data.sessions.map((s) => normalizeSessionRecord(s));
   for (const session of sessions) {
     if (session.global) {
-      await ensureGlobalAgentStorage(session.id);
+      await migrateGlobalAgentDataIfNeeded(session.id, session.repoPath);
     }
   }
   return sessions;

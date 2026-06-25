@@ -9,6 +9,8 @@ import {
   cursorHasSavedSession,
   encodeClaudeProjectPath,
   encodeCursorProjectPath,
+  agentSessionDataPaths,
+  type AgentStorageRoots,
 } from './agents.js';
 import {
   globalAgentCleanupId,
@@ -160,19 +162,21 @@ function mergeDecodedEntries(
   entries: DecodedAgentDir[],
   repos: RepoInfo[],
   codeDir: string,
-): Map<string, { agents: Set<AgentId>; createdAtMs: number }> {
-  const byCwd = new Map<string, { agents: Set<AgentId>; createdAtMs: number }>();
+): Map<string, { agents: Set<AgentId>; createdAtMs: number; dataPaths: Set<string> }> {
+  const byCwd = new Map<string, { agents: Set<AgentId>; createdAtMs: number; dataPaths: Set<string> }>();
   for (const entry of entries) {
     const recovered = tryRecoverWorktreePath(entry.cwd, repos, codeDir);
     const key = normalizeCwdKey(recovered ?? entry.cwd);
     const existing = byCwd.get(key);
     if (existing) {
       existing.agents.add(entry.agentId);
+      existing.dataPaths.add(entry.dataPath);
       existing.createdAtMs = Math.min(existing.createdAtMs, entry.createdAtMs);
     } else {
       byCwd.set(key, {
         agents: new Set([entry.agentId]),
         createdAtMs: entry.createdAtMs,
+        dataPaths: new Set([entry.dataPath]),
       });
     }
   }
@@ -255,6 +259,17 @@ export function displayPathForAgentSession(cwd: string, groupKind: CleanupGroupK
   return cwd;
 }
 
+async function existingAgentDataPaths(
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+): Promise<string[]> {
+  const paths: string[] = [];
+  for (const path of agentSessionDataPaths(cwd, { storageRoots })) {
+    if (await pathExists(path)) paths.push(path);
+  }
+  return paths;
+}
+
 export async function listGlobalAgentStorageSessions(opts: {
   codeDir: string;
   sessions: { id: string; name: string; global?: boolean }[];
@@ -286,17 +301,20 @@ export async function listGlobalAgentStorageSessions(opts: {
     }
 
     const storageRoots = globalAgentStoragePaths(sessionId);
+    const session = sessionsById.get(sessionId);
+    const probeCwd = session?.global ? session.repoPath : opts.codeDir;
     const agents: AgentId[] = [];
-    if (await claudeHasSavedConversation(opts.codeDir, storageRoots)) agents.push('claude');
-    if (await cursorHasSavedSession(opts.codeDir, storageRoots)) agents.push('cursor');
-    if (await codexHasSavedSession(opts.codeDir, storageRoots)) agents.push('codex');
+    if (await claudeHasSavedConversation(probeCwd, storageRoots)) agents.push('claude');
+    if (await cursorHasSavedSession(probeCwd, storageRoots)) agents.push('cursor');
+    if (await codexHasSavedSession(probeCwd, storageRoots)) agents.push('codex');
     if (agents.length === 0) continue;
 
-    const session = sessionsById.get(sessionId);
     const isActive = registeredGlobalIds.has(sessionId);
+    const dataPaths = await existingAgentDataPaths(probeCwd, storageRoots);
     results.push({
       id: globalAgentCleanupId(sessionId),
       cwd: dataRoot,
+      dataPaths,
       groupName: 'Global',
       groupKind: 'global',
       repoPath: '',
@@ -357,6 +375,7 @@ export async function listLeftoverAgentSessions(opts: {
     sessions.push({
       id: agentSessionId(cwd),
       cwd,
+      dataPaths: Array.from(merged.dataPaths),
       groupName: group.groupName,
       groupKind: group.groupKind,
       repoPath: group.repoPath,
@@ -474,6 +493,9 @@ export function resolveCanonicalAgentCwd(
 
   return decoded;
 }
+
+/** @internal Exported for tests. */
+export { mergeDecodedEntries };
 
 export async function collectKnownAgentCwds(
   repos: RepoInfo[],

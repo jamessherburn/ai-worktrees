@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readlink, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -10,11 +10,13 @@ import {
   globalAgentEnv,
   globalAgentStoragePaths,
   globalSessionCwdPath,
+  migrateGlobalAgentDataIfNeeded,
   removeGlobalAgentStorage,
   removeGlobalSessionCwd,
   resolveAgentCwd,
   setUserDataRootForTests,
 } from './global-session-cwd.js';
+import { encodeCursorProjectPath } from './agents.js';
 
 describe('global-session-cwd', () => {
   let userDataDir: string;
@@ -73,7 +75,7 @@ describe('global-session-cwd', () => {
       lastStartedAt: null,
       global: true,
     });
-    assert.equal(cwd, codeDir);
+    assert.equal(cwd, await realpath(codeDir));
   });
 
   it('ensureGlobalSessionCwd creates a symlink to the code directory', async () => {
@@ -107,6 +109,32 @@ describe('global-session-cwd', () => {
     await removeGlobalSessionCwd(sessionId);
     await assert.rejects(() => readlink(cwd));
     await writeFile(join(codeDir, 'still-here.txt'), 'ok');
+  });
+
+  it('migrateGlobalAgentDataIfNeeded copies legacy symlink data into canonical cwd storage', async () => {
+    const codeDir = join(userDataDir, 'code');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-migrate';
+    const legacyCwd = globalSessionCwdPath(sessionId);
+    await ensureGlobalSessionCwd(sessionId, codeDir);
+    const storageRoots = globalAgentStoragePaths(sessionId);
+    const legacyChat = join(
+      storageRoots.cursorConfigDir!,
+      'chats',
+      encodeCursorProjectPath(legacyCwd),
+    );
+    await mkdir(legacyChat, { recursive: true });
+    await writeFile(join(legacyChat, 'chat.json'), '{}');
+
+    await migrateGlobalAgentDataIfNeeded(sessionId, codeDir);
+
+    const canonicalCwd = await realpath(codeDir);
+    const canonicalChat = join(
+      storageRoots.cursorConfigDir!,
+      'chats',
+      encodeCursorProjectPath(canonicalCwd),
+    );
+    await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
   });
 
   it('removeGlobalAgentStorage deletes per-session agent data and legacy symlinks', async () => {

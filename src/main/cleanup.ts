@@ -9,7 +9,7 @@ import type {
   Session,
 } from '@shared/types';
 import { listLeftoverAgentSessions } from './agent-session-scan.js';
-import { clearAgentSessionData } from './agents.js';
+import { clearAgentSessionData, removeAgentDataPaths } from './agents.js';
 import {
   ensureGlobalAgentStorage,
   globalAgentStoragePaths,
@@ -251,6 +251,9 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
       }
       try {
         const settings = await getSettings();
+        if (item.dataPaths.length > 0) {
+          await removeAgentDataPaths(item.dataPaths);
+        }
         await clearAgentSessionData(settings.codeDir, {
           storageRoots: globalAgentStoragePaths(sessionId),
         });
@@ -273,6 +276,9 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
     }
     if (item.groupKind === 'external') continue;
     try {
+      if (item.dataPaths.length > 0) {
+        await removeAgentDataPaths(item.dataPaths);
+      }
       await clearAgentSessionData(item.cwd, {
         includeLocalAgentDirs: item.groupKind !== 'global',
       });
