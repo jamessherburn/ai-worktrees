@@ -102,6 +102,7 @@ export async function startPty(opts: {
   sessionId: string;
   agentId: AgentId;
   cwd: string;
+  workspaceCwd?: string;
   cols: number;
   rows: number;
   storageRoots?: AgentStorageRoots;
@@ -122,6 +123,7 @@ export async function startPty(opts: {
 
   const launch = await buildLaunchCommand(opts.agentId, {
     cwd: opts.cwd,
+    workspaceCwd: opts.workspaceCwd,
     storageRoots: opts.storageRoots,
     agentEnv: opts.agentEnv,
   });

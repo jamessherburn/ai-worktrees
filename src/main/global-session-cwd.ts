@@ -3,13 +3,17 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Session } from '@shared/types';
 import {
-  agentHasSavedSession,
+  claudeHasSavedConversation,
   clearAgentSessionData,
+  codexHasSavedSession,
   copyAgentSessionDataBetweenRoots,
+  cursorHasSavedSession,
   type AgentStorageRoots,
 } from './agents.js';
 
 const requireElectron = createRequire(import.meta.url);
+
+const GLOBAL_CODE_LINK = 'code';
 
 let userDataRootOverride: string | undefined;
 
@@ -29,9 +33,18 @@ function userDataRoot(): string {
   return app.getPath('userData');
 }
 
-/** Legacy per-global-session symlink path (pre–config-dir isolation). */
+/** Legacy per-global-session symlink path (pre–workspace isolation). */
 export function globalSessionCwdPath(sessionId: string): string {
   return join(userDataRoot(), 'global-sessions', sessionId);
+}
+
+/** Real per-global-session workspace root (Cursor keys chats by --workspace, not PTY cwd). */
+export function globalWorkspacePath(sessionId: string): string {
+  return join(userDataRoot(), 'global-workspaces', sessionId);
+}
+
+export function globalWorktreePath(sessionId: string): string {
+  return join(globalWorkspacePath(sessionId), GLOBAL_CODE_LINK);
 }
 
 /** Per-global-session agent config roots under userData. */
@@ -78,6 +91,46 @@ async function canonicalAgentCwd(cwd: string): Promise<string> {
   }
 }
 
+async function ensureSymlinkToTarget(linkPath: string, target: string): Promise<void> {
+  await fs.mkdir(dirname(linkPath), { recursive: true });
+  try {
+    const stat = await fs.lstat(linkPath);
+    if (stat.isSymbolicLink()) {
+      const current = await fs.readlink(linkPath);
+      if (current === target) return;
+      await fs.unlink(linkPath);
+    } else {
+      return;
+    }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  await fs.symlink(target, linkPath);
+}
+
+/**
+ * Per-session workspace: a real directory (unique Cursor project key) with `code` → codeDir.
+ * Cursor resolves symlink cwds to the code directory for storage; --workspace must be this root.
+ */
+export async function ensureGlobalWorkspace(sessionId: string, codeDir: string): Promise<string> {
+  const workspace = globalWorkspacePath(sessionId);
+  await fs.mkdir(workspace, { recursive: true });
+  await ensureSymlinkToTarget(globalWorktreePath(sessionId), codeDir);
+  return workspace;
+}
+
+async function globalSessionHasSavedData(
+  workspace: string,
+  workCwd: string,
+  storageRoots: AgentStorageRoots,
+): Promise<boolean> {
+  return (
+    (await claudeHasSavedConversation(workCwd, storageRoots)) ||
+    (await cursorHasSavedSession(workspace, storageRoots)) ||
+    (await codexHasSavedSession(workCwd, storageRoots))
+  );
+}
+
 /**
  * Move agent history into per-session storage when it was written to the default
  * agent config (e.g. before env vars took effect) or legacy symlink cwds.
@@ -89,74 +142,80 @@ export async function migrateGlobalAgentDataIfNeeded(
 ): Promise<void> {
   await ensureGlobalAgentStorage(sessionId);
   const storageRoots = globalAgentStoragePaths(sessionId);
-  const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
-  if (await agentHasSavedSession(agentCwd, storageRoots)) return;
+  const workspace = await ensureGlobalWorkspace(sessionId, codeDir);
+  const workCwd = globalWorktreePath(sessionId);
+  if (await globalSessionHasSavedData(workspace, workCwd, storageRoots)) return;
 
   const canonicalCodeDir = await canonicalAgentCwd(codeDir);
-  const sources: { fromCwd: string; fromRoots?: AgentStorageRoots }[] = [
-    { fromCwd: agentCwd },
-    { fromCwd: agentCwd, fromRoots: storageRoots },
+  const legacyCwd = globalSessionCwdPath(sessionId);
+  const sources: { fromCwd: string; fromRoots?: AgentStorageRoots; cursorCwd?: string }[] = [
+    { fromCwd: workCwd, cursorCwd: workspace },
+    { fromCwd: workCwd, fromRoots: storageRoots, cursorCwd: workspace },
+    { fromCwd: legacyCwd, cursorCwd: legacyCwd },
+    { fromCwd: legacyCwd, fromRoots: storageRoots, cursorCwd: legacyCwd },
   ];
-  // Pre-isolation sessions may have written to the default agent config before env vars applied.
   if (!opts?.agentStorageIsolated) {
-    sources.unshift({ fromCwd: canonicalCodeDir });
-    if (canonicalCodeDir !== agentCwd) {
-      sources.push({ fromCwd: canonicalCodeDir, fromRoots: storageRoots });
-    }
+    sources.unshift({ fromCwd: canonicalCodeDir, cursorCwd: canonicalCodeDir });
+    sources.push({ fromCwd: canonicalCodeDir, fromRoots: storageRoots, cursorCwd: canonicalCodeDir });
   }
 
   for (const source of sources) {
-    if (!(await agentHasSavedSession(source.fromCwd, source.fromRoots))) continue;
-    if (
-      await copyAgentSessionDataBetweenRoots(
-        source.fromCwd,
-        agentCwd,
-        source.fromRoots,
-        storageRoots,
-      )
-    ) {
-      return;
+    const fromCursorCwd = source.cursorCwd ?? source.fromCwd;
+    const hasData =
+      (await claudeHasSavedConversation(source.fromCwd, source.fromRoots)) ||
+      (await cursorHasSavedSession(fromCursorCwd, source.fromRoots)) ||
+      (await codexHasSavedSession(source.fromCwd, source.fromRoots));
+    if (!hasData) continue;
+
+    let copied = false;
+    if (source.fromRoots) {
+      copied =
+        (await copyAgentSessionDataBetweenRoots(
+          source.fromCwd,
+          workCwd,
+          source.fromRoots,
+          storageRoots,
+        )) || copied;
     }
+    if (fromCursorCwd !== workspace) {
+      copied =
+        (await copyAgentSessionDataBetweenRoots(
+          fromCursorCwd,
+          workspace,
+          source.fromRoots,
+          undefined,
+        )) || copied;
+    }
+    if (copied) return;
   }
 }
 
-/** Clear saved agent data for a global session (symlink cwd + per-session storage + legacy code-dir keys). */
+/** Clear saved agent data for a global session (workspace, worktree link, per-session storage, legacy paths). */
 export async function clearGlobalSessionAgentData(sessionId: string, codeDir: string): Promise<void> {
-  const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
+  const workspace = await ensureGlobalWorkspace(sessionId, codeDir);
+  const workCwd = globalWorktreePath(sessionId);
   const storageRoots = globalAgentStoragePaths(sessionId);
-  await clearAgentSessionData(agentCwd);
-  await clearAgentSessionData(agentCwd, { storageRoots });
+  await clearAgentSessionData(workspace);
+  await clearAgentSessionData(workCwd);
+  await clearAgentSessionData(workCwd, { storageRoots });
   const canonicalCodeDir = await canonicalAgentCwd(codeDir);
-  if (canonicalCodeDir !== agentCwd) {
+  if (canonicalCodeDir !== workCwd) {
     await clearAgentSessionData(canonicalCodeDir);
     await clearAgentSessionData(canonicalCodeDir, { storageRoots });
   }
+  await clearAgentSessionData(globalSessionCwdPath(sessionId));
 }
 
 export async function removeGlobalAgentStorage(sessionId: string): Promise<void> {
   await fs.rm(globalAgentDataRoot(sessionId), { recursive: true, force: true });
+  await fs.rm(globalWorkspacePath(sessionId), { recursive: true, force: true });
   await removeGlobalSessionCwd(sessionId);
 }
 
 /** @deprecated Legacy symlink cwd; kept for cleaning up older agent data keyed by symlink path. */
 export async function ensureGlobalSessionCwd(sessionId: string, codeDir: string): Promise<string> {
   const linkPath = globalSessionCwdPath(sessionId);
-  await fs.mkdir(dirname(linkPath), { recursive: true });
-
-  try {
-    const stat = await fs.lstat(linkPath);
-    if (stat.isSymbolicLink()) {
-      const target = await fs.readlink(linkPath);
-      if (target === codeDir) return linkPath;
-      await fs.unlink(linkPath);
-    } else {
-      return linkPath;
-    }
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-  }
-
-  await fs.symlink(codeDir, linkPath);
+  await ensureSymlinkToTarget(linkPath, codeDir);
   return linkPath;
 }
 
@@ -168,15 +227,20 @@ export async function removeGlobalSessionCwd(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Agent PTY cwd: per-session symlink into the code directory for global sessions
- * (Cursor stores chats under ~/.cursor keyed by cwd — CURSOR_CONFIG_DIR does not
- * relocate them). Repo sessions use the worktree path.
- */
+/** PTY cwd: `global-workspaces/{id}/code` → codeDir. */
 export async function resolveAgentCwd(session: Session): Promise<string> {
   if (session.global) {
     await ensureGlobalAgentStorage(session.id);
-    return ensureGlobalSessionCwd(session.id, session.repoPath);
+    await ensureGlobalWorkspace(session.id, session.repoPath);
+    return globalWorktreePath(session.id);
   }
   return canonicalAgentCwd(session.worktreePath);
+}
+
+/** Cursor --workspace and resume probe path (real directory; not the code-dir symlink). */
+export async function resolveAgentWorkspace(session: Session): Promise<string> {
+  if (session.global) {
+    return ensureGlobalWorkspace(session.id, session.repoPath);
+  }
+  return resolveAgentCwd(session);
 }

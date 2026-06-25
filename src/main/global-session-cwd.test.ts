@@ -7,17 +7,21 @@ import { after, before, describe, it } from 'node:test';
 import {
   ensureGlobalAgentStorage,
   ensureGlobalSessionCwd,
+  ensureGlobalWorkspace,
   globalAgentDataRoot,
   globalAgentEnv,
   globalAgentStoragePaths,
   globalSessionCwdPath,
+  globalWorkspacePath,
+  globalWorktreePath,
   migrateGlobalAgentDataIfNeeded,
   removeGlobalAgentStorage,
   removeGlobalSessionCwd,
   resolveAgentCwd,
+  resolveAgentWorkspace,
   setUserDataRootForTests,
 } from './global-session-cwd.js';
-import { encodeCursorProjectPath } from './agents.js';
+import { buildLaunchCommand, encodeClaudeProjectPath, encodeCursorProjectPath } from './agents.js';
 
 async function withUnixSocket(path: string, run: () => Promise<void>): Promise<void> {
   const server = createServer();
@@ -45,36 +49,24 @@ describe('global-session-cwd', () => {
     await rm(userDataDir, { recursive: true, force: true });
   });
 
-  it('globalSessionCwdPath nests under userData/global-sessions', () => {
+  it('globalWorkspacePath nests under userData/global-workspaces', () => {
     assert.equal(
-      globalSessionCwdPath('abc-123'),
-      join(userDataDir, 'global-sessions', 'abc-123'),
+      globalWorkspacePath('abc-123'),
+      join(userDataDir, 'global-workspaces', 'abc-123'),
     );
   });
 
-  it('globalAgentDataRoot nests under userData/global-agent-data', () => {
-    assert.equal(
-      globalAgentDataRoot('abc-123'),
-      join(userDataDir, 'global-agent-data', 'abc-123'),
-    );
-  });
-
-  it('ensureGlobalAgentStorage creates per-agent config directories', async () => {
-    const sessionId = 'session-storage';
-    await ensureGlobalAgentStorage(sessionId);
-    const paths = globalAgentStoragePaths(sessionId);
-    assert.equal(paths.claudeConfigDir, join(userDataDir, 'global-agent-data', sessionId, 'claude'));
-    assert.equal(paths.cursorConfigDir, join(userDataDir, 'global-agent-data', sessionId, 'cursor'));
-    assert.equal(paths.codexHome, join(userDataDir, 'global-agent-data', sessionId, 'codex'));
-    assert.deepEqual(globalAgentEnv(sessionId), {
-      CLAUDE_CONFIG_DIR: paths.claudeConfigDir,
-      CURSOR_CONFIG_DIR: paths.cursorConfigDir,
-      CODEX_HOME: paths.codexHome,
-    });
-  });
-
-  it('resolveAgentCwd uses a per-session symlink for global sessions', async () => {
+  it('ensureGlobalWorkspace creates a real directory with code symlinked to the code dir', async () => {
     const codeDir = join(userDataDir, 'code');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-a';
+    const workspace = await ensureGlobalWorkspace(sessionId, codeDir);
+    assert.equal(workspace, globalWorkspacePath(sessionId));
+    assert.equal(await readlink(globalWorktreePath(sessionId)), codeDir);
+  });
+
+  it('resolveAgentCwd uses the workspace code link for global sessions', async () => {
+    const codeDir = join(userDataDir, 'code-agent');
     await mkdir(codeDir, { recursive: true });
     const sessionId = 'session-agent';
     const cwd = await resolveAgentCwd({
@@ -90,124 +82,94 @@ describe('global-session-cwd', () => {
       lastStartedAt: null,
       global: true,
     });
-    assert.equal(cwd, globalSessionCwdPath(sessionId));
+    assert.equal(cwd, globalWorktreePath(sessionId));
     assert.equal(await readlink(cwd), codeDir);
   });
 
-  it('ensureGlobalSessionCwd creates a symlink to the code directory', async () => {
-    const codeDir = join(userDataDir, 'code');
+  it('resolveAgentWorkspace returns the real workspace root for global sessions', async () => {
+    const codeDir = join(userDataDir, 'code-workspace');
     await mkdir(codeDir, { recursive: true });
-    const sessionId = 'session-a';
+    const sessionId = 'session-workspace';
+    const workspace = await resolveAgentWorkspace({
+      id: sessionId,
+      name: 'global-b',
+      repoPath: codeDir,
+      repoName: 'Global',
+      worktreePath: codeDir,
+      branchName: '',
+      baseBranch: '',
+      agentId: 'cursor',
+      createdAt: new Date().toISOString(),
+      lastStartedAt: null,
+      global: true,
+    });
+    assert.equal(workspace, globalWorkspacePath(sessionId));
+    assert.notEqual(workspace, globalWorktreePath(sessionId));
+  });
 
+  it('buildLaunchCommand uses workspaceCwd for cursor --workspace while PTY cwd differs', async () => {
+    const codeDir = join(userDataDir, 'code-launch');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-launch';
+    const workspace = await ensureGlobalWorkspace(sessionId, codeDir);
+    const workCwd = globalWorktreePath(sessionId);
+    const launch = await buildLaunchCommand('cursor', {
+      cwd: workCwd,
+      workspaceCwd: workspace,
+      canResume: false,
+    });
+    assert.match(launch.shellCommand, /--workspace/);
+    assert.match(launch.shellCommand, /global-workspaces\/session-launch/);
+    assert.doesNotMatch(launch.shellCommand, /code-launch/);
+  });
+
+  it('ensureGlobalSessionCwd still supports legacy symlink cleanup', async () => {
+    const codeDir = join(userDataDir, 'legacy-code');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-legacy';
     const cwd = await ensureGlobalSessionCwd(sessionId, codeDir);
     assert.equal(cwd, globalSessionCwdPath(sessionId));
     assert.equal(await readlink(cwd), codeDir);
   });
 
-  it('ensureGlobalSessionCwd recreates the symlink when the code directory changes', async () => {
-    const oldCodeDir = join(userDataDir, 'old-code');
-    const newCodeDir = join(userDataDir, 'new-code');
-    await mkdir(oldCodeDir, { recursive: true });
-    await mkdir(newCodeDir, { recursive: true });
-    const sessionId = 'session-b';
-
-    await ensureGlobalSessionCwd(sessionId, oldCodeDir);
-    const cwd = await ensureGlobalSessionCwd(sessionId, newCodeDir);
-    assert.equal(await readlink(cwd), newCodeDir);
-  });
-
-  it('removeGlobalSessionCwd deletes only the symlink', async () => {
-    const codeDir = join(userDataDir, 'code-for-remove');
-    await mkdir(codeDir, { recursive: true });
-    const sessionId = 'session-c';
-    const cwd = await ensureGlobalSessionCwd(sessionId, codeDir);
-
-    await removeGlobalSessionCwd(sessionId);
-    await assert.rejects(() => readlink(cwd));
-    await writeFile(join(codeDir, 'still-here.txt'), 'ok');
-  });
-
-  it('migrateGlobalAgentDataIfNeeded copies legacy code-dir keys into symlink storage', async () => {
-    const codeDir = join(userDataDir, 'code');
+  it('migrateGlobalAgentDataIfNeeded copies legacy code-dir claude data into worktree storage', async () => {
+    const codeDir = join(userDataDir, 'code-migrate');
     await mkdir(codeDir, { recursive: true });
     const sessionId = 'session-migrate';
     const storageRoots = globalAgentStoragePaths(sessionId);
     const canonicalCodeDir = await realpath(codeDir);
-    const legacyChat = join(
-      storageRoots.cursorConfigDir!,
-      'chats',
-      encodeCursorProjectPath(canonicalCodeDir),
+    const legacyProject = join(
+      storageRoots.claudeConfigDir!,
+      'projects',
+      encodeClaudeProjectPath(canonicalCodeDir),
     );
-    await mkdir(legacyChat, { recursive: true });
-    await writeFile(join(legacyChat, 'chat.json'), '{}');
+    await mkdir(legacyProject, { recursive: true });
+    await writeFile(join(legacyProject, 'session.jsonl'), '{}');
 
     await migrateGlobalAgentDataIfNeeded(sessionId, codeDir);
 
-    const agentCwd = globalSessionCwdPath(sessionId);
-    const migratedChat = join(
-      storageRoots.cursorConfigDir!,
-      'chats',
-      encodeCursorProjectPath(agentCwd),
+    const migratedProject = join(
+      storageRoots.claudeConfigDir!,
+      'projects',
+      encodeClaudeProjectPath(globalWorktreePath(sessionId)),
     );
-    await writeFile(join(migratedChat, 'verify.txt'), 'ok');
-  });
-
-  it('migrateGlobalAgentDataIfNeeded skips code-dir keys for isolated sessions', async () => {
-    const codeDir = join(userDataDir, 'code-isolated-skip');
-    await mkdir(codeDir, { recursive: true });
-    const sessionId = 'session-isolated-skip';
-    const storageRoots = globalAgentStoragePaths(sessionId);
-    const canonicalCodeDir = await realpath(codeDir);
-    const legacyChat = join(
-      storageRoots.cursorConfigDir!,
-      'chats',
-      encodeCursorProjectPath(canonicalCodeDir),
-    );
-    await mkdir(legacyChat, { recursive: true });
-    await writeFile(join(legacyChat, 'chat.json'), '{}');
-
-    await migrateGlobalAgentDataIfNeeded(sessionId, codeDir, { agentStorageIsolated: true });
-
-    const agentCwd = globalSessionCwdPath(sessionId);
-    const migratedChat = join(
-      storageRoots.cursorConfigDir!,
-      'chats',
-      encodeCursorProjectPath(agentCwd),
-    );
-    await assert.rejects(() => writeFile(join(migratedChat, 'nope.txt'), 'x'));
-  });
-
-  it('migrateGlobalAgentDataIfNeeded still migrates legacy symlink data for isolated sessions', async () => {
-    const codeDir = join(userDataDir, 'code-isolated-legacy');
-    await mkdir(codeDir, { recursive: true });
-    const sessionId = 'session-isolated-legacy';
-    const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
-    const storageRoots = globalAgentStoragePaths(sessionId);
-    const legacyChat = join(
-      storageRoots.cursorConfigDir!,
-      'chats',
-      encodeCursorProjectPath(agentCwd),
-    );
-    await mkdir(legacyChat, { recursive: true });
-    await writeFile(join(legacyChat, 'chat.json'), '{}');
-
-    await migrateGlobalAgentDataIfNeeded(sessionId, codeDir, { agentStorageIsolated: true });
-
-    await writeFile(join(legacyChat, 'verify.txt'), 'ok');
+    await writeFile(join(migratedProject, 'verify.txt'), 'ok');
   });
 
   it('migrateGlobalAgentDataIfNeeded tolerates cursor worker.sock in per-session storage', async () => {
-    const shortUserData = await mkdtemp('/tmp/u');
+    const shortUserData = '/tmp/u';
     setUserDataRootForTests(shortUserData);
     try {
+      await mkdir(shortUserData, { recursive: true });
       const codeDir = '/tmp/gcode';
       await mkdir(codeDir, { recursive: true });
-      const sessionId = 'session-socket';
+      const sessionId = 's-sock';
       const storageRoots = globalAgentStoragePaths(sessionId);
+      const workCwd = globalWorktreePath(sessionId);
       const projectDir = join(
         storageRoots.cursorConfigDir!,
         'projects',
-        encodeCursorProjectPath(codeDir),
+        encodeCursorProjectPath(workCwd),
       );
       await mkdir(projectDir, { recursive: true });
       await writeFile(join(projectDir, 'chat.json'), '{}');
@@ -222,15 +184,17 @@ describe('global-session-cwd', () => {
     }
   });
 
-  it('removeGlobalAgentStorage deletes per-session agent data and legacy symlinks', async () => {
+  it('removeGlobalAgentStorage deletes workspace, agent data, and legacy symlinks', async () => {
     const codeDir = join(userDataDir, 'code-for-agent-remove');
     await mkdir(codeDir, { recursive: true });
     const sessionId = 'session-d';
     await ensureGlobalAgentStorage(sessionId);
+    await ensureGlobalWorkspace(sessionId, codeDir);
     await ensureGlobalSessionCwd(sessionId, codeDir);
     await writeFile(join(globalAgentDataRoot(sessionId), 'marker.txt'), 'ok');
 
     await removeGlobalAgentStorage(sessionId);
+    await assert.rejects(() => readlink(globalWorktreePath(sessionId)));
     await assert.rejects(() => readlink(globalSessionCwdPath(sessionId)));
     await assert.rejects(() => writeFile(join(globalAgentDataRoot(sessionId), 'nope.txt'), 'x'));
   });

@@ -16,6 +16,8 @@ export type AgentStorageRoots = {
 
 export type LaunchOptions = {
   cwd: string;
+  /** Cursor --workspace path when it differs from the PTY cwd (global sessions). */
+  workspaceCwd?: string;
   /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
   storageRoots?: AgentStorageRoots;
@@ -314,10 +316,14 @@ export async function buildLaunchCommand(
   agentId: AgentId,
   options: LaunchOptions,
 ): Promise<LaunchCommand> {
+  const probeCwd =
+    agentId === 'cursor' ? (options.workspaceCwd ?? options.cwd) : options.cwd;
   const canResume =
     options.canResume ??
-    (await AGENT_RESUME_PROBES[agentId](options.cwd, options.storageRoots));
-  const launch = composeLaunchCommand(agentId, canResume, { cwd: options.cwd });
+    (await AGENT_RESUME_PROBES[agentId](probeCwd, options.storageRoots));
+  const launch = composeLaunchCommand(agentId, canResume, {
+    cwd: agentId === 'cursor' ? probeCwd : options.cwd,
+  });
   return {
     shellCommand: formatPtyShellCommand(launch.shellCommand, options.agentEnv),
   };
