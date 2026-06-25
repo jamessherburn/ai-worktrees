@@ -119,6 +119,7 @@ describe('global-session-cwd', () => {
       canResume: false,
     });
     assert.match(launch.shellCommand, /--workspace/);
+    assert.match(launch.shellCommand, /--trust/);
     assert.match(launch.shellCommand, /global-workspaces\/session-launch/);
     assert.doesNotMatch(launch.shellCommand, /code-launch/);
   });

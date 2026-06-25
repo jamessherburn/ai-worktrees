@@ -28,6 +28,12 @@ describe('encodeProjectPath', () => {
       encodeCursorProjectPath('/Users/jamessherburn/code/ai-worktrees-skills-tray'),
       'Users-jamessherburn-code-ai-worktrees-skills-tray',
     );
+    assert.equal(
+      encodeCursorProjectPath(
+        '/Users/jamessherburn/Library/Application Support/ai-worktrees/global-workspaces/abc-123',
+      ),
+      'Users-jamessherburn-Library-Application-Support-ai-worktrees-global-workspaces-abc-123',
+    );
   });
 
   it('encodeClaudeProjectPath keeps the leading dash from the root slash', () => {
@@ -75,6 +81,17 @@ describe('composeLaunchCommand', () => {
     assert.equal(
       composeLaunchCommand('cursor', true, { cwd }).shellCommand,
       `cursor-agent --workspace ${shellSingleQuote(cwd)} resume`,
+    );
+  });
+
+  it('cursor includes --trust for fresh global workspace roots', () => {
+    assert.equal(
+      composeLaunchCommand('cursor', false, { cwd, cursorTrustWorkspace: true }).shellCommand,
+      `cursor-agent --workspace ${shellSingleQuote(cwd)} --trust`,
+    );
+    assert.equal(
+      composeLaunchCommand('cursor', true, { cwd, cursorTrustWorkspace: true }).shellCommand,
+      `cursor-agent --workspace ${shellSingleQuote(cwd)} --trust resume`,
     );
   });
 
@@ -246,6 +263,31 @@ describe('cursorHasSavedSession', () => {
         await cursorHasSavedSession(cwd, { cursorConfigDir: isolatedCursorRoot }),
         true,
       );
+    } finally {
+      process.env.HOME = previousHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('finds agent-transcripts under Application Support global workspace paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-worktrees-cursor-global-ws-'));
+    const workspace = join(root, 'Library', 'Application Support', 'ai-worktrees', 'global-workspaces', 'sess-1');
+    const encoded = encodeCursorProjectPath(workspace);
+    const transcriptDir = join(root, 'cursor-home', 'projects', encoded, 'agent-transcripts', 'chat-uuid');
+    await mkdir(transcriptDir, { recursive: true });
+    await writeFile(join(transcriptDir, 'chat-uuid.jsonl'), '{"role":"user"}');
+
+    const fakeHome = join(root, 'home');
+    await mkdir(fakeHome, { recursive: true });
+    const previousHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    await copyAgentPathSkippingSpecialFiles(
+      join(root, 'cursor-home', 'projects'),
+      join(fakeHome, '.cursor', 'projects'),
+    );
+
+    try {
+      assert.equal(await cursorHasSavedSession(workspace), true);
     } finally {
       process.env.HOME = previousHome;
       await rm(root, { recursive: true, force: true });
