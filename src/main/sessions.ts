@@ -20,9 +20,8 @@ import {
 } from './git.js';
 import { clearAgentSessionData } from './agents.js';
 import {
+  clearGlobalSessionAgentData,
   ensureGlobalAgentStorage,
-  globalAgentStoragePaths,
-  globalSessionCwdPath,
   migrateGlobalAgentDataIfNeeded,
   removeGlobalAgentStorage,
 } from './global-session-cwd.js';
@@ -133,7 +132,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
     try {
       await ensureGlobalAgentStorage(session.id);
-      await clearAgentSessionData(codeDir, { storageRoots: globalAgentStoragePaths(session.id) });
+      await clearGlobalSessionAgentData(session.id, codeDir);
     } catch (err) {
       await store.update((current) => ({
         sessions: current.sessions.filter((s) => s.id !== session.id),
@@ -273,10 +272,7 @@ export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: tr
   if (!session) return { ok: false, error: 'Session not found.' };
 
   if (session.global) {
-    await clearAgentSessionData(session.repoPath, {
-      storageRoots: globalAgentStoragePaths(session.id),
-    });
-    await clearAgentSessionData(globalSessionCwdPath(session.id));
+    await clearGlobalSessionAgentData(session.id, session.repoPath);
     await removeGlobalAgentStorage(session.id);
   } else {
     await clearAgentSessionData(session.worktreePath, { includeLocalAgentDirs: true });

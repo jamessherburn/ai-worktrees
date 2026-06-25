@@ -222,4 +222,33 @@ describe('cursorHasSavedSession', () => {
 
     await rm(root, { recursive: true, force: true });
   });
+
+  it('falls back to ~/.cursor when per-session cursor config is empty', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-worktrees-cursor-fallback-'));
+    const cwd = join(root, 'workspace');
+    const isolatedCursorRoot = join(root, 'isolated-cursor');
+    const projectDir = join(root, 'default-cursor', 'projects', encodeCursorProjectPath(cwd));
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(join(projectDir, 'chat.json'), '{}');
+
+    const fakeHome = join(root, 'home');
+    await mkdir(fakeHome, { recursive: true });
+    const previousHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    await mkdir(join(fakeHome, '.cursor', 'projects'), { recursive: true });
+    await copyAgentPathSkippingSpecialFiles(
+      join(root, 'default-cursor', 'projects'),
+      join(fakeHome, '.cursor', 'projects'),
+    );
+
+    try {
+      assert.equal(
+        await cursorHasSavedSession(cwd, { cursorConfigDir: isolatedCursorRoot }),
+        true,
+      );
+    } finally {
+      process.env.HOME = previousHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

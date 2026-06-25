@@ -11,8 +11,8 @@ import type {
 import { listLeftoverAgentSessions } from './agent-session-scan.js';
 import { clearAgentSessionData, removeAgentDataPaths } from './agents.js';
 import {
+  clearGlobalSessionAgentData,
   ensureGlobalAgentStorage,
-  globalAgentStoragePaths,
   globalSessionCwdPath,
   removeGlobalAgentStorage,
 } from './global-session-cwd.js';
@@ -26,7 +26,7 @@ import {
 import { compareByCreatedAtDesc, createdAtIso, pathCreatedAtMs, statCreatedAtMs } from './path-created-at.js';
 import { listRepos } from './repos.js';
 import { getSettings } from './settings.js';
-import { listSessions } from './sessions.js';
+import { listSessions, getSessionById } from './sessions.js';
 
 function worktreeId(repoPath: string, worktreePath: string): string {
   return `${repoPath}::${worktreePath}`;
@@ -254,10 +254,11 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
         if (item.dataPaths.length > 0) {
           await removeAgentDataPaths(item.dataPaths);
         }
-        await clearAgentSessionData(settings.codeDir, {
-          storageRoots: globalAgentStoragePaths(sessionId),
-        });
-        await clearAgentSessionData(globalSessionCwdPath(sessionId));
+        const registered = await getSessionById(sessionId);
+        const codeDir = registered?.repoPath ?? settings.codeDir;
+        if (codeDir) {
+          await clearGlobalSessionAgentData(sessionId, codeDir);
+        }
         if (item.status === 'orphaned') {
           await removeGlobalAgentStorage(sessionId);
         } else {

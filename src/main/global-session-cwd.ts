@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import type { Session } from '@shared/types';
 import {
   agentHasSavedSession,
+  clearAgentSessionData,
   copyAgentSessionDataBetweenRoots,
   type AgentStorageRoots,
 } from './agents.js';
@@ -83,23 +84,25 @@ async function canonicalAgentCwd(cwd: string): Promise<string> {
  */
 export async function migrateGlobalAgentDataIfNeeded(
   sessionId: string,
-  cwd: string,
+  codeDir: string,
   opts?: { agentStorageIsolated?: boolean },
 ): Promise<void> {
   await ensureGlobalAgentStorage(sessionId);
   const storageRoots = globalAgentStoragePaths(sessionId);
-  const canonicalCwd = await canonicalAgentCwd(cwd);
-  if (await agentHasSavedSession(canonicalCwd, storageRoots)) return;
-  if (canonicalCwd !== cwd && (await agentHasSavedSession(cwd, storageRoots))) return;
+  const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
+  if (await agentHasSavedSession(agentCwd, storageRoots)) return;
 
-  const legacyCwd = globalSessionCwdPath(sessionId);
+  const canonicalCodeDir = await canonicalAgentCwd(codeDir);
   const sources: { fromCwd: string; fromRoots?: AgentStorageRoots }[] = [
-    { fromCwd: legacyCwd },
-    { fromCwd: legacyCwd, fromRoots: storageRoots },
+    { fromCwd: agentCwd },
+    { fromCwd: agentCwd, fromRoots: storageRoots },
   ];
   // Pre-isolation sessions may have written to the default agent config before env vars applied.
   if (!opts?.agentStorageIsolated) {
-    sources.unshift({ fromCwd: canonicalCwd });
+    sources.unshift({ fromCwd: canonicalCodeDir });
+    if (canonicalCodeDir !== agentCwd) {
+      sources.push({ fromCwd: canonicalCodeDir, fromRoots: storageRoots });
+    }
   }
 
   for (const source of sources) {
@@ -107,13 +110,26 @@ export async function migrateGlobalAgentDataIfNeeded(
     if (
       await copyAgentSessionDataBetweenRoots(
         source.fromCwd,
-        canonicalCwd,
+        agentCwd,
         source.fromRoots,
         storageRoots,
       )
     ) {
       return;
     }
+  }
+}
+
+/** Clear saved agent data for a global session (symlink cwd + per-session storage + legacy code-dir keys). */
+export async function clearGlobalSessionAgentData(sessionId: string, codeDir: string): Promise<void> {
+  const agentCwd = await ensureGlobalSessionCwd(sessionId, codeDir);
+  const storageRoots = globalAgentStoragePaths(sessionId);
+  await clearAgentSessionData(agentCwd);
+  await clearAgentSessionData(agentCwd, { storageRoots });
+  const canonicalCodeDir = await canonicalAgentCwd(codeDir);
+  if (canonicalCodeDir !== agentCwd) {
+    await clearAgentSessionData(canonicalCodeDir);
+    await clearAgentSessionData(canonicalCodeDir, { storageRoots });
   }
 }
 
@@ -152,11 +168,15 @@ export async function removeGlobalSessionCwd(sessionId: string): Promise<void> {
   }
 }
 
-/** Agent PTY cwd: code directory for global sessions; worktree path for repo sessions. */
+/**
+ * Agent PTY cwd: per-session symlink into the code directory for global sessions
+ * (Cursor stores chats under ~/.cursor keyed by cwd — CURSOR_CONFIG_DIR does not
+ * relocate them). Repo sessions use the worktree path.
+ */
 export async function resolveAgentCwd(session: Session): Promise<string> {
   if (session.global) {
     await ensureGlobalAgentStorage(session.id);
-    return canonicalAgentCwd(session.repoPath);
+    return ensureGlobalSessionCwd(session.id, session.repoPath);
   }
   return canonicalAgentCwd(session.worktreePath);
 }
