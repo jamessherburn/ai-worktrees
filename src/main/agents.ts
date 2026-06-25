@@ -88,9 +88,22 @@ async function dirHasEntries(path: string, predicate?: (name: string) => boolean
   }
 }
 
-/** Cursor runtime IPC sockets are not persisted session data. */
-function isCursorSessionEntry(name: string): boolean {
-  return name !== 'worker.sock' && !name.endsWith('.sock');
+/** True when Cursor has at least one saved agent transcript (not just repo.json / worker.log). */
+async function cursorPathHasSavedTranscripts(path: string): Promise<boolean> {
+  const transcriptsRoot = join(path, 'agent-transcripts');
+  try {
+    const chatIds = await fs.readdir(transcriptsRoot);
+    for (const chatId of chatIds) {
+      if (
+        await dirHasEntries(join(transcriptsRoot, chatId), (name) => name.endsWith('.jsonl'))
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    // ignore missing agent-transcripts
+  }
+  return dirHasEntries(path, (name) => name.endsWith('.jsonl'));
 }
 
 /** Copy agent session trees without sockets/FIFOs (fs.cp cannot copy them). */
@@ -145,7 +158,7 @@ export async function cursorHasSavedSession(
     );
   }
   for (const path of candidates) {
-    if (await dirHasEntries(path, isCursorSessionEntry)) return true;
+    if (await cursorPathHasSavedTranscripts(path)) return true;
   }
   return false;
 }

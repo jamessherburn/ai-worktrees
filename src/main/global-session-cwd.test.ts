@@ -65,6 +65,17 @@ describe('global-session-cwd', () => {
     assert.equal(await readlink(globalWorktreePath(sessionId)), codeDir);
   });
 
+  it('ensureGlobalWorkspace replaces a stale code directory with the code symlink', async () => {
+    const codeDir = join(userDataDir, 'code-replace');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-replace';
+    const workPath = globalWorktreePath(sessionId);
+    await mkdir(workPath, { recursive: true });
+    await writeFile(join(workPath, 'stale.txt'), 'stale');
+    await ensureGlobalWorkspace(sessionId, codeDir);
+    assert.equal(await readlink(workPath), codeDir);
+  });
+
   it('resolveAgentCwd uses the workspace code link for global sessions', async () => {
     const codeDir = join(userDataDir, 'code-agent');
     await mkdir(codeDir, { recursive: true });
