@@ -117,6 +117,8 @@ export type LeftoverBranch = {
 export type LeftoverAgentSession = {
   id: string;
   cwd: string;
+  /** On-disk agent data directories found during scan (used for reliable deletes). */
+  dataPaths: string[];
   groupName: string;
   groupKind: CleanupGroupKind;
   repoPath: string;

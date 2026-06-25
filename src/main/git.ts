@@ -150,8 +150,11 @@ export async function removeWorktree(repoPath: string, worktreePath: string, for
 export async function deleteBranch(repoPath: string, branch: string): Promise<void> {
   try {
     await git(repoPath, ['branch', '-D', branch]);
-  } catch {
-    // ignore: branch may not exist after worktree removal
+  } catch (err) {
+    if (err instanceof GitError && /not a valid object name|not found|does not exist/i.test(err.stderr)) {
+      return;
+    }
+    throw err;
   }
 }
 

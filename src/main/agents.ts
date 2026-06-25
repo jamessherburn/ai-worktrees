@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import type { AgentId } from '@shared/agents';
 import { getCursorLaunchBinary } from './cursor-binary.js';
 
@@ -19,6 +19,12 @@ export type LaunchOptions = {
   /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
   storageRoots?: AgentStorageRoots;
+  /** Inline env vars for the agent shell (global sessions). */
+  agentEnv?: NodeJS.ProcessEnv;
+};
+
+export type ComposeLaunchOptions = {
+  cwd?: string;
 };
 
 export type AgentLaunchSpec = {
@@ -175,6 +181,21 @@ export function agentSessionDataPaths(
   return paths;
 }
 
+/** Remove explicit on-disk agent data directories (e.g. from cleanup scan). */
+export async function removeAgentDataPaths(paths: Iterable<string>): Promise<void> {
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    try {
+      await fs.rm(path, { recursive: true, force: true });
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+  }
+}
+
 /** Remove saved agent conversations for a session cwd so a new session does not resume. */
 export async function clearAgentSessionData(
   cwd: string,
@@ -190,14 +211,73 @@ export async function clearAgentSessionData(
   }
 }
 
+/** Quote a value for POSIX single-quoted shell strings. */
+export function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function cursorWorkspaceArgs(cwd: string | undefined): string {
+  if (!cwd) return '';
+  return ` --workspace ${shellSingleQuote(cwd)}`;
+}
+
 /** Pure launch decision: only resume when a probe confirms saved state exists. */
-export function composeLaunchCommand(agentId: AgentId, canResume: boolean): LaunchCommand {
+export function composeLaunchCommand(
+  agentId: AgentId,
+  canResume: boolean,
+  options: ComposeLaunchOptions = {},
+): LaunchCommand {
   const spec = AGENT_LAUNCH_SPECS[agentId];
   const binary = agentId === 'cursor' ? getCursorLaunchBinary() : spec.binary;
+  const workspace = agentId === 'cursor' ? cursorWorkspaceArgs(options.cwd) : '';
   if (canResume && spec.resumeArgs) {
-    return { shellCommand: `${binary} ${spec.resumeArgs}`.trim() };
+    return { shellCommand: `${binary}${workspace} ${spec.resumeArgs}`.trim() };
   }
-  return { shellCommand: binary };
+  return { shellCommand: `${binary}${workspace}`.trim() };
+}
+
+export function formatPtyShellCommand(shellCommand: string, agentEnv?: NodeJS.ProcessEnv): string {
+  if (!agentEnv) return shellCommand;
+  const prefix = Object.entries(agentEnv)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+    .map(([key, value]) => `${key}=${shellSingleQuote(value)}`)
+    .join(' ');
+  return prefix ? `${prefix} ${shellCommand}` : shellCommand;
+}
+
+export async function agentHasSavedSession(
+  cwd: string,
+  storageRoots?: AgentStorageRoots,
+): Promise<boolean> {
+  return (
+    (await claudeHasSavedConversation(cwd, storageRoots)) ||
+    (await cursorHasSavedSession(cwd, storageRoots)) ||
+    (await codexHasSavedSession(cwd, storageRoots))
+  );
+}
+
+/** Copy saved agent session dirs when data landed outside per-session storage. */
+export async function copyAgentSessionDataBetweenRoots(
+  fromCwd: string,
+  toCwd: string,
+  fromRoots: AgentStorageRoots | undefined,
+  toRoots: AgentStorageRoots | undefined,
+): Promise<boolean> {
+  const fromPaths = agentSessionDataPaths(fromCwd, { storageRoots: fromRoots });
+  const toPaths = agentSessionDataPaths(toCwd, { storageRoots: toRoots });
+  let copied = false;
+  for (let i = 0; i < fromPaths.length; i++) {
+    try {
+      await fs.stat(fromPaths[i]);
+      await fs.mkdir(dirname(toPaths[i]), { recursive: true });
+      await fs.cp(fromPaths[i], toPaths[i], { recursive: true });
+      copied = true;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw err;
+    }
+  }
+  return copied;
 }
 
 export async function buildLaunchCommand(
@@ -207,5 +287,8 @@ export async function buildLaunchCommand(
   const canResume =
     options.canResume ??
     (await AGENT_RESUME_PROBES[agentId](options.cwd, options.storageRoots));
-  return composeLaunchCommand(agentId, canResume);
+  const launch = composeLaunchCommand(agentId, canResume, { cwd: options.cwd });
+  return {
+    shellCommand: formatPtyShellCommand(launch.shellCommand, options.agentEnv),
+  };
 }

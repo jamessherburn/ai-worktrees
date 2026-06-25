@@ -2,7 +2,11 @@ import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Session } from '@shared/types';
-import type { AgentStorageRoots } from './agents.js';
+import {
+  agentHasSavedSession,
+  copyAgentSessionDataBetweenRoots,
+  type AgentStorageRoots,
+} from './agents.js';
 
 const requireElectron = createRequire(import.meta.url);
 
@@ -65,6 +69,50 @@ export async function ensureGlobalAgentStorage(sessionId: string): Promise<void>
   ]);
 }
 
+async function canonicalAgentCwd(cwd: string): Promise<string> {
+  try {
+    return await fs.realpath(cwd);
+  } catch {
+    return cwd;
+  }
+}
+
+/**
+ * Move agent history into per-session storage when it was written to the default
+ * agent config (e.g. before env vars took effect) or legacy symlink cwds.
+ */
+export async function migrateGlobalAgentDataIfNeeded(
+  sessionId: string,
+  cwd: string,
+): Promise<void> {
+  await ensureGlobalAgentStorage(sessionId);
+  const storageRoots = globalAgentStoragePaths(sessionId);
+  const canonicalCwd = await canonicalAgentCwd(cwd);
+  if (await agentHasSavedSession(canonicalCwd, storageRoots)) return;
+
+  const legacyCwd = globalSessionCwdPath(sessionId);
+  const sources: { fromCwd: string; fromRoots?: AgentStorageRoots }[] = [
+    { fromCwd: canonicalCwd },
+    { fromCwd: legacyCwd },
+    { fromCwd: canonicalCwd, fromRoots: storageRoots },
+    { fromCwd: legacyCwd, fromRoots: storageRoots },
+  ];
+
+  for (const source of sources) {
+    if (!(await agentHasSavedSession(source.fromCwd, source.fromRoots))) continue;
+    if (
+      await copyAgentSessionDataBetweenRoots(
+        source.fromCwd,
+        canonicalCwd,
+        source.fromRoots,
+        storageRoots,
+      )
+    ) {
+      return;
+    }
+  }
+}
+
 export async function removeGlobalAgentStorage(sessionId: string): Promise<void> {
   await fs.rm(globalAgentDataRoot(sessionId), { recursive: true, force: true });
   await removeGlobalSessionCwd(sessionId);
@@ -104,7 +152,7 @@ export async function removeGlobalSessionCwd(sessionId: string): Promise<void> {
 export async function resolveAgentCwd(session: Session): Promise<string> {
   if (session.global) {
     await ensureGlobalAgentStorage(session.id);
-    return session.repoPath;
+    return canonicalAgentCwd(session.repoPath);
   }
-  return session.worktreePath;
+  return canonicalAgentCwd(session.worktreePath);
 }

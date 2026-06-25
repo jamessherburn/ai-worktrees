@@ -7,6 +7,7 @@ import {
   displayPathForAgentSession,
   encodedPathsForCwd,
   buildAgentEncodedPathIndex,
+  mergeDecodedEntries,
   resolveAgentSessionStatus,
   resolveCanonicalAgentCwd,
   resolveCleanupGroup,
@@ -159,5 +160,36 @@ describe('displayPathForAgentSession', () => {
       'global',
     );
     assert.match(label, /^Global session · abcdef12/);
+  });
+});
+
+describe('mergeDecodedEntries', () => {
+  it('keeps every scanned data path for the same cwd', () => {
+    const cwd = '/Users/me/code/myrepo-feature';
+    const encoded = encodeClaudeProjectPath(cwd);
+    const merged = mergeDecodedEntries(
+      [
+        {
+          cwd,
+          agentId: 'claude',
+          dataPath: `/Users/me/.claude/projects/${encoded}`,
+          createdAtMs: 100,
+        },
+        {
+          cwd,
+          agentId: 'cursor',
+          dataPath: `/Users/me/.cursor/chats/${encoded.replace(/^-/, '')}`,
+          createdAtMs: 200,
+        },
+      ],
+      [{ name: 'myrepo', path: '/Users/me/code/myrepo' }],
+      '/Users/me/code',
+    );
+    const entry = merged.get(cwd);
+    assert.ok(entry);
+    assert.deepEqual(Array.from(entry!.dataPaths).sort(), [
+      `/Users/me/.claude/projects/${encoded}`,
+      `/Users/me/.cursor/chats/${encoded.replace(/^-/, '')}`,
+    ].sort());
   });
 });

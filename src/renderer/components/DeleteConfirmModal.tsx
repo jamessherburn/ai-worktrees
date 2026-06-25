@@ -17,11 +17,16 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const result = await window.api.deleteSession({ id: session.id, force, deleteBranch });
-    if (result.ok) {
-      onDeleted(session.id);
-    } else {
-      setError(result.error);
+    try {
+      const result = await window.api.deleteSession({ id: session.id, force, deleteBranch });
+      if (result.ok) {
+        onDeleted(session.id);
+      } else {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
       setBusy(false);
     }
   };

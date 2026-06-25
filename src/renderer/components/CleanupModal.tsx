@@ -133,20 +133,24 @@ export function CleanupModal({ onClose }: Props) {
     const branchIds = tab === 'branches' ? ids : [];
     const agentSessionIds = tab === 'agentSessions' ? ids : [];
 
-    const result = await window.api.deleteCleanupItems({
-      worktreeIds,
-      branchIds,
-      agentSessionIds,
-      force,
-    });
-    if (!result.ok) {
-      setActionError(result.error);
+    try {
+      const result = await window.api.deleteCleanupItems({
+        worktreeIds,
+        branchIds,
+        agentSessionIds,
+        force,
+      });
+      if (!result.ok) {
+        setActionError(result.error);
+        return;
+      }
+      removeDeletedFromSnapshot(new Set(ids));
+      void refresh();
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
       setBusy(false);
-      return;
     }
-    removeDeletedFromSnapshot(new Set(ids));
-    setBusy(false);
-    void refresh();
   };
 
   const deleteSelectedInTab = () => {
