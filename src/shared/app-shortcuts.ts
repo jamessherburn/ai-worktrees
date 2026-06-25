@@ -15,7 +15,7 @@ export type AppShortcutReference = {
 };
 
 export const APP_KEYBOARD_SHORTCUTS: AppShortcutReference[] = [
-  { id: 'nextSession', keys: 'Shift+N', description: 'Next session in sidebar — global and repo (skips muted)' },
+  { id: 'nextSession', keys: 'Shift+N', description: 'Next session in sidebar (skips muted)' },
   { id: 'toggleTerminal', keys: 'Shift+T', description: 'Toggle terminal panel (active session)' },
   { id: 'toggleGit', keys: 'Shift+G', description: 'Toggle git panel (active session)' },
   {

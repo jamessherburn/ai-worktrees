@@ -4,22 +4,9 @@ import { basename, dirname, join } from 'node:path';
 import type { AgentId } from '@shared/agents';
 import type { CleanupGroupKind, LeftoverAgentSession } from '@shared/types';
 import {
-  claudeHasSavedConversation,
-  codexHasSavedSession,
-  cursorHasSavedSession,
   encodeClaudeProjectPath,
   encodeCursorProjectPath,
-  agentSessionDataPaths,
-  type AgentStorageRoots,
 } from './agents.js';
-import {
-  globalAgentCleanupId,
-  globalAgentStoragePaths,
-  globalSessionCwdPath,
-  globalWorktreePath,
-  globalWorkspacePath,
-  userDataRootForCleanup,
-} from './global-session-cwd.js';
 import { compareByCreatedAtDesc, createdAtIso, statCreatedAtMs } from './path-created-at.js';
 import type { RepoInfo } from '@shared/types';
 
@@ -195,19 +182,10 @@ export function resolveCleanupGroup(
   cwd: string,
   codeDir: string,
   repos: RepoInfo[],
-  globalSessionRoot: string,
-  globalWorkspaceRoot?: string,
 ): CleanupGroupInfo {
   let normalized = normalizeCwdKey(cwd);
   const recovered = tryRecoverWorktreePath(normalized, repos, codeDir);
   if (recovered) normalized = recovered;
-
-  const globalRoots = [globalSessionRoot, globalWorkspaceRoot].filter(Boolean) as string[];
-  for (const root of globalRoots) {
-    if (normalized.startsWith(normalizeCwdKey(root) + '/')) {
-      return { groupName: 'Global', groupKind: 'global', repoPath: '' };
-    }
-  }
 
   const repoByPath = new Map(repos.map((r) => [r.path, r]));
   for (const repo of repos) {
@@ -253,11 +231,7 @@ export function resolveAgentSessionStatus(
   return 'orphaned';
 }
 
-export function displayPathForAgentSession(cwd: string, groupKind: CleanupGroupKind): string {
-  if (groupKind === 'global') {
-    const id = basename(cwd);
-    return `Global session · ${id.slice(0, 8)}…`;
-  }
+export function displayPathForAgentSession(cwd: string): string {
   const parts = cwd.split('/');
   if (parts.length >= 2) {
     return parts.slice(-2).join('/');
@@ -265,105 +239,13 @@ export function displayPathForAgentSession(cwd: string, groupKind: CleanupGroupK
   return cwd;
 }
 
-async function existingAgentDataPaths(
-  cwd: string,
-  storageRoots?: AgentStorageRoots,
-): Promise<string[]> {
-  const paths: string[] = [];
-  for (const path of agentSessionDataPaths(cwd, { storageRoots })) {
-    if (await pathExists(path)) paths.push(path);
-  }
-  return paths;
-}
-
-export async function listGlobalAgentStorageSessions(opts: {
-  codeDir: string;
-  sessions: { id: string; name: string; global?: boolean }[];
-}): Promise<LeftoverAgentSession[]> {
-  const root = join(userDataRootForCleanup(), 'global-agent-data');
-  let entries: string[];
-  try {
-    entries = await fs.readdir(root);
-  } catch {
-    return [];
-  }
-
-  const registeredGlobalIds = new Set(
-    opts.sessions.filter((session) => session.global).map((session) => session.id),
-  );
-  const sessionsById = new Map(opts.sessions.map((session) => [session.id, session]));
-  const results: LeftoverAgentSession[] = [];
-
-  for (const sessionId of entries) {
-    if (sessionId.startsWith('.')) continue;
-    const dataRoot = join(root, sessionId);
-    let createdAtMs = 0;
-    try {
-      const stat = await fs.stat(dataRoot);
-      if (!stat.isDirectory()) continue;
-      createdAtMs = statCreatedAtMs(stat);
-    } catch {
-      continue;
-    }
-
-    const storageRoots = globalAgentStoragePaths(sessionId);
-    const session = sessionsById.get(sessionId);
-    const workCwd = session?.global ? globalWorktreePath(sessionId) : opts.codeDir;
-    const cursorCwd = session?.global ? globalWorkspacePath(sessionId) : workCwd;
-    const agents: AgentId[] = [];
-    if (await claudeHasSavedConversation(workCwd, storageRoots)) agents.push('claude');
-    if (await cursorHasSavedSession(cursorCwd, storageRoots)) agents.push('cursor');
-    if (await codexHasSavedSession(workCwd, storageRoots)) agents.push('codex');
-
-    const isActive = registeredGlobalIds.has(sessionId);
-    if (agents.length === 0) {
-      if (isActive) continue;
-      results.push({
-        id: globalAgentCleanupId(sessionId),
-        cwd: dataRoot,
-        dataPaths: [],
-        groupName: 'Global',
-        groupKind: 'global',
-        repoPath: '',
-        agents: [],
-        status: 'orphaned',
-        displayPath: displayPathForAgentSession(dataRoot, 'global'),
-        createdAt: createdAtIso(createdAtMs),
-      });
-      continue;
-    }
-
-    const dataPaths = [
-      ...(await existingAgentDataPaths(workCwd, storageRoots)),
-      ...(cursorCwd !== workCwd ? await existingAgentDataPaths(cursorCwd) : []),
-    ];
-    results.push({
-      id: globalAgentCleanupId(sessionId),
-      cwd: dataRoot,
-      dataPaths,
-      groupName: 'Global',
-      groupKind: 'global',
-      repoPath: '',
-      agents: agents.sort() as AgentId[],
-      status: isActive ? 'active' : 'orphaned',
-      displayPath: session ? `Global · ${session.name}` : displayPathForAgentSession(dataRoot, 'global'),
-      createdAt: createdAtIso(createdAtMs),
-    });
-  }
-
-  results.sort(compareByCreatedAtDesc);
-  return results;
-}
-
 export async function listLeftoverAgentSessions(opts: {
   codeDir: string;
   repos: RepoInfo[];
   activeAgentCwds: Set<string>;
-  sessions?: { global?: boolean; id: string; worktreePath: string }[];
+  sessions?: { id: string; worktreePath: string }[];
   extraCwds?: string[];
 }): Promise<LeftoverAgentSession[]> {
-  const globalSessionRoot = join(userDataRootForCleanup(), 'global-sessions');
-  const globalWorkspaceRoot = join(userDataRootForCleanup(), 'global-workspaces');
   const knownCwds = await collectKnownAgentCwds(opts.repos, {
     sessions: opts.sessions,
     worktreePaths: opts.extraCwds,
@@ -373,7 +255,6 @@ export async function listLeftoverAgentSessions(opts: {
     encodedIndex,
     repos: opts.repos,
     codeDir: opts.codeDir,
-    globalSessionRoot,
   };
   const encodedEntries = await scanEncodedRoots(resolveCtx);
   const localEntries = await scanLocalAgentDirs([...knownCwds, ...(opts.extraCwds ?? [])]);
@@ -383,21 +264,11 @@ export async function listLeftoverAgentSessions(opts: {
     opts.codeDir,
   );
 
-  const globalStorageSessions = await listGlobalAgentStorageSessions({
-    codeDir: opts.codeDir,
-    sessions: opts.sessions ?? [],
-  });
-  const globalStorageIds = new Set(globalStorageSessions.map((session) => session.id));
-
-  const sessions: LeftoverAgentSession[] = [...globalStorageSessions];
+  const sessions: LeftoverAgentSession[] = [];
   for (const [rawCwd, merged] of mergedEntries) {
     const recovered = tryRecoverWorktreePath(rawCwd, opts.repos, opts.codeDir);
     const cwd = recovered ?? rawCwd;
-    const group = resolveCleanupGroup(cwd, opts.codeDir, opts.repos, globalSessionRoot, globalWorkspaceRoot);
-    if (group.groupKind === 'global') {
-      const legacySessionId = basename(cwd);
-      if (globalStorageIds.has(globalAgentCleanupId(legacySessionId))) continue;
-    }
+    const group = resolveCleanupGroup(cwd, opts.codeDir, opts.repos);
     const agents = Array.from(merged.agents).sort() as AgentId[];
     sessions.push({
       id: agentSessionId(cwd),
@@ -408,7 +279,7 @@ export async function listLeftoverAgentSessions(opts: {
       repoPath: group.repoPath,
       agents,
       status: resolveAgentSessionStatus(cwd, opts.activeAgentCwds, group.groupKind),
-      displayPath: displayPathForAgentSession(cwd, group.groupKind),
+      displayPath: displayPathForAgentSession(cwd),
       createdAt: createdAtIso(merged.createdAtMs),
     });
   }
@@ -475,7 +346,6 @@ export type AgentCwdResolveContext = {
   encodedIndex: Map<string, string>;
   repos: RepoInfo[];
   codeDir: string;
-  globalSessionRoot: string;
 };
 
 export function resolveCanonicalAgentCwd(
@@ -483,17 +353,10 @@ export function resolveCanonicalAgentCwd(
   encoding: 'claude' | 'cursor',
   ctx: AgentCwdResolveContext,
 ): string {
-  const { encodedIndex, repos, codeDir, globalSessionRoot } = ctx;
+  const { encodedIndex, repos, codeDir } = ctx;
 
   const indexed = encodedIndex.get(encoded);
   if (indexed) return indexed;
-
-  const globalRoot = normalizeCwdKey(globalSessionRoot);
-  const globalPrefix = encodeForAgentStorage(`${globalRoot}/`, encoding);
-  if (encoded.startsWith(globalPrefix) && encoded.length > globalPrefix.length) {
-    const candidate = join(globalRoot, encoded.slice(globalPrefix.length));
-    if (matchesEncodedPath(candidate, encoded, encoding)) return candidate;
-  }
 
   const reposByName = [...repos].sort((a, b) => b.name.length - a.name.length);
   for (const repo of reposByName) {
@@ -526,17 +389,13 @@ export { mergeDecodedEntries };
 
 export async function collectKnownAgentCwds(
   repos: RepoInfo[],
-  opts?: { sessions?: { global?: boolean; id: string; worktreePath: string }[]; worktreePaths?: string[] },
+  opts?: { sessions?: { id: string; worktreePath: string }[]; worktreePaths?: string[] },
 ): Promise<string[]> {
   const cwds = new Set<string>();
   for (const repo of repos) cwds.add(repo.path);
 
   for (const session of opts?.sessions ?? []) {
-    if (session.global) {
-      cwds.add(globalWorkspacePath(session.id));
-      cwds.add(globalWorktreePath(session.id));
-      cwds.add(globalSessionCwdPath(session.id));
-    } else cwds.add(session.worktreePath);
+    cwds.add(session.worktreePath);
   }
 
   for (const path of opts?.worktreePaths ?? []) cwds.add(path);

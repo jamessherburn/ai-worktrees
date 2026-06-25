@@ -40,35 +40,15 @@ describe('decodeAgentEncodedPath', () => {
 describe('resolveCleanupGroup', () => {
   const codeDir = '/Users/me/code';
   const repos = [{ name: 'myrepo', path: '/Users/me/code/myrepo' }];
-  const globalRoot = '/Users/me/Library/Application Support/ai-worktrees/global-sessions';
-
-  it('groups global session cwds under Global', () => {
-    const globalRoot = '/Users/me/Library/Application Support/ai-worktrees/global-sessions';
-    const workspaceRoot = '/Users/me/Library/Application Support/ai-worktrees/global-workspaces';
-    const group = resolveCleanupGroup(
-      `${workspaceRoot}/abc-123/code`,
-      codeDir,
-      repos,
-      globalRoot,
-      workspaceRoot,
-    );
-    assert.equal(group.groupName, 'Global');
-    assert.equal(group.groupKind, 'global');
-  });
 
   it('groups sibling worktrees under their repo', () => {
-    const group = resolveCleanupGroup(
-      '/Users/me/code/myrepo-feature',
-      codeDir,
-      repos,
-      globalRoot,
-    );
+    const group = resolveCleanupGroup('/Users/me/code/myrepo-feature', codeDir, repos);
     assert.equal(group.groupName, 'myrepo');
     assert.equal(group.groupKind, 'repo');
   });
 
   it('groups unknown paths as External', () => {
-    const group = resolveCleanupGroup('/opt/other/project', codeDir, repos, globalRoot);
+    const group = resolveCleanupGroup('/opt/other/project', codeDir, repos);
     assert.equal(group.groupName, 'External');
     assert.equal(group.groupKind, 'external');
   });
@@ -79,7 +59,6 @@ describe('resolveCleanupGroup', () => {
       '/Users/me/code/ai-worktrees-clean-up-fixes',
       codeDir,
       aiRepos,
-      globalRoot,
     );
     assert.equal(group.groupName, 'ai-worktrees');
     assert.equal(group.groupKind, 'repo');
@@ -89,7 +68,6 @@ describe('resolveCleanupGroup', () => {
 describe('resolveCanonicalAgentCwd', () => {
   const codeDir = '/Users/me/code';
   const repos = [{ name: 'ai-worktrees', path: '/Users/me/code/ai-worktrees' }];
-  const globalRoot = '/Users/me/Library/Application Support/ai-worktrees/global-sessions';
 
   it('uses the encoded index so ai-worktrees paths are not split into ai/worktrees', () => {
     const cwd = '/Users/me/code/ai-worktrees-clean-up-fixes';
@@ -100,7 +78,6 @@ describe('resolveCanonicalAgentCwd', () => {
         encodedIndex: index,
         repos,
         codeDir,
-        globalSessionRoot: globalRoot,
       }),
       cwd,
     );
@@ -115,7 +92,6 @@ describe('resolveCanonicalAgentCwd', () => {
         encodedIndex: new Map(),
         repos,
         codeDir,
-        globalSessionRoot: globalRoot,
       }),
       cwd,
     );
@@ -157,12 +133,9 @@ describe('resolveAgentSessionStatus', () => {
 });
 
 describe('displayPathForAgentSession', () => {
-  it('shortens global session paths', () => {
-    const label = displayPathForAgentSession(
-      '/Users/me/Library/Application Support/ai-worktrees/global-sessions/abcdef12-3456',
-      'global',
-    );
-    assert.match(label, /^Global session · abcdef12/);
+  it('shortens long paths to the last two segments', () => {
+    const label = displayPathForAgentSession('/Users/me/code/myrepo-feature');
+    assert.equal(label, 'code/myrepo-feature');
   });
 });
 

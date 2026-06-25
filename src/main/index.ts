@@ -5,7 +5,7 @@ import type { ThemePreference } from '@shared/types';
 import { applyAppTheme } from './app-theme.js';
 import { registerIpc } from './ipc.js';
 import { detectAgents } from './agent-detection.js';
-import { migrateLegacyUserData } from './migrate.js';
+import { migrateLegacyUserData, purgeRemovedGlobalSessions } from './migrate.js';
 import { gracefulShutdown, registerWebContents } from './pty-manager.js';
 import { gracefulShellShutdown, registerShellPtyWebContents } from './shell-pty-manager.js';
 import { getSettings } from './settings.js';
@@ -43,6 +43,7 @@ function createMainWindow(theme: ThemePreference): BrowserWindow {
 
 app.whenReady().then(async () => {
   await migrateLegacyUserData();
+  await purgeRemovedGlobalSessions();
   const settings = await getSettings();
   applyAppTheme(settings.theme);
   registerIpc();

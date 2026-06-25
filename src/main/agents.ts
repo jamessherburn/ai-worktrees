@@ -16,20 +16,15 @@ export type AgentStorageRoots = {
 
 export type LaunchOptions = {
   cwd: string;
-  /** Cursor --workspace path when it differs from the PTY cwd (global sessions). */
-  workspaceCwd?: string;
-  /** Pass --trust for fresh global workspace roots (no .workspace-trusted yet). */
-  cursorTrustWorkspace?: boolean;
   /** When set, skips the cwd probe (used when resume eligibility is known out-of-band). */
   canResume?: boolean;
   storageRoots?: AgentStorageRoots;
-  /** Inline env vars for the agent shell (global sessions). */
+  /** Inline env vars for the agent shell. */
   agentEnv?: NodeJS.ProcessEnv;
 };
 
 export type ComposeLaunchOptions = {
   cwd?: string;
-  cursorTrustWorkspace?: boolean;
 };
 
 export type AgentLaunchSpec = {
@@ -264,10 +259,9 @@ export function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function cursorWorkspaceArgs(cwd: string | undefined, trustWorkspace?: boolean): string {
+function cursorWorkspaceArgs(cwd: string | undefined): string {
   if (!cwd) return '';
-  const trust = trustWorkspace ? ' --trust' : '';
-  return ` --workspace ${shellSingleQuote(cwd)}${trust}`;
+  return ` --workspace ${shellSingleQuote(cwd)}`;
 }
 
 /** Pure launch decision: only resume when a probe confirms saved state exists. */
@@ -278,8 +272,7 @@ export function composeLaunchCommand(
 ): LaunchCommand {
   const spec = AGENT_LAUNCH_SPECS[agentId];
   const binary = agentId === 'cursor' ? getCursorLaunchBinary() : spec.binary;
-  const workspace =
-    agentId === 'cursor' ? cursorWorkspaceArgs(options.cwd, options.cursorTrustWorkspace) : '';
+  const workspace = agentId === 'cursor' ? cursorWorkspaceArgs(options.cwd) : '';
   if (canResume && spec.resumeArgs) {
     return { shellCommand: `${binary}${workspace} ${spec.resumeArgs}`.trim() };
   }
@@ -334,16 +327,11 @@ export async function buildLaunchCommand(
   agentId: AgentId,
   options: LaunchOptions,
 ): Promise<LaunchCommand> {
-  const probeCwd =
-    agentId === 'cursor' ? (options.workspaceCwd ?? options.cwd) : options.cwd;
   const canResume =
     options.canResume ??
-    (await AGENT_RESUME_PROBES[agentId](probeCwd, options.storageRoots));
+    (await AGENT_RESUME_PROBES[agentId](options.cwd, options.storageRoots));
   const launch = composeLaunchCommand(agentId, canResume, {
-    cwd: agentId === 'cursor' ? probeCwd : options.cwd,
-    cursorTrustWorkspace:
-      options.cursorTrustWorkspace ??
-      (agentId === 'cursor' && options.workspaceCwd !== undefined),
+    cwd: options.cwd,
   });
   return {
     shellCommand: formatPtyShellCommand(launch.shellCommand, options.agentEnv),

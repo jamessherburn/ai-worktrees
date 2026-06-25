@@ -501,42 +501,12 @@ body.resizing-sidebar .sidebar-resize {
   bottom: 8px;
 }
 
-.session-row--global {
-  border-color: color-mix(in srgb, #3b82f6 35%, var(--border));
-}
-
-.session-row--global:hover {
-  border-color: color-mix(in srgb, #3b82f6 55%, var(--border-strong));
-}
-
-.session-row--global.active {
-  border-color: color-mix(in srgb, #3b82f6 50%, var(--accent));
-  background: color-mix(in srgb, #3b82f6 8%, var(--bg-elev));
-}
-
-.session-row--global.active::before {
-  background: #3b82f6;
-}
-
 [data-theme='light'] .session-row.active {
   background: color-mix(in srgb, var(--accent) 7%, #ffffff);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
     0 3px 12px color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-[data-theme='light'] .session-row--global {
-  border-color: color-mix(in srgb, #2563eb 40%, var(--border));
-}
-
-[data-theme='light'] .session-row--global.active {
-  border-color: #2563eb;
-  background: color-mix(in srgb, #2563eb 6%, var(--bg-elev));
-}
-
-[data-theme='light'] .session-row--global.active::before {
-  background: #2563eb;
 }
 
 .session-card-content {
@@ -599,26 +569,6 @@ body.resizing-sidebar .sidebar-resize {
 
 .session-row.active .session-branch-name {
   color: var(--text-muted);
-}
-
-.session-global-label {
-  flex-shrink: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid #2563eb;
-  background: color-mix(in srgb, #2563eb 14%, transparent);
-  color: #60a5fa;
-  vertical-align: middle;
-}
-[data-theme='light'] .session-global-label {
-  color: #1d4ed8;
-  border-color: #1d4ed8;
-  background: color-mix(in srgb, #1d4ed8 10%, transparent);
 }
 
 .session-agent-tag-wrap,
@@ -1129,25 +1079,6 @@ body.resizing-sidebar .sidebar-resize {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.pane-global-label {
-  flex-shrink: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid #2563eb;
-  background: color-mix(in srgb, #2563eb 14%, transparent);
-  color: #60a5fa;
-}
-[data-theme='light'] .pane-global-label {
-  color: #1d4ed8;
-  border-color: #1d4ed8;
-  background: color-mix(in srgb, #1d4ed8 10%, transparent);
 }
 
 .pane-wizard-label {

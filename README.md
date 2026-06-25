@@ -24,12 +24,12 @@ Open **Settings → General** and set the code directory (default `~/code`). The
 **2. Create a session.**  
 Click **+ New Session** in the sidebar (or press **Shift+C**). The wizard has three steps:
 
-- **Type** — repo worktree (new branch + worktree) or **global** (agent runs at the code directory, no git worktree)
+- **Repository** — pick a repo from your code directory
 - **Agent** — pick a CLI; unavailable agents are greyed out if the binary is not on your `PATH`
-- **Details** — session name (also the branch name for repo sessions), optional labels
+- **Details** — session name (also the branch name), optional labels
 
 **3. Start the agent.**  
-Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s directory. Agent history stays on disk in the agent’s own config. **Repo sessions** resume when saved state exists for that session’s worktree path. **Global sessions** run at your code directory (shell, git, and agent all use that path); each global session gets its own agent config directory under app data (`CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, `CODEX_HOME`) so conversations stay separate across relaunches. **Deleting** a session (or recreating one with the same name) clears that session’s saved agent conversations so the agent starts fresh.
+Select the session in the sidebar. The main pane is an xterm.js terminal running the agent CLI in that session’s worktree. Agent history stays on disk in the agent’s own config and resumes when saved state exists for that worktree path. **Deleting** a session (or recreating one with the same name) clears that session’s saved agent conversations so the agent starts fresh.
 
 **4. Open the bottom dock when you need more.**  
 Each session remembers its own panel layout:
@@ -72,7 +72,7 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 
 | Area | What you get |
 | --- | --- |
-| **Sessions** | Repo worktrees (`git worktree add`) or global sessions at the code directory |
+| **Sessions** | Git worktrees (`git worktree add`) beside your repos |
 | **Agents** | Claude, Cursor, Gemini, Codex — concurrent sessions can use different agents |
 | **Terminals** | Long-lived agent PTY + optional built-in shell PTY per session |
 | **Git panel** | Status, diff, stage / unstage / discard for the active worktree |
@@ -81,7 +81,7 @@ That’s the core loop: sidebar for orientation, agent terminal for work, dock f
 | **To Do** | To Do / Doing / Done sections; inline editing; drag between sections |
 | **Skills** | Cross-agent slash-command prompts in the bottom bar; edit in Settings → Skills; import/export with other settings |
 | **Agent Data** | Edit each agent’s instructions file; billing / usage hints where supported |
-| **Cleanup** | Sidebar modal to list and remove leftover branches, worktrees, and agent session data (grouped by repo, Global, or External) |
+| **Cleanup** | Sidebar modal to list and remove leftover branches, worktrees, and agent session data (grouped by repo or External) |
 | **Settings** | Code directory, theme, skills, labels, keyboard shortcut reference, import/export |
 | **Persistence** | Sessions, settings, and to-do survive restarts; worktrees remain on disk until you delete |
 | **Session delete** | Removes the session record; repo sessions can remove the worktree and branch; clears saved agent conversations (Claude, Cursor, Codex) for that path |
@@ -146,13 +146,11 @@ npm run dist     # release/AI Worktrees.dmg + .app
 | App data (dev) | `~/Library/Application Support/ai-worktrees/` |
 | App data (packaged) | `~/Library/Application Support/AI Worktrees/` |
 | Legacy migration | Older `Claude Worktrees/` or `claude-worktrees-ui/` folders are copied once if the new directory is empty (`src/main/migrate.ts`) |
-| `sessions.json` | Session list — paths, agent, labels, global flag, … |
+| `sessions.json` | Session list — paths, agent, labels, … |
 | `settings.json` | Code directory, theme, session labels, worktrees skills |
 | `diary.json` | To-do items |
-| Global agent data | `userData/global-agent-data/<session-id>/` — per-session `CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, and `CODEX_HOME` for global sessions |
-| Global session symlinks (legacy) | `userData/global-sessions/<session-id>` — old symlink-based isolation; removed on delete; agent data cleared if present |
 | Worktrees | Sibling of the repo: `<parent>/<repo-name>-<session-name>` (slashes in the name become dashes) |
-| Agent session data | Per-project dirs under each agent’s home (e.g. `~/.claude/projects/…`, `~/.cursor/projects/…`, `~/.codex/sessions/…`); global sessions use per-session dirs under `global-agent-data/` instead; cleared on session delete/create and via **Cleanup → Agent Sessions** |
+| Agent session data | Per-project dirs under each agent’s home (e.g. `~/.claude/projects/…`, `~/.cursor/projects/…`, `~/.codex/sessions/…`); cleared on session delete/create and via **Cleanup → Agent Sessions** |
 | Panel prefs | Browser `localStorage` key `session-panel-prefs` (per-session shell/git open state) |
 
 Only sessions you create in the app appear in the sidebar. The app does not import or discover agent processes running outside it.
@@ -196,13 +194,11 @@ flowchart LR
 | --- | --- |
 | List repos | Directories under your code directory; `git rev-parse` per candidate |
 | Create repo session | Optional `git fetch`; `git worktree add` with a new branch |
-| Create global session | No git mutation; `ensureGlobalAgentStorage` creates per-session agent config dirs; each session has a unique id/name |
-| Agent terminal | `pty.spawn` login shell with launch command from `agents.ts`; cwd probe decides resume (repo: worktree path; global: code directory + per-session agent config env) |
+| Agent terminal | `pty.spawn` login shell with launch command from `agents.ts`; cwd probe decides resume for the worktree path |
 | Built-in shell | Separate `pty.spawn` per session; fish preferred when installed |
 | Git panel | `git status` / `diff` / `add` / `restore` via `execFile` in the worktree |
 | Persist state | `sessions.json`, `settings.json`, `diary.json` in userData |
-| Delete repo session | `git worktree remove`; optional branch delete; clears agent session data for that worktree |
-| Delete global session | Removes `global-agent-data/<session-id>/` and any legacy symlink; clears agent session data for that session |
+| Delete session | `git worktree remove`; optional branch delete; clears agent session data for that worktree |
 | Cleanup modal | Lists leftover branches, worktrees, and agent session folders; selective or bulk delete |
 | Agent instructions | Read/write under each agent’s home (e.g. `~/.claude/CLAUDE.md`) |
 | Claude usage chip | May run pinned `ccusage` via `npx` / `bun x` (local usage files; npm when uncached) |

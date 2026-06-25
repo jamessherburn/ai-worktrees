@@ -11,14 +11,6 @@ import type {
 import { listLeftoverAgentSessions } from './agent-session-scan.js';
 import { clearAgentSessionData, removeAgentDataPaths } from './agents.js';
 import {
-  clearGlobalSessionAgentData,
-  ensureGlobalAgentStorage,
-  globalSessionCwdPath,
-  globalWorktreePath,
-  globalWorkspacePath,
-  removeGlobalAgentStorage,
-} from './global-session-cwd.js';
-import {
   deleteBranch,
   listGitWorktrees,
   listLocalBranchesWithCreatorDates,
@@ -28,7 +20,7 @@ import {
 import { compareByCreatedAtDesc, createdAtIso, pathCreatedAtMs, statCreatedAtMs } from './path-created-at.js';
 import { listRepos } from './repos.js';
 import { getSettings } from './settings.js';
-import { listSessions, getSessionById } from './sessions.js';
+import { listSessions } from './sessions.js';
 
 function worktreeId(repoPath: string, worktreePath: string): string {
   return `${repoPath}::${worktreePath}`;
@@ -55,18 +47,7 @@ function deriveWorktreePath(repoPath: string, name: string): string {
 }
 
 function activeAgentCwds(sessions: Session[]): Set<string> {
-  const cwds = new Set<string>();
-  for (const session of sessions) {
-    if (session.global) {
-      cwds.add(session.repoPath);
-      cwds.add(globalWorkspacePath(session.id));
-      cwds.add(globalWorktreePath(session.id));
-      cwds.add(globalSessionCwdPath(session.id));
-    } else {
-      cwds.add(session.worktreePath);
-    }
-  }
-  return cwds;
+  return new Set(sessions.map((session) => session.worktreePath));
 }
 
 async function scanUnregisteredWorktreeDirs(
@@ -115,12 +96,8 @@ async function scanUnregisteredWorktreeDirs(
 export async function listCleanupItems(): Promise<CleanupSnapshot> {
   const settings = await getSettings();
   const sessions = await listSessions();
-  const activeWorktreePaths = new Set(
-    sessions.filter((s) => !s.global).map((s) => s.worktreePath),
-  );
-  const activeBranchKeys = new Set(
-    sessions.filter((s) => !s.global).map((s) => branchId(s.repoPath, s.branchName)),
-  );
+  const activeWorktreePaths = new Set(sessions.map((s) => s.worktreePath));
+  const activeBranchKeys = new Set(sessions.map((s) => branchId(s.repoPath, s.branchName)));
   const agentCwds = activeAgentCwds(sessions);
 
   const worktrees: LeftoverWorktree[] = [];
@@ -246,34 +223,6 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
   }
 
   for (const id of input.agentSessionIds) {
-    if (id.startsWith('agent::global::')) {
-      const sessionId = id.slice('agent::global::'.length);
-      const item = agentSessionById.get(id);
-      if (!item) {
-        errors.push(`Agent session not found: ${id}`);
-        continue;
-      }
-      try {
-        const settings = await getSettings();
-        if (item.dataPaths.length > 0) {
-          await removeAgentDataPaths(item.dataPaths);
-        }
-        const registered = await getSessionById(sessionId);
-        const codeDir = registered?.repoPath ?? settings.codeDir;
-        if (codeDir) {
-          await clearGlobalSessionAgentData(sessionId, codeDir);
-        }
-        if (item.status === 'orphaned') {
-          await removeGlobalAgentStorage(sessionId);
-        } else {
-          await ensureGlobalAgentStorage(sessionId);
-        }
-      } catch (err) {
-        errors.push(`${item.displayPath}: ${(err as Error).message}`);
-      }
-      continue;
-    }
-
     const item = agentSessionById.get(id);
     if (!item) {
       errors.push(`Agent session not found: ${id}`);
@@ -284,9 +233,7 @@ export async function deleteCleanupItems(input: CleanupDeleteInput): Promise<Cle
       if (item.dataPaths.length > 0) {
         await removeAgentDataPaths(item.dataPaths);
       }
-      await clearAgentSessionData(item.cwd, {
-        includeLocalAgentDirs: item.groupKind !== 'global',
-      });
+      await clearAgentSessionData(item.cwd, { includeLocalAgentDirs: true });
     } catch (err) {
       errors.push(`${item.cwd}: ${(err as Error).message}`);
     }

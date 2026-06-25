@@ -8,8 +8,7 @@ type Props = {
 };
 
 export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
-  const isGlobal = session.global === true;
-  const [deleteBranch, setDeleteBranch] = useState(!isGlobal);
+  const [deleteBranch, setDeleteBranch] = useState(true);
   const [force, setForce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,32 +36,19 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
         <div className="modal-header">
           <div className="modal-title">Delete session "{session.name}"?</div>
           <div className="modal-subtitle">
-            {isGlobal ? (
-              <>
-                This will remove the global session record and clear saved agent conversations for
-                this session. Your code directory is not modified.
-              </>
-            ) : (
-              <>
-                This will remove the worktree at <span className="kbd">{session.worktreePath}</span>{' '}
-                and clear saved agent conversations (Claude, Cursor, Codex, etc.) for this path.
-              </>
-            )}
+            This will remove the worktree at <span className="kbd">{session.worktreePath}</span>{' '}
+            and clear saved agent conversations (Claude, Cursor, Codex, etc.) for this path.
           </div>
         </div>
         <div className="modal-body">
-          {!isGlobal && (
-            <>
-              <label className="checkbox">
-                <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
-                Also delete branch <span className="kbd">{session.branchName}</span>
-              </label>
-              <label className="checkbox">
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
-                Force remove (discard uncommitted changes)
-              </label>
-            </>
-          )}
+          <label className="checkbox">
+            <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
+            Also delete branch <span className="kbd">{session.branchName}</span>
+          </label>
+          <label className="checkbox">
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+            Force remove (discard uncommitted changes)
+          </label>
           {error && <div className="modal-error">{error}</div>}
         </div>
         <div className="modal-footer">

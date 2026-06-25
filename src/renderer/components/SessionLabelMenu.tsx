@@ -29,7 +29,7 @@ export function SessionLabelMenu({
   const applied = new Set(session.labelIds ?? []);
   const isMuted = session.muted === true;
   const showWorktreeActions =
-    !session.global && Boolean(session.worktreePath) && (onRevealInFinder || onOpenInVSCode);
+    Boolean(session.worktreePath) && (onRevealInFinder || onOpenInVSCode);
 
   return (
     <div

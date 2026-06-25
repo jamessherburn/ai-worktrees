@@ -176,7 +176,7 @@ export function Sidebar({
                       return (
                       <div
                         key={s.id}
-                        className={`session-row${isActive ? ' active' : ''}${s.global ? ' session-row--global' : ''}${s.muted ? ' session-row--muted' : ''}`}
+                        className={`session-row${isActive ? ' active' : ''}${s.muted ? ' session-row--muted' : ''}`}
                         onClick={() => onSelect(s.id)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -194,11 +194,6 @@ export function Sidebar({
                             <span className="session-name-primary" title={s.name}>
                               {s.name}
                             </span>
-                            {s.global ? (
-                              <span className="session-global-label" title="Global session">
-                                Global
-                              </span>
-                            ) : null}
                           </div>
                           <div className="session-card-meta">
                             <span
@@ -209,16 +204,12 @@ export function Sidebar({
                                 {getAgent(s.agentId).name}
                               </span>
                             </span>
-                            {!s.global && (
-                              <>
-                                <span className="session-meta-sep" aria-hidden>
-                                  ·
-                                </span>
-                                <span className="session-branch-name" title={s.branchName}>
-                                  {s.branchName}
-                                </span>
-                              </>
-                            )}
+                            <span className="session-meta-sep" aria-hidden>
+                              ·
+                            </span>
+                            <span className="session-branch-name" title={s.branchName}>
+                              {s.branchName}
+                            </span>
                           </div>
                           {appliedLabels.length > 0 && (
                             <div className="session-row-labels">

@@ -8,15 +8,17 @@ For install, daily use, and a user-facing security summary, see [README.md](./RE
 
 ## 1. The story of a session
 
-When someone creates a **repo session**, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels. A **global session** skips git entirely: shell, git, and agent PTYs all use the configured code directory from settings. Multiple global sessions can exist at once; they are distinguished by unique `id` and `name` in `sessions.json` and by separate per-session agent config directories under `userData/global-agent-data/<sessionId>/` (see `global-session-cwd.ts`).
+When someone creates a session, the app validates the name, resolves the repo’s default branch, optionally fetches from `origin`, and runs `git worktree add` beside the repo. The new row in `sessions.json` stores the worktree path, branch, agent id, and any labels.
 
-Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session and builds a launch command in `agents.ts` (`claude --continue`, `cursor-agent resume`, etc. when resuming). **Repo sessions** use a cwd probe: if the agent has saved state for that worktree path, resume args are appended. **Global sessions** use the same cwd probe against the code directory, but with per-session `CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, and `CODEX_HOME` env vars so each session’s conversations are isolated — first open starts fresh; reopening after the PTY exited resumes that session’s own conversation. The PTY spawns at the resolved agent cwd (`resolveAgentCwd` in `ipc.ts`). Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
+Selecting a session in the sidebar mounts (or reveals) an xterm.js view. The renderer calls `pty.start(sessionId)`. The main process looks up the session and builds a launch command in `agents.ts` (`claude --continue`, `cursor-agent resume`, etc. when resuming). A cwd probe checks whether the agent has saved state for that worktree path; if so, resume args are appended. The PTY spawns at `session.worktreePath`. Output streams over IPC to xterm; keystrokes go back through `pty.write`. When you switch away, the PTY keeps running and accumulates a backlog so reconnecting replays recent output.
 
-Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the session’s `worktreePath` (the code directory for global sessions). Agent and shell are independent processes with independent backlogs.
+Separately, each session *may* have a **shell PTY** in the bottom dock (`shell-pty-manager.ts`). That is a normal login shell (fish when available) at the session’s `worktreePath`. Agent and shell are independent processes with independent backlogs.
 
-Deleting a session kills both PTYs, removes the JSON entry, clears saved agent conversations for that session (`clearAgentSessionData` in `agents.ts` — Claude, Cursor, Codex home dirs and local `.cursor`/`.codex` where safe), and — for repo sessions — removes the worktree and optionally the branch. Global sessions drop the record, remove their per-session agent data directory (and any legacy symlink), and clear agent data keyed to that session; your code directory is untouched. Creating a session also clears stale agent data at the new path so a reused name does not resume an old chat.
+Deleting a session kills both PTYs, removes the JSON entry, clears saved agent conversations for that session (`clearAgentSessionData` in `agents.ts` — Claude, Cursor, Codex home dirs and local `.cursor`/`.codex` where safe), removes the worktree, and optionally the branch. Creating a session also clears stale agent data at the new path so a reused name does not resume an old chat.
 
-The **Cleanup** modal (sidebar icon, next to Agent Data) scans for leftover branches, worktrees, and agent session folders not tied to active sessions — including global agent data under `global-agent-data/` — and lets you delete them in bulk or selectively.
+The **Cleanup** modal (sidebar icon, next to Agent Data) scans for leftover branches, worktrees, and agent session folders not tied to active sessions and lets you delete them in bulk or selectively.
+
+On startup, `purgeRemovedGlobalSessions()` in `migrate.ts` strips any legacy `global: true` rows from `sessions.json` and deletes deprecated `global-*` directories under userData.
 
 Nothing in this flow scans the OS for other agent processes. The sidebar lists only sessions in `sessions.json`.
 
@@ -61,7 +63,7 @@ The app has a single workspace layout (no view switcher):
 | Shell panel | `components/BuiltInTerminalPanel.tsx` | xterm + shell PTY |
 | Git panel | `components/GitPanel.tsx` | Status / diff / file actions |
 | Bottom dock | `components/BottomDock.tsx` | Resizable split between dock panels |
-| New session | `components/NewSessionModal.tsx` | Type → Agent → Details wizard |
+| New session | `components/NewSessionModal.tsx` | Repository → Agent → Details wizard |
 | To Do | `components/TodoModal.tsx` | Global tasks (`diary.json`) |
 | Skills bar | `components/WorktreesSkillPrompter.tsx` | Slash-command skills prompt (bottom bar) |
 | Skills editor | `components/WorktreesSkillsEditor.tsx` | Settings → Skills tab |
@@ -90,7 +92,7 @@ Import/export: `settings-import-export.ts` includes `worktreesSkills` in the exp
 
 ## 4. Session lifecycle (detailed)
 
-### Create (repo)
+### Create
 
 ```
 NewSessionModal
@@ -104,20 +106,6 @@ NewSessionModal
          append to sessions.json
 ```
 
-### Create (global)
-
-```
-createSession({ global: true, name, agentId, labelIds? })
-  → worktreePath = settings.codeDir (display, shell, git, agent cwd)
-  → ensureGlobalAgentStorage(id) → userData/global-agent-data/<id>/{claude,cursor,codex}
-  → clearAgentSessionData(codeDir, { storageRoots })
-  → no git calls
-  → repoName = 'Global'
-  → unique id per row; names must be unique among global sessions
-```
-
-Existing global sessions get agent storage dirs ensured on `listSessions()` (app startup).
-
 ### Open / switch
 
 ```
@@ -126,10 +114,8 @@ Sidebar onSelect(id)
   → TerminalView mounts or becomes visible
   → pty.start → startPty in pty-manager.ts
        if PTY exists: reattach + backlog replay
-       else: resolveAgentCwd(session) in ipc.ts
-         repo: session.worktreePath
-         global: settings.codeDir + per-session agent env (CLAUDE_CONFIG_DIR, etc.)
-       agents.buildLaunchCommand(cwd, storageRoots?) — canResume from AGENT_RESUME_PROBES
+       else: cwd = session.worktreePath
+       agents.buildLaunchCommand(cwd) — canResume from AGENT_RESUME_PROBES
        → pty.spawn($SHELL, ['-lic', cmd], { cwd })
        → markSessionStarted on first spawn
 ```
@@ -160,13 +146,12 @@ listSessions IPC
 DeleteSession
   → killPty + killShellPty
   → deleteSession:
-       clearAgentSessionData(agent cwd, storageRoots?)   agents.ts
-       worktree remove + optional branch delete (repo only)
-       global: removeGlobalAgentStorage (config dirs + legacy symlink; code directory untouched)
+       clearAgentSessionData(worktreePath)   agents.ts
+       worktree remove + optional branch delete
   → store removes JSON entry
 
-createSession (after worktree add or global agent storage setup)
-  → clearAgentSessionData(path)          stale agent data safety net
+createSession (after worktree add)
+  → clearAgentSessionData(worktreePath)          stale agent data safety net
 
 CleanupList / CleanupDelete
   → cleanup.ts + agent-session-scan.ts
@@ -182,9 +167,8 @@ src/
 ├── main/
 │   ├── index.ts              Window, theme, graceful PTY shutdown
 │   ├── ipc.ts                All ipcMain handlers
-│   ├── migrate.ts            Legacy userData copy
+│   ├── migrate.ts            Legacy userData copy; purge deprecated global sessions
 │   ├── sessions.ts           CRUD + NAME_PATTERN
-│   ├── global-session-cwd.ts Per-global-session agent config dirs + legacy symlink cleanup
 │   ├── git.ts                worktree + status/diff/stage (execFile only)
 │   ├── repos.ts              Scans settings.codeDir
 │   ├── pty-manager.ts        Agent PTY + activity + backlog
@@ -273,7 +257,7 @@ case 'newAgent':
   return buildResumable('newagent-cli', 'resume --last', options);
 ```
 
-Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass `storageRoots` in `LaunchOptions` when agent config lives outside the default home dirs (global sessions). Pass an explicit `canResume` only when resume eligibility is known out-of-band.
+Use string **literals** only. For cwd-sensitive resume (like Claude’s project dirs), add a probe in `AGENT_RESUME_PROBES`. Pass `storageRoots` in `LaunchOptions` when agent config lives outside the default home dirs. Pass an explicit `canResume` only when resume eligibility is known out-of-band.
 
 If the agent stores per-project session data under its home directory, add paths to `agentSessionDataPaths` in `agents.ts` so delete, create, and cleanup can clear them.
 
@@ -358,14 +342,12 @@ Document new subprocesses that download or phone home in PRs.
 
 | Area | Access |
 | --- | --- |
-| `settings.codeDir` | Repo scan, global session code directory, worktree parent |
-| `userData/global-agent-data/` | Per-global-session agent config dirs (`CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, `CODEX_HOME`) |
-| `userData/global-sessions/` | Legacy per-session symlinks; cleaned up on delete |
+| `settings.codeDir` | Repo scan, worktree parent |
 | userData JSON | sessions, settings, diary |
 | Agent homes | Instructions read/write per `AgentDefinition`; per-project session dirs scanned/deleted by cleanup |
 | Agent auth paths | Read-only for billing UI |
-| Worktree paths | Git panel + shell PTY cwd (repo sessions; global sessions use `worktreePath` = codeDir) |
-| Agent session scan | Read (and delete on cleanup) under `~/.claude/projects`, `~/.cursor/projects`, `~/.cursor/chats`, `~/.codex/sessions`, `~/.codex/projects`, `userData/global-agent-data/`, and local `.cursor`/`.codex` in worktrees |
+| Worktree paths | Git panel + shell PTY cwd + agent PTY cwd |
+| Agent session scan | Read (and delete on cleanup) under `~/.claude/projects`, `~/.cursor/projects`, `~/.cursor/chats`, `~/.codex/sessions`, `~/.codex/projects`, and local `.cursor`/`.codex` in worktrees |
 
 ### 9.6 Agent checklist
 
