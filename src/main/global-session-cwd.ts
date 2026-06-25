@@ -84,6 +84,7 @@ async function canonicalAgentCwd(cwd: string): Promise<string> {
 export async function migrateGlobalAgentDataIfNeeded(
   sessionId: string,
   cwd: string,
+  opts?: { agentStorageIsolated?: boolean },
 ): Promise<void> {
   await ensureGlobalAgentStorage(sessionId);
   const storageRoots = globalAgentStoragePaths(sessionId);
@@ -93,10 +94,13 @@ export async function migrateGlobalAgentDataIfNeeded(
 
   const legacyCwd = globalSessionCwdPath(sessionId);
   const sources: { fromCwd: string; fromRoots?: AgentStorageRoots }[] = [
-    { fromCwd: canonicalCwd },
     { fromCwd: legacyCwd },
     { fromCwd: legacyCwd, fromRoots: storageRoots },
   ];
+  // Pre-isolation sessions may have written to the default agent config before env vars applied.
+  if (!opts?.agentStorageIsolated) {
+    sources.unshift({ fromCwd: canonicalCwd });
+  }
 
   for (const source of sources) {
     if (!(await agentHasSavedSession(source.fromCwd, source.fromRoots))) continue;

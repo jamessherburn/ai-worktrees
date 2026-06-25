@@ -151,6 +151,32 @@ describe('global-session-cwd', () => {
     await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
   });
 
+  it('migrateGlobalAgentDataIfNeeded still migrates legacy symlink data for isolated sessions', async () => {
+    const codeDir = join(userDataDir, 'code-isolated-legacy');
+    await mkdir(codeDir, { recursive: true });
+    const sessionId = 'session-isolated-legacy';
+    const legacyCwd = globalSessionCwdPath(sessionId);
+    await ensureGlobalSessionCwd(sessionId, codeDir);
+    const storageRoots = globalAgentStoragePaths(sessionId);
+    const legacyChat = join(
+      storageRoots.cursorConfigDir!,
+      'chats',
+      encodeCursorProjectPath(legacyCwd),
+    );
+    await mkdir(legacyChat, { recursive: true });
+    await writeFile(join(legacyChat, 'chat.json'), '{}');
+
+    await migrateGlobalAgentDataIfNeeded(sessionId, codeDir, { agentStorageIsolated: true });
+
+    const canonicalCwd = await realpath(codeDir);
+    const canonicalChat = join(
+      storageRoots.cursorConfigDir!,
+      'chats',
+      encodeCursorProjectPath(canonicalCwd),
+    );
+    await writeFile(join(canonicalChat, 'verify.txt'), 'ok');
+  });
+
   it('migrateGlobalAgentDataIfNeeded tolerates cursor worker.sock in per-session storage', async () => {
     const shortUserData = await mkdtemp('/tmp/u');
     setUserDataRootForTests(shortUserData);

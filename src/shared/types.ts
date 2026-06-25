@@ -37,6 +37,11 @@ export type Session = {
   waitingOnReview?: boolean;
   /** Runs the agent at the code directory from settings; no git worktree is created. */
   global?: boolean;
+  /**
+   * When true, skip importing agent data from the default agent config dirs into this
+   * session's per-session storage (set on newly created global sessions).
+   */
+  agentStorageIsolated?: boolean;
 };
 
 export type SessionStatus = 'running' | 'stopped' | 'orphaned';

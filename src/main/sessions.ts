@@ -48,13 +48,19 @@ function normalizeSessionRecord(s: Session): Session {
   };
 }
 
-export async function listSessions(): Promise<Session[]> {
+async function readSessionRecords(): Promise<Session[]> {
   const data = await store.read();
-  const sessions = data.sessions.map((s) => normalizeSessionRecord(s));
+  return data.sessions.map((s) => normalizeSessionRecord(s));
+}
+
+export async function listSessions(): Promise<Session[]> {
+  const sessions = await readSessionRecords();
   for (const session of sessions) {
     if (!session.global) continue;
     try {
-      await migrateGlobalAgentDataIfNeeded(session.id, session.repoPath);
+      await migrateGlobalAgentDataIfNeeded(session.id, session.repoPath, {
+        agentStorageIsolated: session.agentStorageIsolated,
+      });
     } catch (err) {
       console.warn(
         `Failed to migrate global agent data for session ${session.id}:`,
@@ -98,9 +104,12 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       return { ok: false, error: `Code directory does not exist: ${codeDir}` };
     }
 
-    const existing = await listSessions();
+    const existing = await readSessionRecords();
     if (existing.some((s) => s.global && s.name === name)) {
-      return { ok: false, error: `A global session named "${name}" already exists.` };
+      return {
+        ok: false,
+        error: `A global session named "${name}" already exists in the sidebar. Delete it there first — Cleanup only lists leftover agent data, not session records.`,
+      };
     }
 
     const labelIds = normalizeSessionLabelIds(input.labelIds);
@@ -117,12 +126,20 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       createdAt: new Date().toISOString(),
       lastStartedAt: null,
       global: true,
+      agentStorageIsolated: true,
       labelIds: labelIds.length ? labelIds : undefined,
     };
 
     await store.update((current) => ({ sessions: [...current.sessions, session] }));
-    await ensureGlobalAgentStorage(session.id);
-    await clearAgentSessionData(codeDir, { storageRoots: globalAgentStoragePaths(session.id) });
+    try {
+      await ensureGlobalAgentStorage(session.id);
+      await clearAgentSessionData(codeDir, { storageRoots: globalAgentStoragePaths(session.id) });
+    } catch (err) {
+      await store.update((current) => ({
+        sessions: current.sessions.filter((s) => s.id !== session.id),
+      }));
+      return { ok: false, error: (err as Error).message };
+    }
     return { ok: true, session };
   }
 
@@ -130,7 +147,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     return { ok: false, error: 'Repository is required for worktree sessions.' };
   }
 
-  const existing = await listSessions();
+  const existing = await readSessionRecords();
   if (existing.some((s) => s.repoPath === input.repoPath && s.name === name)) {
     return { ok: false, error: `A session named "${name}" already exists for this repo.` };
   }
