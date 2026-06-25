@@ -83,6 +83,30 @@ async function dirHasEntries(path: string, predicate?: (name: string) => boolean
   }
 }
 
+/** Cursor runtime IPC sockets are not persisted session data. */
+function isCursorSessionEntry(name: string): boolean {
+  return name !== 'worker.sock' && !name.endsWith('.sock');
+}
+
+/** Copy agent session trees without sockets/FIFOs (fs.cp cannot copy them). */
+export async function copyAgentPathSkippingSpecialFiles(src: string, dest: string): Promise<void> {
+  if (src === dest) return;
+  const stat = await fs.lstat(src);
+  if (stat.isSocket() || stat.isFIFO()) return;
+  if (stat.isDirectory()) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src);
+    for (const entry of entries) {
+      await copyAgentPathSkippingSpecialFiles(join(src, entry), join(dest, entry));
+    }
+    return;
+  }
+  if (stat.isFile()) {
+    await fs.mkdir(dirname(dest), { recursive: true });
+    await fs.copyFile(src, dest);
+  }
+}
+
 export async function claudeHasSavedConversation(
   cwd: string,
   storageRoots?: AgentStorageRoots,
@@ -110,7 +134,7 @@ export async function cursorHasSavedSession(
     join(cwd, '.cursor'),
   ];
   for (const path of candidates) {
-    if (await dirHasEntries(path)) return true;
+    if (await dirHasEntries(path, isCursorSessionEntry)) return true;
   }
   return false;
 }
@@ -267,10 +291,10 @@ export async function copyAgentSessionDataBetweenRoots(
   const toPaths = agentSessionDataPaths(toCwd, { storageRoots: toRoots });
   let copied = false;
   for (let i = 0; i < fromPaths.length; i++) {
+    if (fromPaths[i] === toPaths[i]) continue;
     try {
       await fs.stat(fromPaths[i]);
-      await fs.mkdir(dirname(toPaths[i]), { recursive: true });
-      await fs.cp(fromPaths[i], toPaths[i], { recursive: true });
+      await copyAgentPathSkippingSpecialFiles(fromPaths[i], toPaths[i]);
       copied = true;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:net';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +9,9 @@ import {
   AGENT_LAUNCH_SPECS,
   agentSessionDataPaths,
   composeLaunchCommand,
+  copyAgentPathSkippingSpecialFiles,
+  copyAgentSessionDataBetweenRoots,
+  cursorHasSavedSession,
   encodeClaudeProjectPath,
   encodeCursorProjectPath,
   encodeProjectPath,
@@ -140,6 +144,82 @@ describe('removeAgentDataPaths', () => {
     await removeAgentDataPaths([target]);
 
     await assert.rejects(() => writeFile(join(target, 'again.txt'), 'x'));
+    await rm(root, { recursive: true, force: true });
+  });
+});
+
+async function withUnixSocket(path: string, run: () => Promise<void>): Promise<void> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.on('error', reject);
+    server.listen(path, () => resolve());
+  });
+  try {
+    await run();
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+describe('copyAgentPathSkippingSpecialFiles', () => {
+  it('skips unix sockets and copies regular files', async () => {
+    const root = await mkdtemp('/tmp/c');
+    const src = join(root, 'src');
+    const dest = join(root, 'dest');
+    const projectDir = join(src, 'projects', 'code');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(join(projectDir, 'chat.json'), '{"ok":true}');
+
+    const socketPath = join(projectDir, 'worker.sock');
+    await withUnixSocket(socketPath, async () => {
+      await copyAgentPathSkippingSpecialFiles(src, dest);
+      await writeFile(join(dest, 'projects', 'code', 'verify.txt'), 'ok');
+    });
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('is a no-op when source and destination are the same path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-worktrees-agent-copy-same-'));
+    const dir = join(root, 'cursor', 'projects', 'Users-example-code');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'chat.json'), '{}');
+
+    await copyAgentPathSkippingSpecialFiles(dir, dir);
+
+    await writeFile(join(dir, 'still-here.txt'), 'ok');
+    await rm(root, { recursive: true, force: true });
+  });
+});
+
+describe('copyAgentSessionDataBetweenRoots', () => {
+  it('ignores identical from/to paths', async () => {
+    const cwd = '/tmp/example';
+    const roots = {
+      claudeConfigDir: '/tmp/global/claude',
+      cursorConfigDir: '/tmp/global/cursor',
+      codexHome: '/tmp/global/codex',
+    };
+    const copied = await copyAgentSessionDataBetweenRoots(cwd, cwd, roots, roots);
+    assert.equal(copied, false);
+  });
+});
+
+describe('cursorHasSavedSession', () => {
+  it('ignores worker.sock when probing for saved sessions', async () => {
+    const root = await mkdtemp('/tmp/c');
+    const cwd = join(root, 'x');
+    const cursorRoot = join(root, 'cursor');
+    const projectDir = join(cursorRoot, 'projects', encodeCursorProjectPath(cwd));
+    await mkdir(projectDir, { recursive: true });
+
+    const socketPath = join(projectDir, 'worker.sock');
+    await withUnixSocket(socketPath, async () => {
+      assert.equal(await cursorHasSavedSession(cwd, { cursorConfigDir: cursorRoot }), false);
+    });
+
+    await writeFile(join(projectDir, 'chat.json'), '{}');
+    assert.equal(await cursorHasSavedSession(cwd, { cursorConfigDir: cursorRoot }), true);
+
     await rm(root, { recursive: true, force: true });
   });
 });
