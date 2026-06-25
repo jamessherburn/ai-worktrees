@@ -43,6 +43,7 @@ import {
   globalAgentEnv,
   globalAgentStoragePaths,
   resolveAgentCwd,
+  resolveAgentWorkspace,
 } from './global-session-cwd.js';
 import { detectAgents } from './agent-detection.js';
 import {
@@ -246,10 +247,12 @@ export function registerIpc(): void {
     const session = await getSessionById(args.sessionId);
     if (!session) return { ok: false, error: 'Session not found.' };
     const cwd = await resolveAgentCwd(session);
+    const workspaceCwd = session.global ? await resolveAgentWorkspace(session) : undefined;
     return startPty({
       sessionId: session.id,
       agentId: session.agentId,
       cwd,
+      workspaceCwd,
       cols: args.cols,
       rows: args.rows,
       ...(session.global

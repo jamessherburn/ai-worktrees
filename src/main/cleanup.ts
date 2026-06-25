@@ -14,6 +14,8 @@ import {
   clearGlobalSessionAgentData,
   ensureGlobalAgentStorage,
   globalSessionCwdPath,
+  globalWorktreePath,
+  globalWorkspacePath,
   removeGlobalAgentStorage,
 } from './global-session-cwd.js';
 import {
@@ -57,6 +59,8 @@ function activeAgentCwds(sessions: Session[]): Set<string> {
   for (const session of sessions) {
     if (session.global) {
       cwds.add(session.repoPath);
+      cwds.add(globalWorkspacePath(session.id));
+      cwds.add(globalWorktreePath(session.id));
       cwds.add(globalSessionCwdPath(session.id));
     } else {
       cwds.add(session.worktreePath);

@@ -16,6 +16,8 @@ import {
   globalAgentCleanupId,
   globalAgentStoragePaths,
   globalSessionCwdPath,
+  globalWorktreePath,
+  globalWorkspacePath,
   userDataRootForCleanup,
 } from './global-session-cwd.js';
 import { compareByCreatedAtDesc, createdAtIso, statCreatedAtMs } from './path-created-at.js';
@@ -194,13 +196,17 @@ export function resolveCleanupGroup(
   codeDir: string,
   repos: RepoInfo[],
   globalSessionRoot: string,
+  globalWorkspaceRoot?: string,
 ): CleanupGroupInfo {
   let normalized = normalizeCwdKey(cwd);
   const recovered = tryRecoverWorktreePath(normalized, repos, codeDir);
   if (recovered) normalized = recovered;
 
-  if (normalized.startsWith(normalizeCwdKey(globalSessionRoot) + '/')) {
-    return { groupName: 'Global', groupKind: 'global', repoPath: '' };
+  const globalRoots = [globalSessionRoot, globalWorkspaceRoot].filter(Boolean) as string[];
+  for (const root of globalRoots) {
+    if (normalized.startsWith(normalizeCwdKey(root) + '/')) {
+      return { groupName: 'Global', groupKind: 'global', repoPath: '' };
+    }
   }
 
   const repoByPath = new Map(repos.map((r) => [r.path, r]));
@@ -302,11 +308,12 @@ export async function listGlobalAgentStorageSessions(opts: {
 
     const storageRoots = globalAgentStoragePaths(sessionId);
     const session = sessionsById.get(sessionId);
-    const probeCwd = session?.global ? globalSessionCwdPath(sessionId) : opts.codeDir;
+    const workCwd = session?.global ? globalWorktreePath(sessionId) : opts.codeDir;
+    const cursorCwd = session?.global ? globalWorkspacePath(sessionId) : workCwd;
     const agents: AgentId[] = [];
-    if (await claudeHasSavedConversation(probeCwd, storageRoots)) agents.push('claude');
-    if (await cursorHasSavedSession(probeCwd, storageRoots)) agents.push('cursor');
-    if (await codexHasSavedSession(probeCwd, storageRoots)) agents.push('codex');
+    if (await claudeHasSavedConversation(workCwd, storageRoots)) agents.push('claude');
+    if (await cursorHasSavedSession(cursorCwd, storageRoots)) agents.push('cursor');
+    if (await codexHasSavedSession(workCwd, storageRoots)) agents.push('codex');
 
     const isActive = registeredGlobalIds.has(sessionId);
     if (agents.length === 0) {
@@ -326,7 +333,10 @@ export async function listGlobalAgentStorageSessions(opts: {
       continue;
     }
 
-    const dataPaths = await existingAgentDataPaths(probeCwd, storageRoots);
+    const dataPaths = [
+      ...(await existingAgentDataPaths(workCwd, storageRoots)),
+      ...(cursorCwd !== workCwd ? await existingAgentDataPaths(cursorCwd) : []),
+    ];
     results.push({
       id: globalAgentCleanupId(sessionId),
       cwd: dataRoot,
@@ -353,6 +363,7 @@ export async function listLeftoverAgentSessions(opts: {
   extraCwds?: string[];
 }): Promise<LeftoverAgentSession[]> {
   const globalSessionRoot = join(userDataRootForCleanup(), 'global-sessions');
+  const globalWorkspaceRoot = join(userDataRootForCleanup(), 'global-workspaces');
   const knownCwds = await collectKnownAgentCwds(opts.repos, {
     sessions: opts.sessions,
     worktreePaths: opts.extraCwds,
@@ -382,7 +393,7 @@ export async function listLeftoverAgentSessions(opts: {
   for (const [rawCwd, merged] of mergedEntries) {
     const recovered = tryRecoverWorktreePath(rawCwd, opts.repos, opts.codeDir);
     const cwd = recovered ?? rawCwd;
-    const group = resolveCleanupGroup(cwd, opts.codeDir, opts.repos, globalSessionRoot);
+    const group = resolveCleanupGroup(cwd, opts.codeDir, opts.repos, globalSessionRoot, globalWorkspaceRoot);
     if (group.groupKind === 'global') {
       const legacySessionId = basename(cwd);
       if (globalStorageIds.has(globalAgentCleanupId(legacySessionId))) continue;
@@ -521,8 +532,11 @@ export async function collectKnownAgentCwds(
   for (const repo of repos) cwds.add(repo.path);
 
   for (const session of opts?.sessions ?? []) {
-    if (session.global) cwds.add(globalSessionCwdPath(session.id));
-    else cwds.add(session.worktreePath);
+    if (session.global) {
+      cwds.add(globalWorkspacePath(session.id));
+      cwds.add(globalWorktreePath(session.id));
+      cwds.add(globalSessionCwdPath(session.id));
+    } else cwds.add(session.worktreePath);
   }
 
   for (const path of opts?.worktreePaths ?? []) cwds.add(path);

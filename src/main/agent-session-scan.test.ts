@@ -43,11 +43,14 @@ describe('resolveCleanupGroup', () => {
   const globalRoot = '/Users/me/Library/Application Support/ai-worktrees/global-sessions';
 
   it('groups global session cwds under Global', () => {
+    const globalRoot = '/Users/me/Library/Application Support/ai-worktrees/global-sessions';
+    const workspaceRoot = '/Users/me/Library/Application Support/ai-worktrees/global-workspaces';
     const group = resolveCleanupGroup(
-      `${globalRoot}/abc-123`,
+      `${workspaceRoot}/abc-123/code`,
       codeDir,
       repos,
       globalRoot,
+      workspaceRoot,
     );
     assert.equal(group.groupName, 'Global');
     assert.equal(group.groupKind, 'global');
