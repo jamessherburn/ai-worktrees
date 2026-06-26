@@ -14,9 +14,13 @@ export type SessionQuickNote = {
   createdAt: string;
 };
 
+export type SessionKind = 'repo' | 'code';
+
 export type Session = {
   id: string;
   name: string;
+  /** Repo worktree session or code-directory session (no git worktree). */
+  kind?: SessionKind;
   repoPath: string;
   repoName: string;
   worktreePath: string;
@@ -72,7 +76,8 @@ export type RepoInfo = {
 };
 
 export type CreateSessionInput = {
-  repoPath: string;
+  kind?: SessionKind;
+  repoPath?: string;
   name: string;
   agentId: AgentId;
   /** Optional labels to apply when the session is created. */
@@ -92,7 +97,7 @@ export type LeftoverWorktree = {
   repoPath: string;
   repoName: string;
   groupName: string;
-  groupKind: 'repo';
+  groupKind: CleanupGroupKind;
   worktreePath: string;
   branchName: string;
   /** False when the directory exists on disk but is not registered with git worktree. */

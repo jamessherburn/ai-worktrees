@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SessionLabel, SessionWithStatus } from '@shared/types';
+import { isCodeSession } from '@shared/code-sessions';
 import { getAgent } from '@shared/agents';
 import {
   activityKindFor,
@@ -207,9 +208,15 @@ export function Sidebar({
                             <span className="session-meta-sep" aria-hidden>
                               ·
                             </span>
-                            <span className="session-branch-name" title={s.branchName}>
-                              {s.branchName}
-                            </span>
+                            {isCodeSession(s) ? (
+                              <span className="session-branch-name" title={s.worktreePath}>
+                                Code session
+                              </span>
+                            ) : (
+                              <span className="session-branch-name" title={s.branchName}>
+                                {s.branchName}
+                              </span>
+                            )}
                           </div>
                           {appliedLabels.length > 0 && (
                             <div className="session-row-labels">

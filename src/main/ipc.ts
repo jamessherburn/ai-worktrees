@@ -26,6 +26,7 @@ import type {
 import type { SettingsExportResult, SettingsImportResult } from '@shared/settings-import-export';
 import { parseSettingsImportJson, settingsExportToJson } from '@shared/settings-import-export';
 import { IPC } from '@shared/ipc-channels';
+import { isCodeSession } from '@shared/code-sessions';
 import { applyAppTheme } from './app-theme.js';
 import { ensureFishShell } from './fish-setup.js';
 import { ensureGitHubCli } from './gh-cli.js';
@@ -374,6 +375,9 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.GitStatus, async (_e, sessionId: string): Promise<GitStatusResult> => {
     const session = await getSessionById(sessionId);
     if (!session) return { ok: false, error: 'Session not found.' };
+    if (isCodeSession(session)) {
+      return { ok: false, error: 'Git panel is not available for code sessions.' };
+    }
     if (!(await pathExists(session.worktreePath))) {
       return { ok: false, error: 'Worktree path no longer exists.' };
     }
@@ -402,6 +406,9 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.GitDiff, async (_e, req: GitDiffRequest): Promise<GitDiffResult> => {
     const session = await getSessionById(req.sessionId);
     if (!session) return { ok: false, error: 'Session not found.' };
+    if (isCodeSession(session)) {
+      return { ok: false, error: 'Git panel is not available for code sessions.' };
+    }
     if (!(await pathExists(session.worktreePath))) {
       return { ok: false, error: 'Worktree path no longer exists.' };
     }
@@ -422,6 +429,9 @@ export function registerIpc(): void {
     async (_e, req: GitFileActionRequest): Promise<GitFileActionResult> => {
       const session = await getSessionById(req.sessionId);
       if (!session) return { ok: false, error: 'Session not found.' };
+      if (isCodeSession(session)) {
+        return { ok: false, error: 'Git panel is not available for code sessions.' };
+      }
       if (!(await pathExists(session.worktreePath))) {
         return { ok: false, error: 'Worktree path no longer exists.' };
       }
