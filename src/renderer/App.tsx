@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SessionWithStatus, Settings } from '@shared/types';
+import { isCodeSession } from '@shared/code-sessions';
 import { DEFAULT_SESSION_LABELS, normalizeSessionLabels } from '@shared/session-labels';
 import { normalizeWorktreesSkills } from '@shared/worktrees-skills';
 import { matchAppShortcut, shouldIgnoreAppShortcut } from '@shared/app-shortcuts';
@@ -164,6 +165,8 @@ export function App() {
 
   const toggleGitPanel = useCallback(() => {
     if (!activeId) return;
+    const session = sessions.find((s) => s.id === activeId);
+    if (!session || isCodeSession(session)) return;
     setPanelPrefsBySession((prev) => {
       const current = sessionPanelPrefs(prev, activeId);
       const next = {
@@ -173,7 +176,7 @@ export function App() {
       writeSessionPanelPrefsMap(next);
       return next;
     });
-  }, [activeId]);
+  }, [activeId, sessions]);
 
   const toggleTodoModal = useCallback(() => {
     setShowTodoModal((prev) => !prev);
@@ -341,6 +344,7 @@ export function App() {
     () => sessions.find((s) => s.id === activeId) ?? null,
     [sessions, activeId],
   );
+  const activeSessionSupportsGit = activeSession !== null && !isCodeSession(activeSession);
 
   const openActiveInVSCode = useCallback(async () => {
     if (!activeSession) return;
@@ -570,7 +574,7 @@ export function App() {
           toggleBuiltInTerminalRef.current();
           break;
         case 'toggleGit':
-          if (!activeSessionRef.current) return;
+          if (!activeSessionRef.current || isCodeSession(activeSessionRef.current)) return;
           toggleGitPanelRef.current();
           break;
         case 'jumpFocus':
@@ -604,7 +608,7 @@ export function App() {
   }, []);
 
   const showBuiltInTerminal = activeSession !== null && !builtInTerminalCollapsed;
-  const showGitPanel = activeSession !== null && !gitPanelCollapsed;
+  const showGitPanel = activeSessionSupportsGit && !gitPanelCollapsed;
   const showBottomDock = showBuiltInTerminal || showGitPanel;
   const appClass = `app${showBottomDock ? ' with-bottom-dock' : ''}`;
   const appStyle = {
@@ -726,9 +730,10 @@ export function App() {
 
       <main className="main-pane">
         {activeSession ? (
-          <PaneHeader session={activeSession}>
+            <PaneHeader session={activeSession}>
             <PaneToolbar
               activeSession={activeSession}
+              gitSupported={activeSessionSupportsGit}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
               gitPanelCollapsed={gitPanelCollapsed}
               onToggleBuiltInTerminal={toggleBuiltInTerminal}
@@ -742,6 +747,7 @@ export function App() {
           <EmptyHeader>
             <PaneToolbar
               activeSession={null}
+              gitSupported={false}
               builtInTerminalCollapsed={builtInTerminalCollapsed}
               gitPanelCollapsed={gitPanelCollapsed}
               onToggleBuiltInTerminal={toggleBuiltInTerminal}
@@ -932,6 +938,7 @@ function VSCodeMissingModal({ onClose }: { onClose: () => void }) {
 
 type PaneToolbarProps = {
   activeSession: SessionWithStatus | null;
+  gitSupported: boolean;
   builtInTerminalCollapsed: boolean;
   gitPanelCollapsed: boolean;
   onToggleBuiltInTerminal: () => void;
@@ -943,6 +950,7 @@ type PaneToolbarProps = {
 
 function PaneToolbar({
   activeSession,
+  gitSupported,
   builtInTerminalCollapsed,
   gitPanelCollapsed,
   onToggleBuiltInTerminal,
@@ -954,7 +962,7 @@ function PaneToolbar({
   const hasSession = activeSession !== null;
 
   const terminalOpen = hasSession && !builtInTerminalCollapsed;
-  const gitOpen = hasSession && !gitPanelCollapsed;
+  const gitOpen = hasSession && gitSupported && !gitPanelCollapsed;
 
   return (
     <div className="pane-toolbar" role="toolbar" aria-label="Session tools">
@@ -979,9 +987,23 @@ function PaneToolbar({
         type="button"
         className={`icon-btn pane-toolbar-btn${gitOpen ? ' pane-toolbar-btn--active' : ''}`}
         onClick={onToggleGitPanel}
-        disabled={!hasSession}
-        title={hasSession ? (gitOpen ? 'Hide Git' : 'Git') : 'Select a session for Git'}
-        aria-label={hasSession ? 'Git' : 'Git (select a session)'}
+        disabled={!hasSession || !gitSupported}
+        title={
+          !hasSession
+            ? 'Select a session for Git'
+            : !gitSupported
+              ? 'Git is not available for code sessions'
+              : gitOpen
+                ? 'Hide Git'
+                : 'Git'
+        }
+        aria-label={
+          !hasSession
+            ? 'Git (select a session)'
+            : !gitSupported
+              ? 'Git (not available for code sessions)'
+              : 'Git'
+        }
         aria-pressed={gitOpen}
       >
         <GitBranchIcon />
@@ -1032,7 +1054,9 @@ function PaneHeader({
       <div className="header-info">
         <div className="pane-title">{session.name}</div>
         <div className="pane-subtitle">
-          {`${session.repoName} · ${session.branchName} · ${session.worktreePath}`}
+          {isCodeSession(session)
+            ? `${session.repoName} · ${session.worktreePath}`
+            : `${session.repoName} · ${session.branchName} · ${session.worktreePath}`}
         </div>
       </div>
       <div className="pane-header-trailing">

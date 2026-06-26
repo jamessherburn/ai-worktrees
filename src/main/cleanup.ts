@@ -8,6 +8,11 @@ import type {
   LeftoverWorktree,
   Session,
 } from '@shared/types';
+import {
+  CODE_SESSION_DIR_PREFIX,
+  CODE_SESSION_REPO_NAME,
+  isCodeSession,
+} from '@shared/code-sessions';
 import { listLeftoverAgentSessions } from './agent-session-scan.js';
 import { clearAgentSessionData, removeAgentDataPaths } from './agents.js';
 import {
@@ -93,11 +98,59 @@ async function scanUnregisteredWorktreeDirs(
   return leftovers;
 }
 
+function codeSessionWorktreeId(worktreePath: string): string {
+  return `code::${worktreePath}`;
+}
+
+async function scanOrphanCodeSessionDirs(
+  codeDir: string,
+  activeWorktreePaths: Set<string>,
+): Promise<LeftoverWorktree[]> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(codeDir);
+  } catch {
+    return [];
+  }
+
+  const leftovers: LeftoverWorktree[] = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(CODE_SESSION_DIR_PREFIX)) continue;
+    const worktreePath = join(codeDir, entry);
+    if (activeWorktreePaths.has(worktreePath)) continue;
+    if (!(await pathExists(worktreePath))) continue;
+    let createdAtMs = 0;
+    try {
+      const stat = await fs.stat(worktreePath);
+      if (!stat.isDirectory()) continue;
+      createdAtMs = statCreatedAtMs(stat);
+    } catch {
+      continue;
+    }
+    leftovers.push({
+      id: codeSessionWorktreeId(worktreePath),
+      repoPath: codeDir,
+      repoName: CODE_SESSION_REPO_NAME,
+      groupName: CODE_SESSION_REPO_NAME,
+      groupKind: 'external',
+      worktreePath,
+      branchName: entry.slice(CODE_SESSION_DIR_PREFIX.length),
+      registered: false,
+      createdAt: createdAtIso(createdAtMs),
+    });
+  }
+  return leftovers;
+}
+
 export async function listCleanupItems(): Promise<CleanupSnapshot> {
   const settings = await getSettings();
   const sessions = await listSessions();
   const activeWorktreePaths = new Set(sessions.map((s) => s.worktreePath));
-  const activeBranchKeys = new Set(sessions.map((s) => branchId(s.repoPath, s.branchName)));
+  const activeBranchKeys = new Set(
+    sessions
+      .filter((s) => !isCodeSession(s) && s.branchName)
+      .map((s) => branchId(s.repoPath, s.branchName)),
+  );
   const agentCwds = activeAgentCwds(sessions);
 
   const worktrees: LeftoverWorktree[] = [];
@@ -166,6 +219,12 @@ export async function listCleanupItems(): Promise<CleanupSnapshot> {
         createdAt: createdAtIso(branch.createdAtMs),
       });
     }
+  }
+
+  const orphanCodeSessions = await scanOrphanCodeSessionDirs(settings.codeDir, activeWorktreePaths);
+  for (const item of orphanCodeSessions) {
+    extraCwds.push(item.worktreePath);
+    worktrees.push(item);
   }
 
   worktrees.sort(compareByCreatedAtDesc);

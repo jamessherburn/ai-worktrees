@@ -6,7 +6,14 @@ import type {
   CreateSessionResult,
   DeleteSessionInput,
   Session,
+  SessionKind,
 } from '@shared/types';
+import {
+  CODE_SESSION_REPO_NAME,
+  deriveCodeSessionPath,
+  isCodeSession,
+  sessionKindFor,
+} from '@shared/code-sessions';
 import { sessionNotesText } from '@shared/session-notes';
 import { DEFAULT_AGENT_ID } from '@shared/agents';
 import { normalizeSession, normalizeSessionLabelIds } from '@shared/session-labels';
@@ -19,6 +26,7 @@ import {
   resolveDefaultBranch,
 } from './git.js';
 import { clearAgentSessionData } from './agents.js';
+import { getSettings } from './settings.js';
 import { JsonStore } from './store.js';
 
 type SessionsFile = { sessions: Session[] };
@@ -28,14 +36,17 @@ const store = new JsonStore<SessionsFile>('sessions.json', { sessions: [] });
 const NAME_PATTERN = /^[a-zA-Z0-9._/-]+$/;
 
 function normalizeSessionRecord(s: Session): Session {
+  const kind = sessionKindFor(s);
   const base = normalizeSession({
     ...s,
+    kind,
     agentId: s.agentId ?? DEFAULT_AGENT_ID,
   });
   const notes = sessionNotesText(base);
   const { quickNotes: _quickNotes, notes: _legacyNotes, ...rest } = base;
   return {
     ...rest,
+    kind,
     notes: notes || undefined,
   };
 }
@@ -65,19 +76,20 @@ function deriveWorktreePath(repoPath: string, name: string): string {
   return join(parent, `${repoName}-${slug}`);
 }
 
-export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
-  const name = input.name.trim();
-  if (!name) return { ok: false, error: 'Session name is required.' };
-  if (!NAME_PATTERN.test(name)) {
-    return { ok: false, error: 'Name may only contain letters, numbers, dot, underscore, slash, and dash.' };
-  }
+function resolveSessionKind(input: CreateSessionInput): SessionKind {
+  return input.kind === 'code' ? 'code' : 'repo';
+}
 
+async function createRepoSession(
+  input: CreateSessionInput,
+  name: string,
+): Promise<CreateSessionResult> {
   if (!input.repoPath) {
     return { ok: false, error: 'Repository is required.' };
   }
 
   const existing = await readSessionRecords();
-  if (existing.some((s) => s.repoPath === input.repoPath && s.name === name)) {
+  if (existing.some((s) => !isCodeSession(s) && s.repoPath === input.repoPath && s.name === name)) {
     return { ok: false, error: `A session named "${name}" already exists for this repo.` };
   }
 
@@ -121,6 +133,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 
   const session: Session = {
     id: randomUUID(),
+    kind: 'repo',
     name,
     repoPath: input.repoPath,
     repoName: basename(input.repoPath),
@@ -135,6 +148,75 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 
   await store.update((current) => ({ sessions: [...current.sessions, session] }));
   return { ok: true, session };
+}
+
+async function createCodeSessionRecord(
+  input: CreateSessionInput,
+  name: string,
+): Promise<CreateSessionResult> {
+  const settings = await getSettings();
+  const codeDir = settings.codeDir.trim();
+  if (!codeDir) {
+    return { ok: false, error: 'Code directory is not configured. Set it in Settings.' };
+  }
+
+  const existing = await readSessionRecords();
+  if (existing.some((s) => isCodeSession(s) && s.name === name)) {
+    return { ok: false, error: `A code session named "${name}" already exists.` };
+  }
+
+  const worktreePath = deriveCodeSessionPath(codeDir, name);
+  if (await pathExists(worktreePath)) {
+    return {
+      ok: false,
+      error: `Session folder already exists on disk: ${worktreePath}`,
+    };
+  }
+
+  try {
+    await fs.mkdir(worktreePath, { recursive: false });
+  } catch (err) {
+    return { ok: false, error: `Failed to create session folder: ${(err as Error).message}` };
+  }
+
+  await clearAgentSessionData(worktreePath, { includeLocalAgentDirs: true });
+
+  const labelIds = normalizeSessionLabelIds(input.labelIds);
+
+  const session: Session = {
+    id: randomUUID(),
+    kind: 'code',
+    name,
+    repoPath: codeDir,
+    repoName: CODE_SESSION_REPO_NAME,
+    worktreePath,
+    branchName: '',
+    baseBranch: '',
+    agentId: input.agentId ?? DEFAULT_AGENT_ID,
+    createdAt: new Date().toISOString(),
+    lastStartedAt: null,
+    labelIds: labelIds.length ? labelIds : undefined,
+  };
+
+  await store.update((current) => ({ sessions: [...current.sessions, session] }));
+  return { ok: true, session };
+}
+
+export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'Session name is required.' };
+  if (!NAME_PATTERN.test(name)) {
+    return {
+      ok: false,
+      error: 'Name may only contain letters, numbers, dot, underscore, slash, and dash.',
+    };
+  }
+
+  const kind = resolveSessionKind(input);
+  if (kind === 'code') {
+    return createCodeSessionRecord(input, name);
+  }
+  return createRepoSession(input, name);
 }
 
 export async function markSessionStarted(id: string): Promise<void> {
@@ -196,22 +278,41 @@ export async function setSessionLabels(id: string, labelIds: string[]): Promise<
   }));
 }
 
-export async function deleteSession(input: DeleteSessionInput): Promise<{ ok: true } | { ok: false; error: string }> {
+async function removeCodeSessionDirectory(worktreePath: string, force: boolean): Promise<void> {
+  if (!(await pathExists(worktreePath))) return;
+  try {
+    await fs.rm(worktreePath, { recursive: true, force });
+  } catch (err) {
+    if (!force) throw err;
+    await fs.rm(worktreePath, { recursive: true, force: true });
+  }
+}
+
+export async function deleteSession(
+  input: DeleteSessionInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const sessions = await listSessions();
   const session = sessions.find((s) => s.id === input.id);
   if (!session) return { ok: false, error: 'Session not found.' };
 
   await clearAgentSessionData(session.worktreePath, { includeLocalAgentDirs: true });
-  if (await pathExists(session.worktreePath)) {
+
+  if (isCodeSession(session)) {
+    try {
+      await removeCodeSessionDirectory(session.worktreePath, input.force);
+    } catch (err) {
+      return { ok: false, error: `Failed to remove session folder: ${(err as Error).message}` };
+    }
+  } else if (await pathExists(session.worktreePath)) {
     try {
       await removeWorktree(session.repoPath, session.worktreePath, input.force);
     } catch (err) {
       return { ok: false, error: `git worktree remove failed: ${(err as Error).message}` };
     }
-  }
 
-  if (input.deleteBranch) {
-    await deleteBranch(session.repoPath, session.branchName);
+    if (input.deleteBranch && session.branchName) {
+      await deleteBranch(session.repoPath, session.branchName);
+    }
   }
 
   await store.update((current) => ({ sessions: current.sessions.filter((s) => s.id !== input.id) }));
@@ -222,3 +323,6 @@ export async function getSessionById(id: string): Promise<Session | undefined> {
   const sessions = await listSessions();
   return sessions.find((s) => s.id === id);
 }
+
+/** @internal Exported for tests. */
+export { deriveWorktreePath, NAME_PATTERN };

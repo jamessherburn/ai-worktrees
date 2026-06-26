@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { SessionWithStatus } from '@shared/types';
+import { isCodeSession } from '@shared/code-sessions';
 
 type Props = {
   session: SessionWithStatus;
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
+  const codeSession = isCodeSession(session);
   const [deleteBranch, setDeleteBranch] = useState(true);
   const [force, setForce] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +19,11 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const result = await window.api.deleteSession({ id: session.id, force, deleteBranch });
+      const result = await window.api.deleteSession({
+        id: session.id,
+        force,
+        deleteBranch: codeSession ? false : deleteBranch,
+      });
       if (result.ok) {
         onDeleted(session.id);
       } else {
@@ -36,18 +42,35 @@ export function DeleteConfirmModal({ session, onClose, onDeleted }: Props) {
         <div className="modal-header">
           <div className="modal-title">Delete session "{session.name}"?</div>
           <div className="modal-subtitle">
-            This will remove the worktree at <span className="kbd">{session.worktreePath}</span>{' '}
-            and clear saved agent conversations (Claude, Cursor, Codex, etc.) for this path.
+            {codeSession ? (
+              <>
+                This will remove the session folder at{' '}
+                <span className="kbd">{session.worktreePath}</span> and clear saved agent
+                conversations (Claude, Cursor, Codex, etc.) for this path. Git work in other repos
+                is not affected.
+              </>
+            ) : (
+              <>
+                This will remove the worktree at <span className="kbd">{session.worktreePath}</span>{' '}
+                and clear saved agent conversations (Claude, Cursor, Codex, etc.) for this path.
+              </>
+            )}
           </div>
         </div>
         <div className="modal-body">
-          <label className="checkbox">
-            <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
-            Also delete branch <span className="kbd">{session.branchName}</span>
-          </label>
+          {!codeSession && (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={deleteBranch}
+                onChange={(e) => setDeleteBranch(e.target.checked)}
+              />
+              Also delete branch <span className="kbd">{session.branchName}</span>
+            </label>
+          )}
           <label className="checkbox">
             <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
-            Force remove (discard uncommitted changes)
+            Force remove (discard uncommitted changes{codeSession ? ' in the session folder' : ''})
           </label>
           {error && <div className="modal-error">{error}</div>}
         </div>
